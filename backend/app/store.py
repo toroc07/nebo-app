@@ -98,6 +98,13 @@ class Store(Protocol):
         """
         ...
 
+    def dequeue_timeline(self) -> tuple[Patch, Timeline] | None:
+        """Take one timeline waiting in the queue (building/queued) for a worker, or None.
+
+        Marks it as started so no other worker takes it. Must be atomic across processes.
+        """
+        ...
+
     def update_progress(self, timeline_id: int, stage: str, done: int, total: int) -> None: ...
     def complete_timeline(
         self, timeline_id: int, images: list[EpochImage], frames_found: int, frames_used: int
@@ -465,6 +472,24 @@ class PostgresStore:
                 },
             ).fetchone()
         return Timeline(**row) if row else None
+
+    def dequeue_timeline(self) -> tuple[Patch, Timeline] | None:
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                f"""
+                UPDATE timelines SET stage = 'querying', updated_at = now()
+                WHERE id = (SELECT id FROM timelines
+                            WHERE status = 'building' AND stage = 'queued'
+                            ORDER BY updated_at FOR UPDATE SKIP LOCKED LIMIT 1)
+                RETURNING {TIMELINE_COLUMNS}
+                """
+            ).fetchone()
+            if row is None:
+                return None
+            patch = conn.execute(
+                "SELECT id, ra, dec, target_slug FROM patches WHERE id = %s", (row["patch_id"],)
+            ).fetchone()
+        return Patch(**patch), Timeline(**row)
 
     def update_progress(self, timeline_id: int, stage: str, done: int, total: int) -> None:
         with self.pool.connection() as conn:

@@ -164,3 +164,15 @@ def test_failed_timeline_is_not_reclaimed_during_cooldown(store):
             (claimed.id,),
         )
     assert store.claim_timeline(patch.id, 1).status == "building"
+
+
+def test_dequeue_takes_a_queued_timeline_once(store):
+    patch = store.create_patch(222.222, -22.0, None)
+    store.created_patches.append(patch.id)
+    assert store.claim_timeline(patch.id, 3) is not None
+
+    dequeued = store.dequeue_timeline()
+    assert dequeued is not None and dequeued[0].id == patch.id
+    assert dequeued[1].detector == 3 and store.get_timeline(patch.id, 3).stage == "querying"
+    again = store.dequeue_timeline()  # Other queued rows may exist, but not this one.
+    assert again is None or again[0].id != patch.id
