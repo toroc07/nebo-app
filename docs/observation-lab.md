@@ -1,62 +1,62 @@
-# Laboratorio de observación — hallazgos
+# Observation lab — findings
 
-Ruta de pruebas `/lab/observation` para ver cómo se consumen las imágenes de `shared/demo/`
-(sintéticas) y, con el backend encendido, la API real. Se llega desde el menú:
-**Inicio → Observar → "Laboratorio de imágenes (demo, sin backend)"**, y la página trae su
-enlace "← Volver al menú".
+Test route `/lab/observation` to see how the images in `shared/demo/` (synthetic) are consumed
+and, with the backend running, the real API. It is reached from the menu:
+**Home → Observe → "Image lab (demo, no backend)"**, and the page has its own
+"← Back to the menu" link.
 
-**Único cambio en un archivo de Codex:** un bloque nuevo en `frontend/components/Nebo.tsx`,
-justo antes de `{view === "Coordenadas" && (`: un `<p><a className="secondary" href="/lab/observation">`
-visible solo en la vista "Observar". No toca la rejilla, el estado ni el CSS. Para quitar el
-acceso basta borrar ese bloque. El backend no se ha tocado.
+**Only change in a file outside the lab:** one new block in `frontend/components/Nebo.tsx`,
+right before `{view === "Coordinates" && (`: a `<p><a className="secondary" href="/lab/observation">`
+shown only in the "Observe" view. It does not touch the grid, the state or the CSS. To remove
+the entry point, delete that block. The backend was not touched.
 
-## Archivos del laboratorio (todos nuevos, borrables sin efecto en el menú)
+## Lab files (all new, removable with no effect on the menu)
 
-| Archivo | Qué es |
+| File | What it is |
 | --- | --- |
-| `frontend/app/lab/observation/page.tsx` | La página |
-| `frontend/app/lab/demo/[...path]/route.ts` | Sirve `shared/demo/**` de solo lectura (404 fuera de esa carpeta y para tipos distintos de json/png) |
-| `frontend/components/lab/ObservationLab.tsx`, `lab.module.css` | Visor básico, sin diseño |
-| `frontend/lib/lab/contract.ts` | Contrato completo de `/timeline` + `loadTimeline(source, …)` común a demo y API |
+| `frontend/app/lab/observation/page.tsx` | The page |
+| `frontend/app/lab/demo/[...path]/route.ts` | Serves `shared/demo/**` read-only (404 outside that folder and for file types other than json/png) |
+| `frontend/components/lab/ObservationLab.tsx`, `lab.module.css` | Basic viewer, unstyled |
+| `frontend/lib/lab/contract.ts` | Full `/timeline` contract + `loadTimeline(source, …)` shared by demo and API |
 
-Para verlo: `cd frontend && npm run dev` y abrir `/lab/observation`. Fuente "Demo" no necesita backend.
+To see it: `cd frontend && npm run dev` and open `/lab/observation`. The "Demo" source needs no backend.
 
-## Verificado (navegador real, servidor Next 16 en dev)
-- Carga la imagen de cada época (31, 59 y 147 px) con `image-rendering: pixelated`; damero detrás para ver los píxeles transparentes.
-- Precarga de las 3 épocas en ~40 ms en local; el blink recorre 1→2→3→1 sin carga intermedia.
-- **`expected_position` verificado con los píxeles**: el píxel más brillante cae en (29,30), (29,29) y (29,28) para posiciones esperadas (28.92,30.04), (28.98,29.19), (29.05,28.35). Es decir, `x,y` son **centros de píxel con índice desde 0**. Para dibujar encima de la imagen: `left% = (x + 0.5) / width_px`, `top% = (y + 0.5) / height_px`.
-- Cambio de objeto, detector (3/6) y tamaño; cada uno pide su timeline y reinicia la reproducción.
-- Fuente "API real" con el backend apagado: mensaje de error legible, sin romper la página.
+## Verified (real browser, Next 16 dev server)
+- Loads each epoch's image (31, 59 and 147 px) with `image-rendering: pixelated`; a checkerboard sits behind it so transparent pixels are visible.
+- All 3 epochs preload in about 40 ms locally; blink cycles 1→2→3→1 with no loading in between.
+- **`expected_position` checked against the pixels**: the brightest pixel falls at (29,30), (29,29) and (29,28) for expected positions (28.92,30.04), (28.98,29.19), (29.05,28.35). So `x,y` are **pixel centers with a 0-based index**. To draw over the image: `left% = (x + 0.5) / width_px`, `top% = (y + 0.5) / height_px`.
+- Changing object, detector (3/6) and size; each requests its own timeline and resets playback.
+- "Real API" source with the backend off: a readable error message, the page does not break.
 
-## Para Codex (no lo he tocado)
-1. **`lib/api.ts` omite campos que el backend ya envía.** Snippet de tipos (ver `lib/lab/contract.ts` para el completo):
+## For Codex (not touched)
+1. **`lib/api.ts` omits fields the backend already sends.** Type snippet (see `lib/lab/contract.ts` for the full one):
    ```ts
    export type Epoch = {
-     // …campos actuales…
+     // …existing fields…
      mid_mjd: number; frames_available: number;
      display_min: number; display_max: number;
      releases: string[];
      expected_position?: { ra: number; dec: number; x: number; y: number; in_image: boolean };
    };
    export type Timeline = {
-     // …campos actuales…
+     // …existing fields…
      sector?: { center: { ra: number; dec: number };
                 corners: Record<"NW" | "NE" | "SE" | "SW", [number, number]> };
      data?: { source: string; processed_at: string };
      display: { stretch: string; unit: string; note: string };
    };
    ```
-2. **`Field.tsx` escribe "SPHEREx QR2" a mano.** El dato trae `releases` (hoy `["qr2"]`); debería mostrarlo desde ahí y avisar si las épocas mezclan versiones.
-3. **`Field.tsx` cambia `<img src>` sin precargar.** En local no se nota; con red real cada época puede parpadear al llegar. Recomendación: precargar todas las épocas (`new Image()`) y habilitar "Comparar épocas" solo cuando terminen (el laboratorio muestra el patrón).
-4. `Field.tsx` aún no usa `expected_position` (marcador y estela del objeto) ni `sector.corners` (para colocar el recorte sobre Aladin).
-5. Si quieren probar `Field` sin backend: `loadTimeline(source, …)` de `lib/lab/contract.ts` ya unifica demo y API; bastaría cambiar el origen.
+2. **`Field.tsx` hard-codes "SPHEREx QR2".** The data carries `releases` (today `["qr2"]`); it should show that, and warn if the epochs mix releases.
+3. **`Field.tsx` swaps `<img src>` without preloading.** Locally it is not noticeable; on a real network each epoch may flicker as it arrives. Recommendation: preload every epoch (`new Image()`) and enable "Compare epochs" only when they finish (the lab shows the pattern).
+4. `Field.tsx` does not yet use `expected_position` (object marker and trail) or `sector.corners` (to place the cutout over Aladin).
+5. To try `Field` without a backend: `loadTimeline(source, …)` in `lib/lab/contract.ts` already unifies demo and API; it would be enough to change the origin.
 
-## Trampa de Next 16 / Turbopack
-Un route handler que lee archivos **fuera** del proyecto (`../shared/demo`) hacía que Turbopack rastreara todo el repo y cada lectura provocaba recompilar y recargar la página en bucle. Se arregla marcando `process.cwd()` con `/* turbopackIgnore: true */` (ya aplicado en el route handler del laboratorio). Hay que recordarlo si alguien más sirve archivos de `shared/`.
+## Next 16 / Turbopack trap
+A route handler that reads files **outside** the project (`../shared/demo`) made Turbopack trace the whole repo, and every read triggered a recompile and an endless page reload. It is fixed by marking `process.cwd()` with `/* turbopackIgnore: true */` (already applied in the lab's route handler). Remember it if anyone else serves files from `shared/`.
 
-## Límites del demo
-Sin imágenes `diff`, sin respuestas `202 building` (el estado de progreso del laboratorio solo se ejercita con la API real), solo 3 épocas y detectores 3 y 6; brillo y ruido inventados, no juzgar contraste.
+## Demo limits
+No `diff` images, no `202 building` responses (the lab's progress state is only exercised with the real API), only 3 epochs and detectors 3 and 6; brightness and noise are made up, so do not judge contrast by them.
 
-## Pendiente de backend (nada bloqueante)
-- Confirmar que `expected_position` también llega en la API real para posiciones que no son un target (aquí es opcional en el tipo).
-- Con la API real encendida, repetir la prueba de precarga para medir el tiempo real de las imágenes.
+## Pending from the backend (nothing blocking)
+- Confirm that `expected_position` also arrives in the real API for positions that are not a target (it is optional in the type here).
+- With the real API running, repeat the preload test to measure the real image time.

@@ -1,4 +1,4 @@
-/* Estilos mínimos y neutros a propósito: la estética final no se decide aquí. */
+/* Minimal, neutral styles on purpose: the final look is not decided here. */
 .lab {
   max-width: 960px;
   margin: 0 auto;
@@ -40,9 +40,9 @@
 .frame {
   position: relative;
   width: 100%;
-  /* Fondo en damero para que se vean los píxeles transparentes (sin dato). */
-  background:
-    repeating-conic-gradient(#2a2a2a 0 25%, #1c1c1c 0 50%) 50% / 16px 16px;
+  /* Checkerboard background so transparent (no-data) pixels are visible. */
+  background: repeating-conic-gradient(#2a2a2a 0 25%, #1c1c1c 0 50%) 50% / 16px
+    16px;
 }
 .image {
   display: block;

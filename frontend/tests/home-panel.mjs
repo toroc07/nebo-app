@@ -51,8 +51,8 @@ await page.screenshot({ path: out + "rest-desktop.png", fullPage: true });
 const tasks = [];
 await page.setViewportSize({ width: 375, height: 812 });
 for (const [label, heading] of [
-  ["Comenzar exploración", "Observar"],
-  ["Objetos destacados", "Objetos destacados"],
+  ["Start exploring", "Observe"],
+  ["Featured objects", "Featured objects"],
   ["Tutorial", "Tutorial"],
 ]) {
   await page.reload();
@@ -84,10 +84,10 @@ for (const [label, heading] of [
   await page.keyboard.press("Shift+Tab");
   assert.equal(
     await page.evaluate(() => document.activeElement.textContent.trim()),
-    "Volver",
+    "Back",
   );
   await page.keyboard.press("Enter");
-  await page.getByRole("navigation", { name: "Panel de inicio" }).waitFor();
+  await page.getByRole("navigation", { name: "Home panel" }).waitFor();
   tasks.push({ label, tabs: tabs + 1, enter: true, return: true });
 }
 const stress = [];
@@ -148,9 +148,9 @@ assert.equal(
     .evaluate((el) => getComputedStyle(el).opacity),
   "1",
 );
-await touch.getByRole("button", { name: /Comenzar exploración/ }).tap();
+await touch.getByRole("button", { name: /Start exploring/ }).tap();
 await touch
-  .getByRole("heading", { level: 1, name: "Observar", exact: true })
+  .getByRole("heading", { level: 1, name: "Observe", exact: true })
   .waitFor();
 await touch.close();
 await page.mouse.move(0, 0);

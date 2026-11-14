@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Nebo — El cielo tiene más que contar",
-  description:
-    "Explora el cielo y compara imágenes infrarrojas de SPHEREx a través del tiempo.",
+  title: "Nebo — The sky has more to tell",
+  description: "Explore the sky and compare SPHEREx infrared images over time.",
 };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

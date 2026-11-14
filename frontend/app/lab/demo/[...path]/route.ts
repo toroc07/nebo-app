@@ -1,11 +1,17 @@
-// Laboratorio (no es parte del menú): sirve en solo lectura `shared/demo/**` para probar el
-// visor sin backend. Se lee del disco en cada petición para que un `git pull` se refleje solo.
+// Lab route (not part of the menu): serves `shared/demo/**` read-only so the viewer can be
+// tested without a backend. Files are read from disk on every request so a `git pull` shows up
+// immediately.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-// turbopackIgnore: la ruta sale del proyecto (`..`); sin esto Turbopack rastrea todo el repo como
-// dependencia del build y cada lectura provoca una recompilación y una recarga en bucle.
-const root = path.resolve(/* turbopackIgnore: true */ process.cwd(), "..", "shared", "demo");
+// turbopackIgnore: the path leaves the project (`..`); without it Turbopack traces the whole repo
+// as a build dependency and every read triggers a recompile and an endless page reload.
+const root = path.resolve(
+  /* turbopackIgnore: true */ process.cwd(),
+  "..",
+  "shared",
+  "demo",
+);
 const types: Record<string, string> = {
   ".json": "application/json",
   ".png": "image/png",
@@ -18,7 +24,7 @@ export async function GET(
   const { path: parts } = await params;
   const file = path.resolve(root, ...parts);
   const type = types[path.extname(file)];
-  // Solo dentro de shared/demo y solo los tipos del export; cualquier otra cosa es 404.
+  // Only inside shared/demo and only the export's file types; anything else is a 404.
   if (!type || !file.startsWith(root + path.sep)) {
     return new Response("Not found", { status: 404 });
   }
