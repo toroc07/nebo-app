@@ -119,6 +119,7 @@ class Store(Protocol):
     ) -> list[dict[str, Any]]: ...
     def list_sector_coordinates(self, patch_id: int) -> list[dict[str, Any]]: ...
 
+    def delete_timeline_exposures(self, timeline_id: int) -> None: ...
     def save_nasa_sector_exposures(self, exposures: list[dict[str, Any]]) -> int: ...
     def list_nasa_sector_exposures(
         self, patch_id: int, detector: int | None = None
@@ -675,6 +676,10 @@ class PostgresStore:
             ).fetchall()
 
     # ----- nasa_sector_exposures --------------------------------------------------------
+
+    def delete_timeline_exposures(self, timeline_id: int) -> None:
+        with self.pool.connection() as conn:
+            conn.execute("DELETE FROM nasa_sector_exposures WHERE timeline_id = %s", (timeline_id,))
 
     def save_nasa_sector_exposures(self, exposures: list[dict[str, Any]]) -> int:
         if not exposures:

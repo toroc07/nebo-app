@@ -241,6 +241,11 @@ class MemoryStore:
         bucket = self.sector_coordinates.get(patch_id, {})
         return [copy.deepcopy(r) for r in sorted(bucket.values(), key=lambda x: x["side_deg"])]
 
+    def delete_timeline_exposures(self, timeline_id: int) -> None:
+        with self._lock:
+            for key in [k for k, r in self.nasa_sector_exposures.items() if r.get("timeline_id") == timeline_id]:
+                del self.nasa_sector_exposures[key]
+
     def save_nasa_sector_exposures(self, exposures: list[dict[str, Any]]) -> int:
         if not exposures:
             return 0

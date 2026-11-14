@@ -13,6 +13,7 @@ from app.service import (
     TimelineService,
     group_into_epochs,
     select_evenly,
+    split_into_epochs,
 )
 from app.targets import TARGETS
 from tests.fakes import make_cutout_bytes, make_records
@@ -45,6 +46,22 @@ def make_service(records, fetch=None) -> tuple[TimelineService, MemoryStore]:
 def test_group_into_epochs_splits_on_large_gaps():
     assert group_into_epochs([0, 1, 2, 200, 201, 400]) == [[0, 1, 2], [3, 4], [5]]
     assert group_into_epochs([]) == []
+
+
+def test_short_passes_stay_whole_even_with_few_frames():
+    # A pass is the only image of its date, so a short one is kept although it has few frames.
+    assert split_into_epochs([0, 1, 2, 200, 201, 400]) == [[0, 1, 2], [3, 4], [5]]
+    assert split_into_epochs([]) == []
+
+
+def test_long_passes_are_cut_and_small_spans_folded_into_a_neighbour():
+    mjds = [2.0 * i for i in range(30)]  # One pass of 58 days, a frame every 2 days.
+    epochs = split_into_epochs(mjds, gap_days=30, max_span_days=14, min_frames=6)
+    # Spans of 14 days hold 7 frames; the last one (2 frames) joins the span before it.
+    assert [len(e) for e in epochs] == [7, 7, 7, 9]
+    assert [i for e in epochs for i in e] == list(range(30))
+    # With a higher minimum the spans keep merging until each one is big enough.
+    assert [len(e) for e in split_into_epochs(mjds, 30, 14, 12)] == [14, 16]
 
 
 def test_select_evenly_keeps_first_and_last():
@@ -207,6 +224,39 @@ def test_build_now_skips_ready_timelines():
     assert service.build_now(patch, 3).status == "ready"
     assert service.build_now(patch, 3).status == "ready"
     assert len(calls) == 1
+
+
+def test_rebuild_replaces_a_ready_timeline_with_fresh_frames():
+    records = make_records([60914.0, 61110.0])
+    service, store = make_service(records)
+    patch = service.resolve_patch(target_slug="barnards-star")
+    first = service.build_now(patch, 3)
+    assert first is not None and len(store.list_images(first.id, "medium")) == 2
+
+    service._query_frames = lambda *args: make_records([60914.0, 61110.0, 61300.0])
+    rebuilt = service.rebuild_now(patch, 3)
+    assert rebuilt is not None and rebuilt.status == "ready" and rebuilt.id == first.id
+    assert len(store.list_images(rebuilt.id, "medium")) == 3
+    # Exposure rows describe the new build only.
+    assert len(store.list_nasa_sector_exposures(patch.id, detector=3)) == 3
+
+
+def test_failed_rebuild_keeps_the_old_images():
+    service, store = make_service(make_records([60914.0, 61110.0]))
+    patch = service.resolve_patch(target_slug="barnards-star")
+    timeline = service.build_now(patch, 3)
+    assert timeline is not None
+    before = [i.id for i in store.list_images(timeline.id, "medium")]
+
+    def down(*args):
+        raise RuntimeError("IRSA down")
+
+    service._query_frames = down
+    with pytest.raises(RuntimeError):
+        service.rebuild_now(patch, 3)
+    after = store.get_timeline(patch.id, 3)
+    assert after is not None and after.status == "ready"
+    assert [i.id for i in store.list_images(timeline.id, "medium")] == before
 
 
 # ----- per-exposure quick-look photometry -------------------------------------------------
