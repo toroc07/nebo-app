@@ -177,8 +177,10 @@ so responses are cached for a year (`immutable`).
 
 ## Notes for the frontend
 
-- Show the epochs in order as a blink animation. All epochs of one size share the same
-  brightness scale (`display_min`/`display_max`), so changes are real, not display artefacts.
+- Show the epochs in order as a blink animation. All epochs and all sizes share the
+  same brightness scale (`display_min`/`display_max`, taken from the largest size), so
+  changes are real, not display artefacts. Epochs with fewer exposures (`frames_used`) are
+  noisier; show that number.
 - Very bright stars saturate SPHEREx. Their cores are kept visible: small holes fully
   surrounded by data are filled with the brightest pixel around them (display only).
 - The images are small (31, 59 or 147 px). Scale them up with
@@ -187,6 +189,25 @@ so responses are cached for a year (`immutable`).
   enough to place overlays.
 - `GET /timeline` creates the patch on first use, so the first request for a new position
   answers `202`.
+
+## Float data for analysis (work in progress)
+
+The PNGs are stretched and 8-bit, so they cannot be used to subtract epochs or measure
+fluxes. For the `large` size the build also produces `EpochImage.npz`: a compressed `.npz`
+with float32 `image` and `variance` (co-added, no stretch, holes **not** filled; NaN =
+no data). Smaller sizes are central crops of it.
+
+**Not stored yet.** `PostgresStore.complete_timeline` ignores `npz`, and no endpoint serves
+it. Pending on the database side:
+
+1. nullable `npz bytea` column in `timeline_images`;
+2. save it in `complete_timeline` and add `get_npz(image_id)` to `Store`;
+3. an `/images/{id}.npz` endpoint.
+
+Do **not** run `python -m app.preload` before that: ready timelines are skipped, so they
+would never get their arrays. Delete them to rebuild.
+
+Spectra need one row per exposure (wavelength, flux), not the per-epoch co-add. Not done.
 
 ## Tests
 

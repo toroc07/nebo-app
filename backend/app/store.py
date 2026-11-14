@@ -54,6 +54,7 @@ class EpochImage:
     display_min: float
     display_max: float
     png: bytes
+    npz: bytes | None = None  # float32 image + variance; only for the largest size.
 
 
 @dataclass(frozen=True)
