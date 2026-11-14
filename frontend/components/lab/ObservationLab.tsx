@@ -1,7 +1,7 @@
 "use client";
-// Laboratorio del módulo de observación: carga la imagen de cada época y cumple lo básico
-// (precarga, blink, deslizador, marcador de posición esperada, metadatos). Sin diseño a
-// propósito: la estética la decide el menú de Codex. Aislado en components/lab/.
+// Observation module lab: loads each epoch's image and covers the basics (preload, blink,
+// slider, expected-position marker, metadata). Deliberately unstyled: the look is decided by
+// the menu. Kept isolated in components/lab/.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   epochImageUrl,
@@ -15,8 +15,8 @@ import s from "./lab.module.css";
 
 const sizes = ["small", "medium", "large"];
 
-// `expected_position.x/y` se interpreta como índice de píxel (0-based) y se dibuja en su centro.
-// Si el marcador cae medio píxel desviado, este es el único número que hay que ajustar.
+// `expected_position.x/y` is a 0-based pixel index, drawn at the pixel's centre. If the marker
+// ever lands half a pixel off, this is the only number to adjust.
 const PIXEL_CENTER_OFFSET = 0.5;
 
 type Preload = { loaded: number; total: number; ms: number | null };
@@ -30,7 +30,11 @@ export default function ObservationLab() {
   const [data, setData] = useState<LabTimeline | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [preload, setPreload] = useState<Preload>({ loaded: 0, total: 0, ms: null });
+  const [preload, setPreload] = useState<Preload>({
+    loaded: 0,
+    total: 0,
+    ms: null,
+  });
   const [epoch, setEpoch] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [interval, setIntervalMs] = useState(800);
@@ -47,18 +51,23 @@ export default function ObservationLab() {
     return () => abort.abort();
   }, [source]);
 
-  // Cada cambio de selección pide un timeline nuevo y reinicia la reproducción.
+  // Every selection change requests a new timeline and resets playback.
   useEffect(() => {
     const abort = new AbortController();
     setData(null);
     setError("");
-    setStatus("Consultando…");
+    setStatus("Loading…");
     setEpoch(0);
     setPlaying(false);
     setImageError(false);
     setPreload({ loaded: 0, total: 0, ms: null });
-    loadTimeline(source, slug, detector, size, abort.signal, (stage, done, total) =>
-      setStatus(`Construyendo: ${stage} ${done}/${total}`),
+    loadTimeline(
+      source,
+      slug,
+      detector,
+      size,
+      abort.signal,
+      (stage, done, total) => setStatus(`Building: ${stage} ${done}/${total}`),
     )
       .then((d) => {
         if (abort.signal.aborted) return;
@@ -73,8 +82,8 @@ export default function ObservationLab() {
     return () => abort.abort();
   }, [source, slug, detector, size]);
 
-  // Precarga de todas las épocas antes de permitir el blink; mide cuánto tarda para saber si
-  // hace falta pedir una tira de imágenes al backend.
+  // Preload every epoch before allowing blink, and time it to learn whether a strip of
+  // images should be requested from the backend.
   useEffect(() => {
     if (!data) return;
     let cancelled = false;
@@ -110,7 +119,10 @@ export default function ObservationLab() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (!playing || count < 2 || !ready) return;
-    timer.current = setInterval(() => setEpoch((e) => (e + 1) % count), interval);
+    timer.current = setInterval(
+      () => setEpoch((e) => (e + 1) % count),
+      interval,
+    );
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
@@ -125,23 +137,26 @@ export default function ObservationLab() {
 
   return (
     <main className={s.lab}>
-      <a href="/">← Volver al menú</a>
-      <h1>Laboratorio de observación</h1>
+      <a href="/">← Back to the menu</a>
+      <h1>Observation lab</h1>
       <p className={s.note}>
-        Ruta de pruebas, enlazada desde Observar. Fuente demo = imágenes sintéticas de
-        shared/demo (no juzgar contraste).
+        Test route, linked from Observe. The demo source uses the synthetic
+        images in shared/demo (do not judge contrast by them).
       </p>
 
       <div className={s.controls}>
         <label>
-          Fuente
-          <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
+          Source
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value as Source)}
+          >
             <option value="demo">Demo (shared/demo)</option>
-            <option value="api">API real</option>
+            <option value="api">Real API</option>
           </select>
         </label>
         <label>
-          Objeto
+          Object
           <select value={slug} onChange={(e) => setSlug(e.target.value)}>
             {(targets.length ? targets : [{ slug, name: slug }]).map((t) => (
               <option key={t.slug} value={t.slug}>
@@ -152,7 +167,10 @@ export default function ObservationLab() {
         </label>
         <label>
           Detector
-          <select value={detector} onChange={(e) => setDetector(Number(e.target.value))}>
+          <select
+            value={detector}
+            onChange={(e) => setDetector(Number(e.target.value))}
+          >
             {(source === "demo" ? [3, 6] : [1, 2, 3, 4, 5, 6]).map((d) => (
               <option key={d} value={d}>
                 D{d}
@@ -161,7 +179,7 @@ export default function ObservationLab() {
           </select>
         </label>
         <label>
-          Tamaño
+          Size
           <select value={size} onChange={(e) => setSize(e.target.value)}>
             {sizes.map((x) => (
               <option key={x}>{x}</option>
@@ -176,21 +194,26 @@ export default function ObservationLab() {
       {data && current && (
         <div className={s.body}>
           <div>
-            <div className={s.frame} style={{ aspectRatio: `${data.size.width_px} / ${data.size.height_px}` }}>
+            <div
+              className={s.frame}
+              style={{
+                aspectRatio: `${data.size.width_px} / ${data.size.height_px}`,
+              }}
+            >
               {imageError ? (
-                <p role="alert">No se pudo cargar la imagen de esta época.</p>
+                <p role="alert">This epoch's image could not be loaded.</p>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={epochImageUrl(source, current)}
-                  alt={`Época ${epoch + 1} de ${count}, ${current.start_utc.slice(0, 10)}`}
+                  alt={`Epoch ${epoch + 1} of ${count}, ${current.start_utc.slice(0, 10)}`}
                   className={s.image}
                 />
               )}
               {marker && position?.in_image && (
                 <span
                   className={s.marker}
-                  title={`Posición esperada RA ${position.ra.toFixed(5)} Dec ${position.dec.toFixed(5)}`}
+                  title={`Expected position RA ${position.ra.toFixed(5)} Dec ${position.dec.toFixed(5)}`}
                   style={{
                     left: `${((position.x + PIXEL_CENTER_OFFSET) / data.size.width_px) * 100}%`,
                     top: `${((position.y + PIXEL_CENTER_OFFSET) / data.size.height_px) * 100}%`,
@@ -198,12 +221,16 @@ export default function ObservationLab() {
                 />
               )}
             </div>
-            <p className={s.mono}>N arriba · E izquierda · {data.size.side_arcmin}′ · {data.size.width_px}×{data.size.height_px}px</p>
+            <p className={s.mono}>
+              N up · E left · {data.size.side_arcmin}′ · {data.size.width_px}×
+              {data.size.height_px}px
+            </p>
           </div>
 
           <div className={s.panel}>
             <label>
-              Época {epoch + 1} de {count} · {current.start_utc.slice(0, 10)} UTC
+              Epoch {epoch + 1} of {count} · {current.start_utc.slice(0, 10)}{" "}
+              UTC
               <input
                 type="range"
                 min={0}
@@ -217,60 +244,75 @@ export default function ObservationLab() {
               />
             </label>
             <div className={s.row}>
-              <button disabled={count < 2 || !ready || imageError} onClick={() => setPlaying((p) => !p)}>
-                {playing ? "Pausar" : "Blink"}
+              <button
+                disabled={count < 2 || !ready || imageError}
+                onClick={() => setPlaying((p) => !p)}
+              >
+                {playing ? "Pause" : "Blink"}
               </button>
               <label>
-                Intervalo
-                <select value={interval} onChange={(e) => setIntervalMs(Number(e.target.value))}>
-                  <option value={400}>0,4 s</option>
-                  <option value={800}>0,8 s</option>
-                  <option value={1500}>1,5 s</option>
+                Interval
+                <select
+                  value={interval}
+                  onChange={(e) => setIntervalMs(Number(e.target.value))}
+                >
+                  <option value={400}>0.4 s</option>
+                  <option value={800}>0.8 s</option>
+                  <option value={1500}>1.5 s</option>
                 </select>
               </label>
               <label>
-                <input type="checkbox" checked={marker} onChange={(e) => setMarker(e.target.checked)} />
-                Posición esperada
+                <input
+                  type="checkbox"
+                  checked={marker}
+                  onChange={(e) => setMarker(e.target.checked)}
+                />
+                Expected position
               </label>
             </div>
 
             <dl className={s.meta}>
-              <dt>Precarga</dt>
+              <dt>Preload</dt>
               <dd>
                 {preload.loaded}/{preload.total}
                 {preload.ms !== null && ` · ${preload.ms} ms`}
               </dd>
-              <dt>Versión del dato</dt>
-              <dd>{releases.length ? releases.join(", ") : "no informada"}</dd>
-              <dt>Fuente</dt>
-              <dd>{data.data?.source ?? "no informada"}</dd>
-              <dt>Procesado</dt>
-              <dd>{data.data?.processed_at ?? "no informado"}</dd>
-              <dt>Brillo (display)</dt>
+              <dt>Data release</dt>
+              <dd>{releases.length ? releases.join(", ") : "not reported"}</dd>
+              <dt>Source</dt>
+              <dd>{data.data?.source ?? "not reported"}</dd>
+              <dt>Processed</dt>
+              <dd>{data.data?.processed_at ?? "not reported"}</dd>
+              <dt>Brightness (display)</dt>
               <dd>
-                {current.display_min.toFixed(3)} – {current.display_max.toFixed(3)} {data.display.unit} ({data.display.stretch})
+                {current.display_min.toFixed(3)} –{" "}
+                {current.display_max.toFixed(3)} {data.display.unit} (
+                {data.display.stretch})
               </dd>
-              <dt>Posición esperada</dt>
+              <dt>Expected position</dt>
               <dd>
                 {position
-                  ? `RA ${position.ra.toFixed(5)} Dec ${position.dec.toFixed(5)} · px (${position.x}, ${position.y})${position.in_image ? "" : " · fuera de imagen"}`
-                  : "no informada"}
+                  ? `RA ${position.ra.toFixed(5)} Dec ${position.dec.toFixed(5)} · px (${position.x}, ${position.y})${position.in_image ? "" : " · outside image"}`
+                  : "not reported"}
               </dd>
-              <dt>Centro</dt>
+              <dt>Center</dt>
               <dd>
                 RA {data.patch.ra.toFixed(5)} Dec {data.patch.dec.toFixed(5)}
               </dd>
-              <dt>Esquinas</dt>
+              <dt>Corners</dt>
               <dd className={s.mono}>
                 {data.sector
                   ? Object.entries(data.sector.corners)
-                      .map(([k, [ra, dec]]) => `${k} ${ra.toFixed(4)},${dec.toFixed(4)}`)
+                      .map(
+                        ([k, [ra, dec]]) =>
+                          `${k} ${ra.toFixed(4)},${dec.toFixed(4)}`,
+                      )
                       .join(" · ")
-                  : "no informadas"}
+                  : "not reported"}
               </dd>
-              <dt>Exposiciones</dt>
+              <dt>Exposures</dt>
               <dd>
-                {current.frames_used} usadas de {current.frames_available}
+                {current.frames_used} used of {current.frames_available}
               </dd>
             </dl>
           </div>

@@ -11,18 +11,18 @@ import {
   type Building,
 } from "@/lib/api";
 const stages: Record<string, string> = {
-  queued: "Esperando turno",
-  querying: "Buscando observaciones",
-  downloading: "Descargando imágenes",
-  rendering: "Preparando imágenes",
+  queued: "Waiting for a turn",
+  querying: "Searching for observations",
+  downloading: "Downloading images",
+  rendering: "Preparing images",
 };
 const bands = [
-  "0,75–1,09 · Estrellas",
-  "1,10–1,62 · Estrellas y enanas rojas",
-  "1,63–2,41 · Estrellas variables",
-  "2,42–3,82 · Estrellas con polvo",
-  "3,83–4,41 · Enanas marrones",
-  "4,42–5,00 · Objetos más fríos",
+  "0.75–1.09 · Stars",
+  "1.10–1.62 · Stars and red dwarfs",
+  "1.63–2.41 · Variable stars",
+  "2.42–3.82 · Stars with dust",
+  "3.83–4.41 · Brown dwarfs",
+  "4.42–5.00 · Coldest objects",
 ];
 export default function Field({
   query,
@@ -74,7 +74,7 @@ export default function Field({
           setError(
             e instanceof Error
               ? e.message
-              : "No se pudo leer la respuesta del servicio.",
+              : "The service response could not be read.",
           );
           if (e instanceof ApiError)
             setRetryAt(
@@ -131,18 +131,18 @@ export default function Field({
           </select>
         </label>
         <label>
-          Tamaño del campo
+          Field size
           <select value={size} onChange={(e) => setSize(e.target.value)}>
-            <option value="small">3 minutos de arco</option>
-            <option value="medium">6 minutos de arco</option>
-            <option value="large">15 minutos de arco</option>
+            <option value="small">3 arcminutes</option>
+            <option value="medium">6 arcminutes</option>
+            <option value="large">15 arcminutes</option>
           </select>
         </label>
-        <span className="science-label">Cambio observado · SPHEREx QR2</span>
+        <span className="science-label">Observed change · SPHEREx QR2</span>
       </div>
       {error ? (
         <div className="notice" role="alert">
-          <h2>No pudimos abrir este campo</h2>
+          <h2>We could not open this field</h2>
           <p>{error}</p>
           <button
             disabled={remaining > 0}
@@ -150,7 +150,7 @@ export default function Field({
             onClick={() => setReload((x) => x + 1)}
           >
             <RotateCcw size={18} />
-            {remaining > 0 ? `Reintentar en ${remaining} s` : "Reintentar"}
+            {remaining > 0 ? `Retry in ${remaining} s` : "Retry"}
           </button>
         </div>
       ) : !data ? (
@@ -158,11 +158,11 @@ export default function Field({
           <div className="skeleton" />
           <h2>
             {progress
-              ? stages[progress.progress.stage] || "Preparando el campo"
-              : "Consultando imágenes"}
+              ? stages[progress.progress.stage] || "Preparing the field"
+              : "Checking images"}
           </h2>
           <p>
-            Un campo nuevo puede tardar unos minutos. Puedes volver al menú.
+            A new field can take a few minutes. You can go back to the menu.
           </p>
           {progress && (
             <>
@@ -171,20 +171,19 @@ export default function Field({
                 value={
                   progress.progress.total ? progress.progress.done : undefined
                 }
-                aria-label="Preparación del campo"
+                aria-label="Field preparation"
               />
               <p>
                 {progress.progress.total > 0
-                  ? `${progress.progress.done} de ${progress.progress.total}`
-                  : "Buscando datos disponibles…"}
+                  ? `${progress.progress.done} of ${progress.progress.total}`
+                  : "Looking for available data…"}
               </p>
             </>
           )}
         </div>
       ) : !current ? (
         <p className="notice">
-          Este campo todavía no tiene épocas disponibles. Prueba otro detector o
-          tamaño.
+          This field has no epochs available yet. Try another detector or size.
         </p>
       ) : (
         <>
@@ -193,23 +192,23 @@ export default function Field({
             <span className="east mono">E ←</span>
             {imageLoading && !imageError && (
               <span role="status" className="image-status">
-                Cargando época…
+                Loading epoch…
               </span>
             )}
             {imageError ? (
               <p role="alert">
-                No se pudo cargar esta imagen.{" "}
+                This image could not be loaded.{" "}
                 <button
                   className="secondary"
                   onClick={() => setReload((n) => n + 1)}
                 >
-                  Volver a cargar
+                  Reload
                 </button>
               </p>
             ) : (
               <img
                 src={imageUrl(current.image_url)}
-                alt={`Imagen infrarroja del campo observado el ${current.start_utc.slice(0, 10)}, detector ${detector}`}
+                alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}`}
                 width={420}
                 height={420}
                 onLoad={() => setImageLoading(false)}
@@ -225,8 +224,8 @@ export default function Field({
           </div>
           <div className="timeline-panel">
             <label htmlFor="epoch">
-              Fecha de observación ·{" "}
-              {new Date(current.start_utc).toLocaleDateString("es", {
+              Observation date ·{" "}
+              {new Date(current.start_utc).toLocaleDateString("en", {
                 timeZone: "UTC",
                 day: "numeric",
                 month: "long",
@@ -254,28 +253,25 @@ export default function Field({
                 onClick={() => setPlaying((p) => !p)}
               >
                 {playing ? <Pause size={18} /> : <Play size={18} />}{" "}
-                {playing ? "Pausar" : "Comparar épocas"}
+                {playing ? "Pause" : "Compare epochs"}
               </button>
               <label>
-                Intervalo
+                Interval
                 <select
                   value={interval}
                   onChange={(e) => setIntervalMs(Number(e.target.value))}
                 >
-                  <option value="400">0,4 segundos</option>
-                  <option value="800">0,8 segundos</option>
-                  <option value="1500">1,5 segundos</option>
+                  <option value="400">0.4 seconds</option>
+                  <option value="800">0.8 seconds</option>
+                  <option value="1500">1.5 seconds</option>
                 </select>
               </label>
               <span className="mono">
-                Época {epoch + 1} de {data.epochs.length}
+                Epoch {epoch + 1} of {data.epochs.length}
               </span>
             </div>
             {data.epochs.length === 1 && (
-              <p>
-                Solo hay una época disponible; la comparación necesita al menos
-                dos.
-              </p>
+              <p>Only one epoch is available; comparing needs at least two.</p>
             )}
             <p className="field-meta mono">
               RA {data.patch.ra.toFixed(5)}° · Dec {data.patch.dec.toFixed(5)}°
@@ -283,8 +279,8 @@ export default function Field({
               {data.size.pixel_scale_arcsec}″/px
             </p>
             <p>
-              Un cambio entre imágenes no confirma un objeto nuevo. Las zonas
-              transparentes no tienen datos.
+              A change between images does not confirm a new object. Transparent
+              areas have no data.
             </p>
           </div>
         </>

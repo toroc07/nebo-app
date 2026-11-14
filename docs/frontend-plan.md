@@ -1,49 +1,56 @@
-# Nebo — Plan de frontend y UX/UI (reajustado al backend real)
+# Nebo — Frontend and UX/UI plan (adjusted to the real backend)
 
-## Contexto
-La idea del doc de Claude Docs (viaje de zoom en 3 escalas + blink comparator, Next.js + Aladin Lite + r3f + GSAP) sigue en pie y el stack está decidido (`CLAUDE.md`, no re-litigar). Lo que cambió es el **backend**, que ya existe y condiciona el diseño:
+Initial design plan. Where it differs from `docs/observation-lab.md` (verified findings), the
+lab document wins.
 
-| El doc decía | La realidad (`backend/README.md`) | Consecuencia de diseño |
+## Context
+The idea in the team's Claude Docs document (a zoom journey in 3 scales + a blink comparator,
+Next.js + Aladin Lite + r3f + GSAP) still stands and the stack is decided (`CLAUDE.md`, do not
+re-litigate). What changed is the **backend**, which already exists and constrains the design:
+
+| The document said | Reality (`backend/README.md`) | Design consequence |
 | --- | --- | --- |
-| JSON estáticos | API FastAPI + PostgreSQL con `200/202/502/503` | Hay estados de carga reales: la pantalla warp se ata a `progress.done/total` del `202` |
-| Recortes grandes | PNG de **31 / 59 / 147 px** (3′/6′/15′), 6.15″/px | El "campo profundo" es un mosaico pixelado: se diseña como instrumento (retícula, escala, `image-rendering: pixelated`), no como foto |
-| Cualquier campo | Solo **5 objetos del reto** precargados (`/targets`, `/patches`); otras posiciones tardan 1–2 min | La escala "Región" se centra en 5 marcadores; la búsqueda libre existe pero asume espera |
-| Una banda | **6 detectores**, no mezclar; WISE 0855 solo en el 6 | El selector de detector es parte del núcleo, con recomendado por objeto |
-| Huellas de observación | El backend no entrega huellas; entrega épocas (`start_utc`, `frames_used`) | Las "huellas" salen de HiPS/MOC de Aladin o se omiten en MVP; la línea de tiempo usa las épocas reales |
+| Static JSON files | FastAPI + PostgreSQL API with `200/202/502/503` | There are real loading states: the warp screen is tied to `progress.done/total` of the `202` |
+| Large cutouts | **31 / 59 / 147 px** PNGs (3′/6′/15′), 6.15″/px | The "deep field" is a pixelated mosaic: design it as an instrument (reticle, scale, `image-rendering: pixelated`), not as a photo |
+| Any field | Only the **5 challenge objects** preloaded (`/targets`, `/patches`); other positions take 1–2 min | The "Region" scale centers on 5 markers; free search exists but implies waiting |
+| One band | **6 detectors**, do not mix them; WISE 0855 only in 6 | The detector selector is part of the core, with a recommended one per object |
+| Observation footprints | The backend does not deliver footprints; it delivers epochs (`start_utc`, `frames_used`) | Footprints come from HiPS/MOC in Aladin or are skipped in the MVP; the timeline uses the real epochs |
 
-No pude leer la página oficial del reto (error TLS); me baso en el enunciado resumido en el doc y en `CLAUDE.md`. Conviene que alguien del equipo verifique criterios de jurado.
+The official challenge page could not be read when this was written (TLS error); the plan relies
+on the challenge summary in the team document and in `CLAUDE.md`. Someone on the team should
+verify the judging criteria.
 
-## Dirección de arte (a fijar con `frontend-design` + `theme-factory` antes de codificar)
-- **Concepto: "instrumento de observatorio", no "dashboard sci-fi genérico".** Cielo oscuro neutro (no morado-azul), tipografía mono/técnica para datos (fechas, MJD, RA/Dec) y una sans humana para el copy. Un único color de acento cálido (ámbar) para lo que cambia; todo lo demás monocromo. Evitar glassmorphism, neón y tarjetas clónicas (`design-review` lo audita).
-- **El cambio es el protagonista visual:** lo que se mueve entre épocas lleva el acento; lo fijo queda en gris. Esto hace que la comprensión no dependa de ser astrónomo.
-- **Honestidad como UI:** insignias fijas "cambio observado" / "señal candidata", pie con fecha de observación + versión QR2, fondo de adorno marcado como decorativo (`aria-hidden`, distinto programáticamente).
+## Art direction (to settle with `frontend-design` + `theme-factory` before coding)
+- **Concept: "observatory instrument", not a generic sci-fi dashboard.** Neutral dark sky (no purple-blue), mono/technical typography for data (dates, MJD, RA/Dec) and a humane sans for copy. A single warm accent color (amber) for what changes; everything else monochrome. Avoid glassmorphism, neon and clone cards (`design-review` audits this).
+- **The change is the visual protagonist:** what moves between epochs carries the accent; what is fixed stays gray. Understanding then does not depend on being an astronomer.
+- **Honesty as UI:** fixed badges "observed change" / "candidate signal", a footer with the observation date + QR2 release, decorative background marked as decorative (`aria-hidden`, programmatically distinct).
 
-## Flujo de pantallas (3 escalas, una sola superficie)
-1. **Cielo completo** — Aladin con DSS/HiPS infrarrojo; 5 marcadores de `/targets` con nombre y una línea de gancho ("la estrella que más corre"). Buscador por nombre/coordenadas. HUD mínimo: coordenadas del cursor, FoV.
-2. **Región** — `animateToRaDec` + `zoomToFoV` al marcar un objeto; panel lateral con ficha (tipo, nota, movimiento propio, detector recomendado) y botón "Ver cambios".
-3. **Campo (núcleo científico)** — imagen de la época actual escalada pixelada, **deslizador de tiempo** con una marca por época real, **blink** con velocidad ajustable y pausa, selector de detector 1–6 (con rango µm y "bueno para"), selector de tamaño small/medium/large, retícula con escala en arcmin y marca del píxel central (donde se ubica el objeto). Lectura de fecha/época siempre visible.
-- **Transiciones/túnel y warp de carga**: segunda prioridad (`CLAUDE.md`: ciencia primero, el efecto acompaña). Un solo canvas r3f persistente. Con `prefers-reduced-motion` o móvil: fundido simple.
+## Screen flow (3 scales, one surface)
+1. **Whole sky** — Aladin with DSS/infrared HiPS; 5 `/targets` markers with a name and a one-line hook ("the star that runs the most"). Search by name/coordinates. Minimal HUD: cursor coordinates, FoV.
+2. **Region** — `animateToRaDec` + `zoomToFoV` to a selected object; side panel with its card (type, note, proper motion, recommended detector) and a "See changes" button.
+3. **Field (scientific core)** — the current epoch's image scaled pixelated, a **time slider** with one tick per real epoch, **blink** with adjustable speed and pause, detector 1–6 selector (with µm range and "good for"), small/medium/large size selector, a reticle with an arcmin scale and a mark on the central pixel (where the object sits). The date/epoch readout is always visible.
+- **Tunnel/warp transitions and loading screen**: second priority (`CLAUDE.md`: science first, the effect accompanies). One persistent r3f canvas. With `prefers-reduced-motion` or on mobile: a simple fade.
 
-## Estados que hay que diseñar (suelen olvidarse)
-`202` construyendo (warp + etapa `queued→querying→downloading→rendering` en lenguaje llano), `502` sin cobertura ("SPHEREx aún no cubre esta posición con este detector", con reintento), `503` sin BD/modo demo, vacío, error de red → video de respaldo.
+## States to design (often forgotten)
+`202` building (warp + stage `queued→querying→downloading→rendering` in plain language), `502` no coverage ("SPHEREx does not cover this position with this detector yet", with retry), `503` no DB/demo mode, empty, network error → backup video.
 
-## Orden de trabajo (alineado al plan de 48 h)
-1. Scaffold `frontend/` (Next.js + TS + Tailwind), cliente tipado de `/api/v1` en `frontend/lib/api.ts` (tipos desde el contrato del README; `shared/` queda para tipos si el equipo lo pide), tokens de diseño.
-2. Escala 3 primero: timeline + blink + detector sobre un target real (Barnard's Star, d3). Aquí se gana o pierde el reto.
-3. Escala 1 y 2 con Aladin (cargado con `dynamic(..., { ssr: false })`, instancia única) y vuelo entre ellas.
-4. Túnel/warp + GSAP timeline única; carga ligada a `progress`.
-5. Objetos conocidos / señales candidatas (extras), modo narrativo, pulido, `a11y-review`, `design-review`, video de demo.
+## Order of work (aligned to the 48 h plan)
+1. Scaffold `frontend/` (Next.js + TS + Tailwind), a typed `/api/v1` client in `frontend/lib/api.ts` (types from the README contract), design tokens.
+2. Scale 3 first: timeline + blink + detector on a real target (Barnard's Star, d3). This is where the challenge is won or lost.
+3. Scales 1 and 2 with Aladin (loaded with `dynamic(..., { ssr: false })`, single instance) and the flight between them.
+4. Tunnel/warp + a single GSAP timeline; loading tied to `progress`.
+5. Known objects / candidate signals (extras), narrative mode, polish, `a11y-review`, `design-review`, demo video.
 
-## Archivos y piezas (a crear en `frontend/`)
-- `app/` (layout, página única), `components/sky/AladinView.tsx`, `components/field/{BlinkViewer,TimeSlider,DetectorPicker}.tsx`, `components/hud/*`, `components/fx/Tunnel.tsx` (r3f), `lib/api.ts`, `lib/useTimeline.ts` (polling con `Retry-After`).
-- Reusar: contrato de `backend/README.md`; recetas de Aladin ya verificadas en `CLAUDE.md`; skills `frontend-design`, `theme-factory`, `motion-design`, `gsap-*`, `a11y-review`.
+## Files and pieces (in `frontend/`)
+- `app/` (layout, single page), `components/{Nebo,Sky,Field,Flight}.tsx`, `lib/api.ts`.
+- Reuse: the contract in `backend/README.md`; the Aladin recipes already verified in `CLAUDE.md`; skills `frontend-design`, `theme-factory`, `motion-design`, `gsap-*`, `a11y-review`.
 
-## Verificación
-- Backend local (`uvicorn`) + `pytest` del backend intacto; frontend contra la API real con un target precargado.
-- `chrome-devtools`: flujo completo cielo→campo, blink a distintas velocidades, estados 202/502, móvil (emulate), `lighthouse_audit`, consola sin errores.
-- `a11y-review` (contraste, teclado en el deslizador, `prefers-reduced-motion`) y `design-review` contra el "look de IA".
+## Verification
+- Local backend (`uvicorn`) + the backend `pytest` untouched; frontend against the real API with a preloaded target.
+- `chrome-devtools`: full sky→field flow, blink at different speeds, 202/502 states, mobile (emulate), `lighthouse_audit`, console free of errors.
+- `a11y-review` (contrast, keyboard on the slider, `prefers-reduced-motion`) and `design-review` against the "AI look".
 
-## Decisiones que quedan abiertas (recomendación entre paréntesis)
-- Nombre final de producto (mantener "Nebo").
-- ¿Huellas de SPHEREx en el MVP? (No: usar marcadores de targets; huellas solo si sobra tiempo).
-- Idioma de la UI (español + inglés para el jurado internacional; ES por defecto).
+## Open decisions (recommendation in parentheses)
+- Final product name (keep "Nebo").
+- SPHEREx footprints in the MVP? (No: use target markers; footprints only if time allows).
+- UI language (English).

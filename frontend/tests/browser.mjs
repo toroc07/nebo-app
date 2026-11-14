@@ -100,13 +100,10 @@ assert.equal(
   4,
 );
 assert.equal(
-  await page.getByText("TU VENTANA AL UNIVERSO", { exact: true }).count(),
+  await page.getByText("YOUR WINDOW TO THE UNIVERSE", { exact: true }).count(),
   0,
 );
-assert.equal(
-  await page.getByText("El cielo tiene", { exact: false }).count(),
-  0,
-);
+assert.equal(await page.getByText("The sky has", { exact: false }).count(), 0);
 assert.ok(
   await page
     .locator(".panel-image")
@@ -125,78 +122,72 @@ assert.deepEqual(
   axe.map((v) => v.id),
   [],
 );
-await page.getByRole("link", { name: "Nebo, inicio" }).click();
-await page.getByRole("button", { name: /Comenzar exploración/ }).click();
-await page.getByRole("button", { name: /Buscar por coordenadas/ }).click();
-await page.getByLabel("Ascensión recta").fill("360");
-await page.getByLabel("Declinación").fill("0");
-await page.getByRole("button", { name: "Ver imágenes", exact: true }).click();
+await page.getByRole("link", { name: "Nebo, home" }).click();
+await page.getByRole("button", { name: /Start exploring/ }).click();
+await page.getByRole("button", { name: /Search by coordinates/ }).click();
+await page.getByLabel("Right ascension").fill("360");
+await page.getByLabel("Declination").fill("0");
+await page.getByRole("button", { name: "View images", exact: true }).click();
 await page.locator("#coordinate-error").waitFor();
-await page.getByLabel("Ascensión recta").fill("269.446");
-await page.getByLabel("Declinación").fill("4.768");
+await page.getByLabel("Right ascension").fill("269.446");
+await page.getByLabel("Declination").fill("4.768");
 mode = "building";
-await page.getByRole("button", { name: "Ver imágenes", exact: true }).click();
-await page.getByText("Buscando observaciones", { exact: true }).waitFor();
-await page.getByLabel("Fecha de observación").waitFor();
-await page
-  .getByRole("button", { name: "Comparar épocas", exact: true })
-  .click();
+await page.getByRole("button", { name: "View images", exact: true }).click();
+await page.getByText("Searching for observations", { exact: true }).waitFor();
+await page.getByLabel("Observation date").waitFor();
+await page.getByRole("button", { name: "Compare epochs", exact: true }).click();
 await page.waitForTimeout(900);
-await page.getByRole("button", { name: "Pausar", exact: true }).click();
+await page.getByRole("button", { name: "Pause", exact: true }).click();
 assert.notEqual(await page.locator("#epoch").inputValue(), "0");
 await page.screenshot({ path: out + "field-mobile.png", fullPage: true });
 mode = "single";
-await page.getByLabel("Tamaño del campo").selectOption("small");
-await page
-  .getByText("Solo hay una época disponible", { exact: false })
-  .waitFor();
+await page.getByLabel("Field size").selectOption("small");
+await page.getByText("Only one epoch is available", { exact: false }).waitFor();
 assert.ok(
   await page
-    .getByRole("button", { name: "Comparar épocas", exact: true })
+    .getByRole("button", { name: "Compare epochs", exact: true })
     .isDisabled(),
 );
 mode = "empty";
-await page.getByLabel("Tamaño del campo").selectOption("large");
+await page.getByLabel("Field size").selectOption("large");
 await page
-  .getByText("Este campo todavía no tiene épocas disponibles.", {
+  .getByText("This field has no epochs available yet.", {
     exact: false,
   })
   .waitFor();
 mode = "error";
-await page.getByLabel("Tamaño del campo").selectOption("medium");
-await page.getByText(/La base de datos aún no está configurada/).waitFor();
-await page.getByRole("link", { name: "Nebo, inicio" }).click();
-await page.getByRole("button", { name: /Ajustes/ }).click();
-await page.getByLabel("Apariencia").selectOption("light");
-await page.getByLabel("Reducir movimiento", { exact: true }).check();
+await page.getByLabel("Field size").selectOption("medium");
+await page.getByText(/The database is not configured yet/).waitFor();
+await page.getByRole("link", { name: "Nebo, home" }).click();
+await page.getByRole("button", { name: /Settings/ }).click();
+await page.getByLabel("Appearance").selectOption("light");
+await page.getByLabel("Reduce motion", { exact: true }).check();
 await page.reload();
-await page.getByRole("link", { name: "Nebo, inicio" }).click();
-await page.getByRole("button", { name: /Ajustes/ }).click();
-assert.equal(await page.getByLabel("Apariencia").inputValue(), "light");
-assert.ok(
-  await page.getByLabel("Reducir movimiento", { exact: true }).isChecked(),
-);
-await page.getByRole("link", { name: "Nebo, inicio" }).click();
+await page.getByRole("link", { name: "Nebo, home" }).click();
+await page.getByRole("button", { name: /Settings/ }).click();
+assert.equal(await page.getByLabel("Appearance").inputValue(), "light");
+assert.ok(await page.getByLabel("Reduce motion", { exact: true }).isChecked());
+await page.getByRole("link", { name: "Nebo, home" }).click();
 await page.getByRole("button", { name: /Tutorial/ }).click();
-await page.getByRole("button", { name: "Siguiente", exact: true }).click();
-await page.getByRole("button", { name: "Siguiente", exact: true }).click();
-await page.getByRole("button", { name: "Comenzar", exact: true }).click();
+await page.getByRole("button", { name: "Next", exact: true }).click();
+await page.getByRole("button", { name: "Next", exact: true }).click();
+await page.getByRole("button", { name: "Start", exact: true }).click();
 // The three main tasks remain keyboard accessible; activate the coordinate tile through Enter.
-await page.getByRole("button", { name: /Buscar por coordenadas/ }).focus();
+await page.getByRole("button", { name: /Search by coordinates/ }).focus();
 await page.keyboard.press("Enter");
 await page.keyboard.press("Tab");
 assert.equal(
   await page.evaluate(() => document.activeElement?.id === "ra"),
   true,
 );
-await page.getByRole("link", { name: "Nebo, inicio" }).click();
-await page.getByRole("button", { name: /Comenzar exploración/ }).click();
+await page.getByRole("link", { name: "Nebo, home" }).click();
+await page.getByRole("button", { name: /Start exploring/ }).click();
 await page.screenshot({ path: out + "observe-mobile.png", fullPage: true });
-await page.getByRole("button", { name: /Iniciar exploración/ }).click();
+await page.getByRole("button", { name: /Begin exploring/ }).click();
 await page.getByRole("button", { name: /Barnard/ }).click();
-await page.getByRole("button", { name: "Ver imágenes", exact: true }).click();
+await page.getByRole("button", { name: "View images", exact: true }).click();
 mode = "ready";
-await page.getByRole("link", { name: "Nebo, inicio" }).click();
+await page.getByRole("link", { name: "Nebo, home" }).click();
 const stress = [];
 for (const viewport of [
   { width: 320, height: 568 },
@@ -204,7 +195,7 @@ for (const viewport of [
   { width: 375, height: 812 },
 ]) {
   await page.setViewportSize(viewport);
-  await page.getByRole("link", { name: "Nebo, inicio" }).click();
+  await page.getByRole("link", { name: "Nebo, home" }).click();
   await page.evaluate(() => (document.documentElement.style.fontSize = "200%"));
   assert.ok(
     await page.evaluate(

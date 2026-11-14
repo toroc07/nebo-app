@@ -26,19 +26,19 @@ import {
 import Field from "./Field";
 const Sky = dynamic(() => import("./Sky"), {
   ssr: false,
-  loading: () => <p className="sky-loading">Cargando cielo…</p>,
+  loading: () => <p className="sky-loading">Loading sky…</p>,
 });
 const Flight = dynamic(() => import("./Flight"), { ssr: false });
 gsap.registerPlugin(useGSAP);
 type View =
-  | "Inicio"
-  | "Observar"
-  | "Objetos destacados"
+  | "Home"
+  | "Observe"
+  | "Featured objects"
   | "Tutorial"
-  | "Ajustes"
-  | "Explorar"
-  | "Coordenadas"
-  | "Campo";
+  | "Settings"
+  | "Explore"
+  | "Coordinates"
+  | "Field";
 type Prefs = {
   theme: "system" | "light" | "dark";
   reduced: boolean;
@@ -46,11 +46,11 @@ type Prefs = {
 };
 const defaults: Prefs = { theme: "system", reduced: false, speed: 800 };
 const labels: Record<string, string> = {
-  "barnards-star": "La estrella que nunca se queda quieta.",
-  "eps-indi-b": "Dos enanas marrones, una historia compartida.",
-  "wise-0855": "Un mundo frío que brilla en el infrarrojo.",
-  "rw-aurigae": "Una joven estrella entre polvo y cambios.",
-  "r-draconis": "El pulso de una gigante roja.",
+  "barnards-star": "The star that never stands still.",
+  "eps-indi-b": "Two brown dwarfs, one shared story.",
+  "wise-0855": "A cold world glowing in the infrared.",
+  "rw-aurigae": "A young star among dust and change.",
+  "r-draconis": "The pulse of a red giant.",
 };
 function PanelImage({ src }: { src: string }) {
   return (
@@ -67,7 +67,7 @@ function PanelImage({ src }: { src: string }) {
   );
 }
 export default function Nebo() {
-  const [view, setView] = useState<View>("Inicio"),
+  const [view, setView] = useState<View>("Home"),
     [prefs, setPrefs] = useState(defaults),
     [loaded, setLoaded] = useState(false),
     [systemReduced, setSystemReduced] = useState(false);
@@ -118,9 +118,7 @@ export default function Nebo() {
     document.documentElement.dataset.theme = prefs.theme;
     document.documentElement.dataset.reduced = String(reduced);
   }, [prefs, loaded, reduced]);
-  const needsCatalog = ["Explorar", "Objetos destacados", "Campo"].includes(
-    view,
-  );
+  const needsCatalog = ["Explore", "Featured objects", "Field"].includes(view);
   useEffect(() => {
     if (!needsCatalog) return;
     const abort = new AbortController();
@@ -153,8 +151,8 @@ export default function Nebo() {
         ease: "power3.out",
       });
       gsap.to(".landscape", {
-        y: view === "Explorar" || view === "Campo" ? "18%" : "0%",
-        opacity: view === "Explorar" || view === "Campo" ? 0.2 : 1,
+        y: view === "Explore" || view === "Field" ? "18%" : "0%",
+        opacity: view === "Explore" || view === "Field" ? 0.2 : 1,
         duration: 0.45,
       });
     },
@@ -170,7 +168,7 @@ export default function Nebo() {
   function go(v: View) {
     setView(v);
     setFormError("");
-    if (v === "Explorar") {
+    if (v === "Explore") {
       setSkyMounted(true);
       setFlight((x) => x + 1);
     }
@@ -178,15 +176,15 @@ export default function Nebo() {
   function open(t: Target) {
     setSelected(t);
     setQuery({ target: t.slug });
-    go("Campo");
+    go("Field");
   }
   const back = () =>
     go(
-      view === "Campo"
-        ? "Explorar"
-        : ["Explorar", "Coordenadas"].includes(view)
-          ? "Observar"
-          : "Inicio",
+      view === "Field"
+        ? "Explore"
+        : ["Explore", "Coordinates"].includes(view)
+          ? "Observe"
+          : "Home",
     );
   function illuminatePanels(event: PointerEvent<HTMLElement>) {
     if (event.pointerType !== "mouse") return;
@@ -218,28 +216,28 @@ export default function Nebo() {
     <>
       {catalogLoading ? (
         <div className="skeleton" role="status">
-          Cargando objetos del catálogo…
+          Loading catalog objects…
         </div>
       ) : catalogError ? (
         <div className="notice" role="alert">
-          <h2>El catálogo no está disponible</h2>
+          <h2>The catalog is unavailable</h2>
           <p>{catalogError}</p>
           <button className="action" onClick={() => setReload((x) => x + 1)}>
             <RotateCcw size={18} />
-            Reintentar
+            Retry
           </button>
         </div>
       ) : targets.length === 0 ? (
-        <p className="notice">No hay objetos disponibles en el catálogo.</p>
+        <p className="notice">No objects are available in the catalog.</p>
       ) : (
         <div className="target-list">
           {targets.map((t, i) => (
             <button
               key={t.slug}
               className="target-row"
-              onClick={() => (view === "Explorar" ? setSelected(t) : open(t))}
+              onClick={() => (view === "Explore" ? setSelected(t) : open(t))}
               aria-pressed={
-                view === "Explorar" ? selected?.slug === t.slug : undefined
+                view === "Explore" ? selected?.slug === t.slug : undefined
               }
             >
               <span className="mono target-number">0{i + 1}</span>
@@ -248,14 +246,14 @@ export default function Nebo() {
                 <small>{labels[t.slug] || t.note}</small>
                 <span className="mono readiness">
                   {!patchKnown
-                    ? "Disponibilidad por consultar"
+                    ? "Availability to be checked"
                     : patches.some(
                           (p) =>
                             p.target_slug === t.slug &&
                             p.detectors_ready.includes(t.recommended_detector),
                         )
-                      ? "Imágenes preparadas"
-                      : "Requiere preparación"}{" "}
+                      ? "Images ready"
+                      : "Needs preparation"}{" "}
                   · Detector {t.recommended_detector}
                 </span>
               </span>
@@ -270,17 +268,17 @@ export default function Nebo() {
     <div className="app-shell" ref={root}>
       <div className="landscape" aria-hidden="true" />
       <div className="shade" aria-hidden="true" />
-      <a className="skip" href="#contenido">
-        Saltar al contenido
+      <a className="skip" href="#content">
+        Skip to content
       </a>
       <header className="header">
         <a
-          href="#inicio"
+          href="#home"
           className="brand"
-          aria-label="Nebo, inicio"
+          aria-label="Nebo, home"
           onClick={(e) => {
             e.preventDefault();
-            go("Inicio");
+            go("Home");
           }}
         >
           <img
@@ -295,52 +293,52 @@ export default function Nebo() {
           </span>
         </a>
       </header>
-      <main id="contenido" tabIndex={-1} className="view-content">
-        {view === "Inicio" ? (
+      <main id="content" tabIndex={-1} className="view-content">
+        {view === "Home" ? (
           <>
             <h1 className="sr-only" ref={heading} tabIndex={-1}>
-              Inicio
+              Home
             </h1>
             <nav
               className="home-grid"
-              aria-label="Panel de inicio"
+              aria-label="Home panel"
               onPointerMove={illuminatePanels}
               onPointerLeave={clearPanelLight}
             >
               <button
                 className="tile primary-tile image-tile"
-                onClick={() => go("Observar")}
+                onClick={() => go("Observe")}
               >
                 <PanelImage src="/horizon.webp" />
                 <div className="tile-top">
-                  <span className="mono">01 / EXPLORAR</span>
+                  <span className="mono">01 / EXPLORE</span>
                   <Compass size={27} />
                 </div>
                 <div className="tile-bottom">
                   <h2>
-                    Observar
+                    Observe
                     <br />
-                    el cielo
+                    the sky
                   </h2>
                   <span className="tile-link">
-                    Comenzar exploración <ArrowUpRight size={24} />
+                    Start exploring <ArrowUpRight size={24} />
                   </span>
                 </div>
               </button>
               <div className="secondary-stack">
                 <button
                   className="tile featured-tile image-tile"
-                  onClick={() => go("Objetos destacados")}
+                  onClick={() => go("Featured objects")}
                 >
                   <PanelImage src="/panels/nebula.png" />
                   <div className="tile-top">
-                    <span className="mono">02 / DESCUBRIR</span>
+                    <span className="mono">02 / DISCOVER</span>
                     <ArrowUpRight size={24} />
                   </div>
                   <div className="tile-bottom">
-                    <h2>Objetos destacados</h2>
+                    <h2>Featured objects</h2>
                     <span className="tile-link">
-                      Ver objetos <ArrowRight size={18} />
+                      View objects <ArrowRight size={18} />
                     </span>
                   </div>
                 </button>
@@ -352,20 +350,20 @@ export default function Nebo() {
                   <BookOpen size={30} />
                   <div>
                     <h2>Tutorial</h2>
-                    <span>Tu primer viaje, paso a paso</span>
+                    <span>Your first trip, step by step</span>
                   </div>
                   <ArrowUpRight size={24} />
                 </button>
               </div>
               <button
                 className="tile settings-tile image-tile"
-                onClick={() => go("Ajustes")}
+                onClick={() => go("Settings")}
               >
                 <PanelImage src="/panels/controls.svg" />
                 <SlidersHorizontal size={24} aria-hidden="true" />
                 <div>
-                  <h2>Ajustes</h2>
-                  <span>Apariencia y movimiento</span>
+                  <h2>Settings</h2>
+                  <span>Appearance and motion</span>
                 </div>
                 <ArrowUpRight size={24} aria-hidden="true" />
               </button>
@@ -376,54 +374,52 @@ export default function Nebo() {
             <div className="page-heading">
               <button className="back" onClick={back}>
                 <ArrowLeft size={18} />
-                Volver
+                Back
               </button>
               <h1 tabIndex={-1} ref={heading}>
-                {view === "Observar"
-                  ? "Observar"
-                  : view === "Coordenadas"
-                    ? "Encuentra tu campo."
-                    : view === "Explorar"
-                      ? "Elige tu próximo destino."
-                      : view === "Campo"
-                        ? selected?.name || "Tu campo de observación"
-                        : view === "Objetos destacados"
-                          ? "Objetos destacados"
+                {view === "Observe"
+                  ? "Observe"
+                  : view === "Coordinates"
+                    ? "Find your field."
+                    : view === "Explore"
+                      ? "Choose your next destination."
+                      : view === "Field"
+                        ? selected?.name || "Your observation field"
+                        : view === "Featured objects"
+                          ? "Featured objects"
                           : view === "Tutorial"
                             ? "Tutorial"
-                            : "Ajustes"}
+                            : "Settings"}
               </h1>
             </div>
-            {view === "Observar" && (
+            {view === "Observe" && (
               <div className="observe-grid">
                 <button
                   className="tile start-tile"
-                  onClick={() => go("Explorar")}
+                  onClick={() => go("Explore")}
                 >
                   <div className="tile-top">
-                    <span className="mono">01 / SIN RUMBO FIJO</span>
+                    <span className="mono">01 / NO SET COURSE</span>
                     <Compass size={32} />
                   </div>
                   <div className="tile-bottom">
                     <h2>
-                      Iniciar
+                      Begin
                       <br />
-                      exploración
+                      exploring
                     </h2>
-                    <p>
-                      Recorre el mapa celeste y elige un objeto para observar.
-                    </p>
+                    <p>Browse the sky map and pick an object to observe.</p>
                     <span className="tile-link">
-                      Abrir el cielo <ArrowUpRight />
+                      Open the sky <ArrowUpRight />
                     </span>
                   </div>
                 </button>
                 <button
                   className="tile coordinate-tile"
-                  onClick={() => go("Coordenadas")}
+                  onClick={() => go("Coordinates")}
                 >
                   <div className="tile-top">
-                    <span className="mono">02 / UN DESTINO EN MENTE</span>
+                    <span className="mono">02 / A DESTINATION IN MIND</span>
                     <Crosshair size={32} />
                   </div>
                   <div className="coordinate-art mono" aria-hidden="true">
@@ -432,53 +428,52 @@ export default function Nebo() {
                   </div>
                   <div className="tile-bottom">
                     <h2>
-                      Buscar por
+                      Search by
                       <br />
-                      coordenadas
+                      coordinates
                     </h2>
-                    <p>
-                      Introduce una posición y consulta sus imágenes de SPHEREx.
-                    </p>
+                    <p>Enter a position and view its SPHEREx images.</p>
                     <span className="tile-link">
-                      Elegir coordenadas <ArrowUpRight />
+                      Choose coordinates <ArrowUpRight />
                     </span>
                   </div>
                 </button>
               </div>
             )}
-            {view === "Observar" && (
-              // Acceso a la ruta de pruebas /lab/observation (imágenes demo sin backend).
-              // Enlace plano a propósito: no toca la rejilla ni el estado del menú.
+            {view === "Observe" && (
+              // Entry point to the /lab/observation test route (demo images, no backend).
+              // Plain link on purpose: it leaves the grid and the menu state untouched.
               <p>
                 <a className="secondary" href="/lab/observation">
-                  Laboratorio de imágenes (demo, sin backend)
+                  Image lab (demo, no backend)
                 </a>
               </p>
             )}
-            {view === "Coordenadas" && (
+            {view === "Coordinates" && (
               <form
                 className="surface coordinate-form"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!validCoordinates(ra, dec)) {
                     setFormError(
-                      "Introduce RA entre 0 y menos de 360°, y Dec entre −90 y 90°.",
+                      "Enter RA from 0 up to, but not including, 360°, and Dec between −90 and 90°.",
                     );
                     return;
                   }
                   setSelected(null);
                   setQuery({ ra: Number(ra), dec: Number(dec) });
-                  go("Campo");
+                  go("Field");
                 }}
               >
                 <Crosshair size={32} />
-                <h2>Una posición. Muchas miradas.</h2>
+                <h2>One position. Many views.</h2>
                 <p>
-                  Coordenadas celestes ICRS en grados decimales. Un campo nuevo
-                  puede tardar unos minutos en prepararse.
+                  ICRS celestial coordinates in decimal degrees. A new field can
+                  take a few minutes to prepare.
                 </p>
                 <label htmlFor="ra">
-                  Ascensión recta (RA)<span>Desde 0 hasta menos de 360°</span>
+                  Right ascension (RA)
+                  <span>From 0 up to, but not including, 360°</span>
                 </label>
                 <input
                   id="ra"
@@ -492,7 +487,7 @@ export default function Nebo() {
                   aria-describedby={formError ? "coordinate-error" : undefined}
                 />
                 <label htmlFor="dec">
-                  Declinación (Dec)<span>Desde −90 hasta +90°</span>
+                  Declination (Dec)<span>From −90 to +90°</span>
                 </label>
                 <input
                   id="dec"
@@ -511,18 +506,18 @@ export default function Nebo() {
                   </p>
                 )}
                 <button className="action" type="submit">
-                  Ver imágenes <ArrowRight size={20} />
+                  View images <ArrowRight size={20} />
                 </button>
               </form>
             )}
-            {view === "Objetos destacados" && (
+            {view === "Featured objects" && (
               <section className="surface catalog">
-                <p>Cinco destinos para descubrir cómo cambia el universo.</p>
+                <p>Five destinations to discover how the universe changes.</p>
                 {catalog}
               </section>
             )}
 
-            {view === "Campo" && query && (
+            {view === "Field" && query && (
               <Field
                 query={query}
                 recommended={selected?.recommended_detector || 3}
@@ -532,7 +527,7 @@ export default function Nebo() {
             )}
             {view === "Tutorial" && (
               <section className="surface tutorial">
-                <span className="mono">PASO 0{step + 1} / 03</span>
+                <span className="mono">STEP 0{step + 1} / 03</span>
                 <div className="tutorial-symbol" aria-hidden="true">
                   {step === 0 ? (
                     <Compass size={64} />
@@ -545,18 +540,18 @@ export default function Nebo() {
                 <h2>
                   {
                     [
-                      "Explora sin saber coordenadas",
-                      "Elige qué quieres observar",
-                      "Mira lo que cambia",
+                      "Explore without knowing coordinates",
+                      "Choose what you want to observe",
+                      "See what changes",
                     ][step]
                   }
                 </h2>
                 <p>
                   {
                     [
-                      "Entra en Observar y pulsa Iniciar exploración. El mapa muestra el cielo; la lista te ofrece cinco objetos para comenzar.",
-                      "Selecciona un objeto y pulsa Ver imágenes. Si ya conoces una posición, puedes introducir su ascensión recta y declinación en grados.",
-                      "Mueve el selector de fechas o reproduce la comparación. Usa siempre el mismo detector para comparar una banda. Las variaciones son cambios observados, no una confirmación de un planeta nuevo.",
+                      "Go to Observe and press Begin exploring. The map shows the sky; the list offers five objects to start with.",
+                      "Select an object and press View images. If you already know a position, you can enter its right ascension and declination in degrees.",
+                      "Move the date selector or play the comparison. Always use the same detector to compare one band. Variations are observed changes, not confirmation of a new planet.",
                     ][step]
                   }
                 </p>
@@ -566,32 +561,29 @@ export default function Nebo() {
                       className="secondary"
                       onClick={() => setStep((s) => s - 1)}
                     >
-                      Anterior
+                      Previous
                     </button>
                   )}
                   <button
                     className="action"
                     onClick={() =>
-                      step < 2 ? setStep((s) => s + 1) : go("Observar")
+                      step < 2 ? setStep((s) => s + 1) : go("Observe")
                     }
                   >
-                    {step < 2 ? "Siguiente" : "Comenzar"}
+                    {step < 2 ? "Next" : "Start"}
                     <ArrowRight size={20} />
                   </button>
-                  <button
-                    className="text-button"
-                    onClick={() => go("Observar")}
-                  >
-                    Omitir tutorial
+                  <button className="text-button" onClick={() => go("Observe")}>
+                    Skip tutorial
                   </button>
                 </div>
               </section>
             )}
-            {view === "Ajustes" && (
+            {view === "Settings" && (
               <section className="surface settings">
-                <h2>Prepara tu observatorio</h2>
-                <p>Los cambios se guardan automáticamente en este navegador.</p>
-                <label htmlFor="theme">Apariencia</label>
+                <h2>Set up your observatory</h2>
+                <p>Changes are saved automatically in this browser.</p>
+                <label htmlFor="theme">Appearance</label>
                 <select
                   id="theme"
                   value={prefs.theme}
@@ -602,9 +594,9 @@ export default function Nebo() {
                     })
                   }
                 >
-                  <option value="system">Usar tema del dispositivo</option>
-                  <option value="dark">Oscuro</option>
-                  <option value="light">Claro</option>
+                  <option value="system">Use device theme</option>
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
                 </select>
                 <label className="check-label">
                   <input
@@ -614,13 +606,10 @@ export default function Nebo() {
                       setPrefs({ ...prefs, reduced: e.target.checked })
                     }
                   />
-                  Reducir movimiento
+                  Reduce motion
                 </label>
-                <p>
-                  También respetamos la preferencia de movimiento de tu
-                  dispositivo.
-                </p>
-                <label htmlFor="speed">Intervalo de comparación</label>
+                <p>We also respect your device&apos;s motion preference.</p>
+                <label htmlFor="speed">Comparison interval</label>
                 <select
                   id="speed"
                   value={prefs.speed}
@@ -628,17 +617,17 @@ export default function Nebo() {
                     setPrefs({ ...prefs, speed: Number(e.target.value) })
                   }
                 >
-                  <option value="400">Rápido · 0,4 segundos</option>
-                  <option value="800">Normal · 0,8 segundos</option>
-                  <option value="1500">Pausado · 1,5 segundos</option>
+                  <option value="400">Fast · 0.4 seconds</option>
+                  <option value="800">Normal · 0.8 seconds</option>
+                  <option value="1500">Slow · 1.5 seconds</option>
                 </select>
-                <p>La reproducción siempre comienza en pausa.</p>
+                <p>Playback always starts paused.</p>
               </section>
             )}
           </>
         )}
         {skyMounted && (
-          <div hidden={view !== "Explorar"} className="explorer-grid">
+          <div hidden={view !== "Explore"} className="explorer-grid">
             <div className="sky-panel">
               <Sky
                 targets={targets}
@@ -646,11 +635,11 @@ export default function Nebo() {
                 onSelect={setSelected}
               />
               <span className="map-credit">
-                Mapa de referencia DSS2 · CDS Aladin
+                Reference map DSS2 · CDS Aladin
               </span>
             </div>
             <section className="surface explorer-sidebar">
-              <h2>Objetos para empezar</h2>
+              <h2>Objects to get started</h2>
               {catalog}
               {selected && (
                 <div className="selection">
@@ -661,7 +650,7 @@ export default function Nebo() {
                     Dec {selected.dec.toFixed(5)}°
                   </p>
                   <button className="action" onClick={() => open(selected)}>
-                    Ver imágenes <ArrowRight size={20} />
+                    View images <ArrowRight size={20} />
                   </button>
                 </div>
               )}
@@ -671,8 +660,7 @@ export default function Nebo() {
       </main>
       <footer>
         <span className="mono">
-          IMÁGENES SPHEREx <span className="footer-separator">/</span> NASA ·
-          IPAC
+          SPHEREx IMAGES <span className="footer-separator">/</span> NASA · IPAC
         </span>
       </footer>
       {flight > 0 && !reduced && <Flight trigger={flight} />}

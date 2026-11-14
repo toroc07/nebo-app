@@ -48,15 +48,15 @@ export class ApiError extends Error {
     super(
       status === 503
         ? code === "database_not_configured"
-          ? "La base de datos aún no está configurada. Conecta PostgreSQL para consultar las imágenes."
-          : "El servicio no está disponible. Inténtalo de nuevo en unos momentos."
+          ? "The database is not configured yet. Connect PostgreSQL to query the images."
+          : "The service is unavailable. Try again in a few moments."
         : status === 502
-          ? "No se pudo preparar este campo. Prueba otro detector o vuelve a intentarlo en un minuto."
+          ? "We could not prepare this field. Try another detector or try again in a minute."
           : status === 404
-            ? "No encontramos este objeto. Vuelve al catálogo."
+            ? "We could not find this object. Go back to the catalog."
             : status === 422
-              ? "Revisa las coordenadas e inténtalo de nuevo."
-              : "No pudimos conectar con el servicio de imágenes. Comprueba tu conexión y vuelve a intentarlo.",
+              ? "Check the coordinates and try again."
+              : "We could not reach the image service. Check your connection and try again.",
     );
   }
 }

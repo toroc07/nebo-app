@@ -1,12 +1,12 @@
-// Laboratorio de observación. Contrato COMPLETO de `GET /timeline` (backend/app/main.py y
-// shared/demo), superset del `Timeline` de lib/api.ts, que hoy omite sector, data, releases y
-// expected_position. Importa de lib/api.ts pero no lo modifica.
+// Observation lab. FULL contract of `GET /timeline` (backend/app/main.py and shared/demo), a
+// superset of the `Timeline` in lib/api.ts, which today omits sector, data, releases and
+// expected_position. It imports from lib/api.ts but does not modify it.
 import { imageUrl, timeline as fetchTimeline, type Query } from "@/lib/api";
 
 export type ExpectedPosition = {
   ra: number;
   dec: number;
-  // Píxel dentro de la imagen (0,0 = esquina superior izquierda, norte arriba, este a la izquierda).
+  // Pixel inside the image (0,0 = top-left corner, north up, east to the left).
   x: number;
   y: number;
   in_image: boolean;
@@ -19,7 +19,7 @@ export type LabEpoch = {
   mid_mjd: number;
   frames_available: number;
   frames_used: number;
-  // Escala de brillo compartida por todas las épocas de un tamaño.
+  // Brightness scale shared by all epochs of one size.
   display_min: number;
   display_max: number;
   releases: string[];
@@ -66,15 +66,13 @@ export const demoBase = "/lab/demo/";
 
 export async function loadTargets(source: Source): Promise<LabTarget[]> {
   const r = await fetch(
-    source === "demo"
-      ? demoBase + "targets.json"
-      : imageUrl("/api/v1/targets"),
+    source === "demo" ? demoBase + "targets.json" : imageUrl("/api/v1/targets"),
   );
   if (!r.ok) throw new Error(`targets: HTTP ${r.status}`);
   return r.json();
 }
 
-// Un único punto de entrada para demo y API real: el resto del visor no sabe de dónde viene.
+// Single entry point for demo and API: the rest of the viewer does not know where data comes from.
 export async function loadTimeline(
   source: Source,
   slug: string,
@@ -84,20 +82,26 @@ export async function loadTimeline(
   onBuilding?: (stage: string, done: number, total: number) => void,
 ): Promise<LabTimeline> {
   if (source === "demo") {
-    const r = await fetch(`${demoBase}timeline/${slug}_d${detector}_${size}.json`, {
-      signal,
-    });
-    if (!r.ok) throw new Error(`No hay timeline demo para ${slug} D${detector} ${size}`);
+    const r = await fetch(
+      `${demoBase}timeline/${slug}_d${detector}_${size}.json`,
+      {
+        signal,
+      },
+    );
+    if (!r.ok)
+      throw new Error(`No demo timeline for ${slug} D${detector} ${size}`);
     return r.json();
   }
   const query: Query = { target: slug };
   const data = await fetchTimeline(query, size, detector, signal, (b) =>
     onBuilding?.(b.progress.stage, b.progress.done, b.progress.total),
   );
-  // La API devuelve más campos de los que lib/api.ts tipa; aquí los usamos tal cual.
+  // The API returns more fields than lib/api.ts types; here we use them as they come.
   return data as unknown as LabTimeline;
 }
 
 export function epochImageUrl(source: Source, epoch: LabEpoch): string {
-  return source === "demo" ? demoBase + epoch.image_url : imageUrl(epoch.image_url);
+  return source === "demo"
+    ? demoBase + epoch.image_url
+    : imageUrl(epoch.image_url);
 }

@@ -52,7 +52,7 @@ export default function Sky({
           showCooGridControl: true,
         });
         catalog.current = A.catalog({
-          name: "Objetos Nebo",
+          name: "Nebo objects",
           sourceSize: 18,
           color: "#edc181",
           onClick: (source: { data: { slug: string } }) => {
@@ -98,29 +98,28 @@ export default function Sky({
         className="aladin-host"
         ref={host}
         role="region"
-        aria-label="Mapa celeste; selección alternativa en la lista de objetos"
+        aria-label="Sky map; the object list is an alternative way to select"
       />
       {!ready && (
         <div className="sky-message" role="status">
           {error ? (
             <>
-              <p>No se pudo cargar el mapa celeste.</p>
-              <p>Puedes elegir un objeto en la lista.</p>
+              <p>The sky map could not be loaded.</p>
+              <p>You can pick an object from the list.</p>
               <button
                 className="secondary"
                 onClick={() => setRetry((x) => x + 1)}
               >
-                Reintentar mapa
+                Retry map
               </button>
             </>
           ) : (
-            <p>Cargando mapa celeste…</p>
+            <p>Loading sky map…</p>
           )}
         </div>
       )}
       <p className="sky-help">
-        Arrastra para recorrer el cielo. También puedes elegir un objeto en la
-        lista.
+        Drag to move around the sky. You can also pick an object from the list.
       </p>
     </>
   );
