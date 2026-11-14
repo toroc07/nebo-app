@@ -40,6 +40,7 @@ type View =
   | "Explore"
   | "Coordinates"
   | "Field";
+type Destination = View | "/lab/observation";
 type Prefs = {
   theme: "system" | "light" | "dark";
   reduced: boolean;
@@ -90,6 +91,9 @@ export default function Nebo() {
   const root = useRef<HTMLDivElement>(null),
     heading = useRef<HTMLHeadingElement>(null),
     first = useRef(true);
+  const entrance = useRef<gsap.core.Timeline | null>(null),
+    departing = useRef(false),
+    pending = useRef<Destination | null>(null);
   const reduced = prefs.reduced || systemReduced;
   useEffect(() => {
     try {
@@ -143,22 +147,90 @@ export default function Nebo() {
       .catch(() => {});
     return () => abort.abort();
   }, [needsCatalog, reload]);
-  useGSAP(
+  const { contextSafe } = useGSAP(
     () => {
-      if (reduced) return;
-      gsap.from(".view-content", {
-        opacity: 0,
-        y: 14,
-        duration: 0.4,
-        ease: "power3.out",
+      const main = root.current?.querySelector<HTMLElement>(".view-content");
+      if (main) {
+        main.inert = false;
+        main.removeAttribute("aria-busy");
+        delete main.dataset.transition;
+      }
+      departing.current = false;
+      // A preference change can cancel an exit; still honor the chosen destination.
+      if (pending.current) {
+        completeNavigation();
+        return;
+      }
+      if (
+        !loaded ||
+        reduced ||
+        matchMedia("(prefers-reduced-motion: reduce)").matches
+      )
+        return;
+      const menu = root.current?.querySelector(".panel-menu");
+      if (main) main.dataset.transition = "entering";
+      const timeline = gsap.timeline({
+        defaults: { ease: "power3.out" },
+        onComplete: () => {
+          if (main?.dataset.transition === "entering")
+            delete main.dataset.transition;
+        },
       });
+      entrance.current = timeline;
+      timeline.fromTo(
+        ".view-content",
+        { opacity: 0 },
+        {
+          opacity: 1,
+          duration: 0.18,
+          clearProps: "opacity",
+        },
+      );
+      if (menu) {
+        const cards = menu.querySelectorAll(".image-tile");
+        // CSS hover resumes after the coordinated opening finishes.
+        timeline.fromTo(
+          cards,
+          { opacity: 0, scale: 0.965, y: 12 },
+          {
+            opacity: 1,
+            scale: 1,
+            y: 0,
+            duration: 0.3,
+            stagger: Math.min(0.04, 0.16 / cards.length),
+            clearProps: "opacity,transform",
+          },
+          0.04,
+        );
+        timeline.fromTo(
+          menu.querySelectorAll(
+            ".tile-bottom, .tutorial-tile > div, .settings-tile > div",
+          ),
+          {
+            opacity: 0,
+            y: 10,
+          },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.36,
+            stagger: 0.03,
+            clearProps: "opacity,transform",
+          },
+          0.08,
+        );
+      }
       gsap.to(".landscape", {
         y: view === "Explore" || view === "Field" ? "18%" : "0%",
         opacity: view === "Explore" || view === "Field" ? 0.2 : 1,
         duration: 0.45,
       });
     },
-    { scope: root, dependencies: [view, reduced], revertOnUpdate: true },
+    {
+      scope: root,
+      dependencies: [view, reduced, loaded],
+      revertOnUpdate: true,
+    },
   );
   useEffect(() => {
     if (first.current) {
@@ -167,14 +239,97 @@ export default function Nebo() {
     }
     heading.current?.focus();
   }, [view]);
-  function go(v: View) {
-    setView(v);
+  function completeNavigation() {
+    const destination = pending.current;
+    pending.current = null;
+    if (!destination) return;
+    if (destination === "/lab/observation") {
+      router.push(destination);
+      return;
+    }
+    departing.current = false;
+    setView(destination);
     setFormError("");
-    if (v === "Explore") {
+    if (destination === "Explore") {
       setSkyMounted(true);
       setFlight((x) => x + 1);
     }
   }
+  const go = contextSafe((destination: Destination) => {
+    if (departing.current || destination === view) return;
+    pending.current = destination;
+    const main = root.current?.querySelector<HTMLElement>(".view-content");
+    if (
+      !main ||
+      !loaded ||
+      reduced ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      completeNavigation();
+      return;
+    }
+    departing.current = true;
+    const selected =
+      document.activeElement?.closest<HTMLElement>(".image-tile");
+    const menu = main.querySelector<HTMLElement>(".panel-menu");
+    const cards = Array.from(
+      menu?.querySelectorAll<HTMLElement>(".image-tile") ?? [],
+    );
+    const center = menu?.getBoundingClientRect();
+    const directions = new Map(
+      cards.map((card) => {
+        const rect = card.getBoundingClientRect();
+        return [
+          card,
+          center && rect.left + rect.width / 2 < center.left + center.width / 2
+            ? -1
+            : 1,
+        ];
+      }),
+    );
+    entrance.current?.kill();
+    gsap.set(main, { clearProps: "opacity,transform" });
+    main.dataset.transition = "leaving";
+    main.setAttribute("aria-busy", "true");
+    main.inert = true;
+    const exit = gsap.timeline({
+      defaults: { ease: "power2.in" },
+      onComplete: completeNavigation,
+    });
+    if (cards.length) {
+      const others = cards.filter((card) => card !== selected);
+      exit.to(
+        others,
+        {
+          opacity: 0,
+          scale: 0.94,
+          x: (_index, card) => (directions.get(card) ?? 1) * 18,
+          duration: 0.22,
+          stagger: 0.02,
+        },
+        0,
+      );
+      if (selected && cards.includes(selected)) {
+        exit.to(
+          selected,
+          {
+            scale: 1.045,
+            opacity: destination === "/lab/observation" ? 0.15 : 0,
+            duration: 0.26,
+          },
+          0.04,
+        );
+      }
+    } else {
+      exit.to(main, { opacity: 0, y: -6, duration: 0.18 });
+    }
+  });
+  // A field can be opened from Featured objects, the sky explorer or the coordinates form. Back
+  // returns to whichever one it was opened from: the last screen that was not a field.
+  const fieldOrigin = useRef<View>("Observe");
+  useEffect(() => {
+    if (view !== "Field") fieldOrigin.current = view;
+  }, [view]);
   function open(t: Target) {
     setSelected(t);
     setQuery({ target: t.slug });
@@ -183,16 +338,16 @@ export default function Nebo() {
   const back = () =>
     go(
       view === "Field"
-        ? "Explore"
+        ? fieldOrigin.current
         : ["Explore", "Coordinates"].includes(view)
           ? "Observe"
           : "Home",
     );
   function illuminatePanels(event: PointerEvent<HTMLElement>) {
     if (event.pointerType !== "mouse") return;
-    event.currentTarget
-      .querySelectorAll<HTMLElement>(".image-tile")
-      .forEach((tile) => {
+    const lights = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(".image-tile"),
+      (tile) => {
         const rect = tile.getBoundingClientRect();
         const dx = Math.max(
           rect.left - event.clientX,
@@ -204,9 +359,14 @@ export default function Nebo() {
           0,
           event.clientY - rect.bottom,
         );
-        tile.dataset.near = String(Math.hypot(dx, dy) < 64);
-      });
+        return { tile, near: String(Math.hypot(dx, dy) < 64) };
+      },
+    );
+    lights.forEach(({ tile, near }) => {
+      tile.dataset.near = near;
+    });
   }
+
   function clearPanelLight(event: PointerEvent<HTMLElement>) {
     event.currentTarget
       .querySelectorAll<HTMLElement>(".image-tile")
@@ -302,7 +462,7 @@ export default function Nebo() {
               Home
             </h1>
             <nav
-              className="home-grid"
+              className="home-grid panel-menu"
               aria-label="Home panel"
               onPointerMove={illuminatePanels}
               onPointerLeave={clearPanelLight}
@@ -311,7 +471,7 @@ export default function Nebo() {
                 className="tile primary-tile image-tile"
                 onClick={() => go("Observe")}
               >
-                <PanelImage src="/horizon.webp" />
+                <PanelImage src="/panels/deep-field.png" />
                 <div className="tile-top">
                   <span className="mono">01 / EXPLORE</span>
                   <Compass size={27} />
@@ -373,12 +533,18 @@ export default function Nebo() {
           </>
         ) : (
           <>
-            <div className="page-heading">
+            <div
+              className={`page-heading${view === "Observe" ? " observe-heading" : ""}`}
+            >
               <button className="back" onClick={back}>
                 <ArrowLeft size={18} />
                 Back
               </button>
-              <h1 tabIndex={-1} ref={heading}>
+              <h1
+                className={view === "Observe" ? "sr-only" : undefined}
+                tabIndex={-1}
+                ref={heading}
+              >
                 {view === "Observe"
                   ? "Observe"
                   : view === "Coordinates"
@@ -395,13 +561,18 @@ export default function Nebo() {
               </h1>
             </div>
             {view === "Observe" && (
-              <div className="observe-grid">
+              <nav
+                className="observe-grid panel-menu"
+                aria-label="Observe panel"
+                onPointerMove={illuminatePanels}
+                onPointerLeave={clearPanelLight}
+              >
                 <button
-                  className="tile start-tile"
-                  onClick={() => router.push("/lab/observation")}
+                  className="tile start-tile image-tile"
+                  onClick={() => go("/lab/observation")}
                 >
+                  <PanelImage src="/panels/cartwheel.png" />
                   <div className="tile-top">
-                    <span className="mono">01 / NO SET COURSE</span>
                     <Compass size={32} />
                   </div>
                   <div className="tile-bottom">
@@ -410,26 +581,19 @@ export default function Nebo() {
                       <br />
                       exploring
                     </h2>
-                    <p>
-                      Open the SPHEREx images full screen: zoom, pan and read
-                      coordinates.
-                    </p>
+                    <p>Explore images at your own pace.</p>
                     <span className="tile-link">
                       Open the images <ArrowUpRight />
                     </span>
                   </div>
                 </button>
                 <button
-                  className="tile coordinate-tile"
+                  className="tile coordinate-tile image-tile"
                   onClick={() => go("Coordinates")}
                 >
+                  <PanelImage src="/panels/coordinates.svg" />
                   <div className="tile-top">
-                    <span className="mono">02 / A DESTINATION IN MIND</span>
                     <Crosshair size={32} />
-                  </div>
-                  <div className="coordinate-art mono" aria-hidden="true">
-                    α 269.446°
-                    <br />δ +04.769°
                   </div>
                   <div className="tile-bottom">
                     <h2>
@@ -443,7 +607,7 @@ export default function Nebo() {
                     </span>
                   </div>
                 </button>
-              </div>
+              </nav>
             )}
             {view === "Coordinates" && (
               <form

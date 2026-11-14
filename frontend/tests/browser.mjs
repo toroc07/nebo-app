@@ -134,7 +134,7 @@ await page.getByLabel("Declination").fill("4.768");
 mode = "building";
 await page.getByRole("button", { name: "View images", exact: true }).click();
 await page.getByText("Searching for observations", { exact: true }).waitFor();
-await page.getByLabel("Observation date").waitFor();
+await page.getByLabel(/^Observed ·/).waitFor();
 await page.getByRole("button", { name: "Compare epochs", exact: true }).click();
 await page.waitForTimeout(900);
 await page.getByRole("button", { name: "Pause", exact: true }).click();
@@ -183,10 +183,24 @@ assert.equal(
 await page.getByRole("link", { name: "Nebo, home" }).click();
 await page.getByRole("button", { name: /Start exploring/ }).click();
 await page.screenshot({ path: out + "observe-mobile.png", fullPage: true });
-// "Begin exploring" lands directly on the full-screen image viewer (demo export, no API).
+// "Begin exploring" lands on the full-screen image viewer, which asks the real API first. The
+// mocked API is failing here (mode "error"), so the viewer offers the synthetic demo, and once it
+// is chosen a "simulated data" banner stays on screen.
 await page.setViewportSize({ width: 1280, height: 800 });
+const timelineRequestsBefore = requests;
 await page.getByRole("button", { name: /Begin exploring/ }).click();
 await page.waitForURL("**/lab/observation");
+await page
+  .getByRole("button", { name: "Show the simulated demo instead", exact: true })
+  .click();
+assert.ok(
+  requests > timelineRequestsBefore,
+  "the lab asked the real API first",
+);
+await page
+  .getByRole("note")
+  .getByText(/Simulated data/)
+  .waitFor();
 await page.getByRole("application", { name: /SPHEREx image/ }).waitFor();
 const epochImage = page.locator("img[alt^='Epoch 1 of']");
 await epochImage.waitFor();
@@ -298,6 +312,26 @@ mode = "ready";
 await page.setViewportSize({ width: 375, height: 812 });
 await page.getByRole("link", { name: "Back to the menu" }).click();
 await page.getByRole("navigation", { name: "Home panel" }).waitFor();
+// Back from a field returns to the screen it was opened from, not to a fixed one.
+const backButton = page.getByRole("button", { name: "Back", exact: true });
+const heading = (name) =>
+  page.getByRole("heading", { level: 1, name, exact: true });
+await page.getByRole("button", { name: /Featured objects/ }).click();
+await page.getByRole("button", { name: /Barnard/ }).click();
+await page.getByLabel(/^Observed ·/).waitFor();
+await backButton.click();
+await heading("Featured objects").waitFor();
+await backButton.click();
+await page.getByRole("navigation", { name: "Home panel" }).waitFor();
+await page.getByRole("button", { name: /Start exploring/ }).click();
+await page.getByRole("button", { name: /Search by coordinates/ }).click();
+await page.getByLabel("Right ascension").fill("269.446");
+await page.getByLabel("Declination").fill("4.768");
+await page.getByRole("button", { name: "View images", exact: true }).click();
+await page.getByLabel(/^Observed ·/).waitFor();
+await backButton.click();
+await heading("Find your field.").waitFor();
+await page.getByRole("link", { name: "Nebo, home" }).click();
 const stress = [];
 for (const viewport of [
   { width: 320, height: 568 },
@@ -348,6 +382,7 @@ writeFileSync(
         "image viewer: fit, zoom, pin, drag pin, refit",
         "infrared/color switch keeps the view",
         "zoom switches between the 3 sizes",
+        "Back from a field returns to its origin",
         "200% text",
         "RTL",
       ],
