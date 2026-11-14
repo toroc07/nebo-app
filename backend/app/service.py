@@ -71,6 +71,10 @@ def mjd_to_datetime(mjd: float) -> datetime:
     return Time(mjd, format="mjd").to_datetime(timezone=timezone.utc)
 
 
+def datetime_to_mjd(moment: datetime) -> float:
+    return Time(moment).mjd
+
+
 @dataclass
 class _Processed:
     epoch: int

@@ -1,4 +1,7 @@
+import io
+
 import pytest
+from PIL import Image
 from fastapi.testclient import TestClient
 
 from app import db
@@ -107,3 +110,46 @@ def test_without_database_the_api_answers_503(monkeypatch):
     response = http.get("/api/v1/timeline", params={"target": "wise-0855"})
     assert response.status_code == 503
     assert response.json()["code"] == "database_not_configured"
+
+
+def test_timeline_has_corners_data_version_and_expected_position(client):
+    http, service = client
+    params = {"target": "barnards-star", "size": "medium", "detector": 3}
+    http.get("/api/v1/timeline", params=params)
+    wait_until_settled(service, service.resolve_patch(target_slug="barnards-star"))
+    body = http.get("/api/v1/timeline", params=params).json()
+
+    assert set(body["sector"]["corners"]) == {"NW", "NE", "SE", "SW"}
+    assert body["sector"]["center"]["ra"] == pytest.approx(269.446223)
+    assert body["data"]["source"] and body["data"]["processed_at"]
+    for epoch in body["epochs"]:
+        assert epoch["releases"], "every epoch names the data release of its exposures"
+        position = epoch["expected_position"]
+        assert position["in_image"] and 0 <= position["x"] <= body["size"]["width_px"] - 1
+    # Barnard moves north between the two epochs (dec grows, PNG y shrinks).
+    first, last = (e["expected_position"] for e in body["epochs"])
+    assert last["dec"] > first["dec"] and last["y"] < first["y"]
+
+
+def test_expected_position_is_null_without_catalogue_target(client):
+    http, service = client
+    params = {"ra": RA, "dec": DEC, "size": "small", "detector": 3}
+    http.get("/api/v1/timeline", params=params)
+    wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC))
+    epochs = http.get("/api/v1/timeline", params=params).json()["epochs"]
+    assert all(e["expected_position"] is None for e in epochs)
+
+
+def test_timeline_diff(client):
+    http, service = client
+    params = {"ra": RA, "dec": DEC, "size": "small", "detector": 3}
+    assert http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 1}).status_code == 404
+    http.get("/api/v1/timeline", params=params)
+    wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC))
+
+    diff = http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 1})
+    assert diff.status_code == 200 and diff.headers["content-type"] == "image/png"
+    assert float(diff.headers["x-diff-limit"]) > 0
+    side = http.get("/api/v1/timeline", params=params).json()["size"]["width_px"]
+    assert Image.open(io.BytesIO(diff.content)).size == (side, side)
+    assert http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 9}).status_code == 404

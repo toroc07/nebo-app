@@ -304,6 +304,27 @@ def coadd(images: list[np.ndarray], variances: list[np.ndarray]) -> tuple[np.nda
     return mean, variance
 
 
+def to_diff_png(first: np.ndarray, second: np.ndarray, softening: float = 10.0) -> tuple[bytes, float]:
+    """RGBA PNG of ``second - first``: red = brighter in ``second``, blue = fainter.
+
+    The scale is symmetric (0 is black) and ends at the 99.7th percentile of |difference|, which
+    is returned too (MJy/sr). Pixels without data in either image are transparent.
+    """
+    diff = second - first
+    finite = np.isfinite(diff)
+    limit = float(np.percentile(np.abs(diff[finite]), 99.7)) if finite.any() else 0.0
+    limit = max(limit, 1e-6)
+    scaled = np.arcsinh(np.clip(np.abs(diff) / limit, 0.0, 1.0) * softening) / np.arcsinh(softening)
+    level = np.where(finite, np.rint(scaled * 255), 0).astype(np.uint8)
+    red = np.where(diff > 0, level, 0).astype(np.uint8)
+    blue = np.where(diff < 0, level, 0).astype(np.uint8)
+    alpha = np.where(finite, 255, 0).astype(np.uint8)
+    pixels = np.flipud(np.dstack([red, np.zeros_like(red), blue, alpha]))
+    buffer = io.BytesIO()
+    Image.fromarray(pixels).save(buffer, format="PNG")
+    return buffer.getvalue(), limit
+
+
 def to_npz(image: np.ndarray, variance: np.ndarray) -> bytes:
     """Float32 data for analysis (epoch subtraction, photometry); no stretch, no hole filling."""
     buffer = io.BytesIO()
