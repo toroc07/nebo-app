@@ -139,3 +139,9 @@ def test_colorize_png_maps_grey_to_palette_and_keeps_transparency():
     assert tuple(pixels[1, 0]) == (0, 0, 0, 255)  # zero is black
     r, g, b, _ = pixels[1, 1]
     assert r == 255 and 176 < g < 255 and 0 < b < 255  # between amber and white
+
+
+def test_inferno_palette_runs_from_near_black_to_pale_yellow():
+    grey = imaging.to_png(np.array([[0.0, 2.0]]), 0.0, 2.0)
+    pixels = np.asarray(Image.open(io.BytesIO(imaging.colorize_png(grey, "inferno"))))[0]
+    assert tuple(pixels[0]) == (0, 0, 4, 255) and tuple(pixels[1]) == (252, 255, 164, 255)

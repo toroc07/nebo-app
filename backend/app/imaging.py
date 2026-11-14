@@ -401,6 +401,12 @@ def to_png(image: np.ndarray, low: float, high: float, softening: float = 10.0) 
 # is a single band, so it carries no real colour.
 PALETTES = {
     "amber": [(0.0, (0, 0, 0)), (0.6, (255, 176, 0)), (1.0, (255, 255, 255))],
+    # Matplotlib "inferno" sampled every 0.1 (the palette IRSA's SPHEREx tutorial uses).
+    "inferno": [
+        (0.0, (0, 0, 4)), (0.1, (22, 11, 57)), (0.2, (66, 10, 104)), (0.3, (106, 23, 110)),
+        (0.4, (147, 38, 103)), (0.5, (188, 55, 84)), (0.6, (221, 81, 58)), (0.7, (243, 120, 25)),
+        (0.8, (252, 165, 10)), (0.9, (246, 215, 70)), (1.0, (252, 255, 164)),
+    ],
 }
 
 

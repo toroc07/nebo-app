@@ -29,3 +29,9 @@ regenerated, so `processed_at` and ids can differ from `demo/`; use one folder o
 Regenerate: `cd backend && python -m tests.demo_export --out ../shared/demo-color --palette amber`.
 Real data has no such option yet; IRSA's cutout APIs return FITS only, and its viewer offers
 colour tables, stretches and 3-colour composites that we would have to reproduce.
+
+## demo-inferno/
+
+Same layout as `demo-color/`, with the **inferno** palette (near-black, purple, orange, pale
+yellow): the one IRSA's SPHEREx tutorial uses. Regenerate:
+`cd backend && python -m tests.demo_export --out ../shared/demo-inferno --palette inferno`.
