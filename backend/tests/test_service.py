@@ -88,6 +88,16 @@ def test_build_stores_one_image_per_epoch_and_size():
         # Display limits are shared across the epochs of one size.
         assert images[0].display_max == images[1].display_max
 
+    stored = [image for _, image in store.images.values()]
+    # One stretch for all sizes; the float32 data is kept for the largest size only.
+    assert len({(i.display_min, i.display_max) for i in stored}) == 1
+    for image in stored:
+        assert (image.npz is not None) == (image.size == "large")
+        if image.npz:
+            data = np.load(io.BytesIO(image.npz))
+            assert data["image"].dtype == np.float32
+            assert data["image"].shape == data["variance"].shape == (image.height_px,) * 2
+
     assert store.list_patches_with_data() == [
         {"id": patch.id, "ra": RA, "dec": DEC, "target_slug": None, "detectors_ready": [3]}
     ]

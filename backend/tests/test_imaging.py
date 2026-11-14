@@ -77,13 +77,14 @@ def test_reprojection_puts_north_up_for_any_input_orientation():
 def test_coadd_is_inverse_variance_weighted_and_ignores_nan():
     a = np.array([[1.0, np.nan]])
     b = np.array([[3.0, 5.0]])
-    result = imaging.coadd([a, b], [np.array([[1.0, 1.0]]), np.array([[3.0, 1.0]])])
+    result, variance = imaging.coadd([a, b], [np.array([[1.0, 1.0]]), np.array([[3.0, 1.0]])])
     assert np.allclose(result, [[1.5, 5.0]])
+    assert np.allclose(variance, [[0.75, 1.0]])
 
 
 def test_coadd_of_all_nan_pixel_is_nan():
-    result = imaging.coadd([np.array([[np.nan]])], [np.array([[1.0]])])
-    assert np.isnan(result[0, 0])
+    result, variance = imaging.coadd([np.array([[np.nan]])], [np.array([[1.0]])])
+    assert np.isnan(result[0, 0]) and np.isnan(variance[0, 0])
 
 
 def test_png_has_transparent_flagged_pixels_and_is_flipped():
@@ -114,3 +115,4 @@ def test_fill_enclosed_holes_skips_large_holes():
 
 def test_stretch_limits_handle_empty_input():
     assert imaging.stretch_limits([np.array([[np.nan]])]) == (0.0, 1.0)
+

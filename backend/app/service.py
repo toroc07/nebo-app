@@ -81,21 +81,27 @@ def render_epoch_images(
 ) -> list[EpochImage]:
     """Co-add each epoch on the large grid, crop every size and render the PNGs.
 
-    Display limits are shared by all epochs of one size, so a blink compares like with like.
+    Display limits are shared by all epochs and sizes, so a blink compares like with like.
     """
-    coadds: list[tuple[int, np.ndarray]] = []
+    coadds: list[tuple[int, np.ndarray, bytes]] = []
     for epoch in range(len(epochs)):
         members = [p for p in processed if p.epoch == epoch]
         if members:
-            stacked = imaging.coadd([m.image for m in members], [m.variance for m in members])
-            coadds.append((epoch, imaging.fill_enclosed_holes(stacked)))
+            frames, variances = [m.image for m in members], [m.variance for m in members]
+            stacked, stacked_variance = imaging.coadd(frames, variances)
+            npz = imaging.to_npz(stacked, stacked_variance)
+            coadds.append((epoch, imaging.fill_enclosed_holes(stacked), npz))
+
+    # One stretch for every size (taken from the largest), so changing size keeps the contrast.
+    largest = max(config.SIZES_DEG, key=config.SIZES_DEG.get)
+    side = imaging.grid_pixels(config.SIZES_DEG[largest])
+    low, high = imaging.stretch_limits([imaging.crop_center(c[1], side) for c in coadds])
 
     images: list[EpochImage] = []
     for size, side_deg in config.SIZES_DEG.items():
         side = imaging.grid_pixels(side_deg)
-        crops = [(epoch, imaging.crop_center(image, side)) for epoch, image in coadds]
-        low, high = imaging.stretch_limits([crop for _, crop in crops])
-        for out_index, (epoch, crop) in enumerate(crops):
+        for out_index, (epoch, image, npz) in enumerate(coadds):
+            crop = imaging.crop_center(image, side)
             mjds = [records[i].mjd_start for i in epochs[epoch]]
             images.append(
                 EpochImage(
@@ -111,6 +117,7 @@ def render_epoch_images(
                     display_min=low,
                     display_max=high,
                     png=imaging.to_png(crop, low, high),
+                    npz=npz if size == largest else None,
                 )
             )
     return images

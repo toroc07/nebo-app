@@ -152,17 +152,28 @@ def crop_center(image: np.ndarray, side: int) -> np.ndarray:
     return image[start : start + side, start : start + side]
 
 
-def coadd(images: list[np.ndarray], variances: list[np.ndarray]) -> np.ndarray:
-    """Inverse-variance weighted mean that ignores NaN pixels."""
+def coadd(images: list[np.ndarray], variances: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    """Inverse-variance weighted mean and its variance; NaN pixels are ignored."""
     stack = np.array(images)
     weights = 1.0 / np.array(variances)
     valid = np.isfinite(stack) & np.isfinite(weights)
     weights = np.where(valid, weights, 0.0)
     total = weights.sum(axis=0)
     with np.errstate(invalid="ignore", divide="ignore"):
-        result = (np.where(valid, stack, 0.0) * weights).sum(axis=0) / total
-    result[total == 0] = np.nan
-    return result
+        mean = (np.where(valid, stack, 0.0) * weights).sum(axis=0) / total
+        variance = 1.0 / total
+    mean[total == 0] = np.nan
+    variance[total == 0] = np.nan
+    return mean, variance
+
+
+def to_npz(image: np.ndarray, variance: np.ndarray) -> bytes:
+    """Float32 data for analysis (epoch subtraction, photometry); no stretch, no hole filling."""
+    buffer = io.BytesIO()
+    np.savez_compressed(
+        buffer, image=image.astype(np.float32), variance=variance.astype(np.float32)
+    )
+    return buffer.getvalue()
 
 
 def fill_enclosed_holes(image: np.ndarray, max_size: int = 16) -> np.ndarray:
