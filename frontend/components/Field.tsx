@@ -5,6 +5,7 @@ import {
   timeline,
   imageUrl,
   nextEpoch,
+  releaseLabel,
   ApiError,
   type Query,
   type Timeline,
@@ -138,7 +139,9 @@ export default function Field({
             <option value="large">15 arcminutes</option>
           </select>
         </label>
-        <span className="science-label">Observed change · SPHEREx QR2</span>
+        <span className="science-label">
+          Observed change · {releaseLabel(current?.releases)}
+        </span>
       </div>
       {error ? (
         <div className="notice" role="alert">
