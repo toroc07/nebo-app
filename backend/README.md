@@ -60,15 +60,33 @@ The schema is in [db/schema.sql](db/schema.sql) if you prefer to apply it with `
 uvicorn app.main:app --reload          # http://127.0.0.1:8000, docs at /docs
 ```
 
-### Preload the catalogue
+### ETL pipeline (real IRSA data -> database)
 
-Builds the 5 challenge objects for all 6 detectors so the demo opens instantly. It is safe to
-re-run, because ready timelines are skipped. Expect about 50 minutes when IRSA responds well.
+`python -m app.etl` downloads real SPHEREx images from IRSA, processes them and writes the
+result to the database in `DATABASE_URL`. Nothing is synthetic. Ready timelines are skipped,
+so it is safe to re-run. IRSA is slow: a new field takes 1-2 minutes per detector.
 
 ```bash
-python -m app.preload
-python -m app.preload --targets wise-0855,eps-indi-b --detectors 5,6
+python -m app.etl run                                           # catalogue, detectors 1-6 (~50 min)
+python -m app.etl run --targets wise-0855,eps-indi-b --detectors 5,6
+python -m app.etl run --coords "269.4,4.77;133.76,-7.24" --detectors 3
+python -m app.etl run --file fields.csv                         # one "ra,dec" per line
 ```
+
+`python -m app.preload` is an alias of `etl run`.
+
+**Worker mode.** By default (`NEBO_BUILD_MODE=inline`) the API builds a missing field in its own
+threads. On platforms that throttle CPU between requests (Cloud Run) set
+`NEBO_BUILD_MODE=queue` on the API: it then only queues the field and answers `202`, and a
+separate process builds it:
+
+```bash
+python -m app.etl worker            # loops until stopped; --once exits when the queue is empty
+```
+
+Run one worker per instance of the same image (`python -m app.etl worker` as the command). A
+worker that dies mid-build is recovered automatically: after `STALE_BUILD_S` (15 min) the next
+request for that field queues it again. Never commit `DATABASE_URL`: it belongs in `backend/.env`.
 
 ## API reference
 

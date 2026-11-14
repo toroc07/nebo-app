@@ -265,22 +265,33 @@ class TimelineService:
         """Current state of a timeline, starting a background build when needed."""
         current = self.store.get_timeline(patch.id, detector)
         if current is None or current.status != "ready":
+            inline = config.BUILD_MODE != "queue"
             with self._pending_lock:
-                if self._pending >= config.MAX_PENDING_BUILDS and (
+                # shortcut: no backpressure in queue mode, the DB is the queue; add a cap if it grows.
+                if inline and self._pending >= config.MAX_PENDING_BUILDS and (
                     current is None or current.status == "failed"
                 ):
                     raise ServiceBusy()
                 claimed = self.store.claim_timeline(patch.id, detector)
-                if claimed is not None:
+                if claimed is not None and inline:
                     self._pending += 1
             if claimed is not None:
-                self._builds.submit(self._run_queued_build, patch, claimed)
-                current = claimed
+                if inline:
+                    self._builds.submit(self._run_queued_build, patch, claimed)
+                current = claimed  # In queue mode a worker picks it up (work_one).
             else:
                 current = self.store.get_timeline(patch.id, detector)
         assert current is not None
         images = self.store.list_images(current.id, size) if current.status == "ready" else []
         return TimelineView(current.status, patch, detector, current, images)
+
+    def work_one(self) -> bool:
+        """Build one queued timeline (queue mode). False when nothing is waiting."""
+        item = self.store.dequeue_timeline()
+        if item is None:
+            return False
+        self._run_build(*item)
+        return True
 
     def build_now(self, patch: Patch, detector: int) -> Timeline | None:
         """Build synchronously (used by the preload command). Skips ready timelines."""
