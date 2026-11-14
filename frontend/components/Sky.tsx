@@ -7,7 +7,13 @@ type Viewer = {
   gotoRaDec: (ra: number, dec: number) => void;
   setFoV: (fov: number) => void;
   addCatalog: (c: unknown) => void;
+  newImageSurvey: (
+    url: string,
+    options?: { successCallback?: (survey: { setSliceNumber: (n: number) => void }) => void },
+  ) => unknown;
+  setImageLayer: (layer: unknown) => void;
 };
+const SKY_FRAME = 40; // ~1.86 µm, inside detector 3
 export default function Sky({
   targets,
   selected,
@@ -42,7 +48,6 @@ export default function Sky({
         if (cancelled) return;
         api.current = A;
         viewer.current = A.aladin(node, {
-          survey: "P/DSS2/color",
           target: "269.446 4.769",
           fov: 180,
           projection: "AIT",
@@ -51,6 +56,14 @@ export default function Sky({
           showSimbadPointerControl: false,
           showCooGridControl: true,
         });
+        // HiPS cubes load through newImageSurvey, as in the Aladin Lite 3D examples.
+        viewer.current!.setImageLayer(
+          viewer.current!.newImageSurvey(
+            "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube",
+            // Aladin starts at the middle frame (50), which is blank and has no tiles.
+            { successCallback: (survey) => survey.setSliceNumber(SKY_FRAME) },
+          ),
+        );
         catalog.current = A.catalog({
           name: "Nebo objects",
           sourceSize: 18,
