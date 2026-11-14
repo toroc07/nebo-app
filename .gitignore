@@ -3,8 +3,9 @@
 .env.*
 !.env.example
 
-# --- Large data files ---
+# --- Large data files and caches ---
 data/raw/
+backend/.cache/
 *.fits
 *.fits.gz
 *.fz

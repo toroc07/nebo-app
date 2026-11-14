@@ -1,0 +1,10 @@
+fastapi==0.162.7
+uvicorn[standard]==0.54.0
+astropy==8.0.2
+astroquery==0.4.11
+numpy==2.5.4
+pillow==13.0.0
+requests==2.34.2
+psycopg[binary]==3.3.9
+psycopg-pool==3.3.3
+python-dotenv==1.2.4
