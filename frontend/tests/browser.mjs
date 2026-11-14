@@ -183,11 +183,121 @@ assert.equal(
 await page.getByRole("link", { name: "Nebo, home" }).click();
 await page.getByRole("button", { name: /Start exploring/ }).click();
 await page.screenshot({ path: out + "observe-mobile.png", fullPage: true });
+// "Begin exploring" lands directly on the full-screen image viewer (demo export, no API).
+await page.setViewportSize({ width: 1280, height: 800 });
 await page.getByRole("button", { name: /Begin exploring/ }).click();
-await page.getByRole("button", { name: /Barnard/ }).click();
-await page.getByRole("button", { name: "View images", exact: true }).click();
+await page.waitForURL("**/lab/observation");
+await page.getByRole("application", { name: /SPHEREx image/ }).waitFor();
+const epochImage = page.locator("img[alt^='Epoch 1 of']");
+await epochImage.waitFor();
+const view = page.viewportSize();
+const fitted = await epochImage.boundingBox();
+// "Contain" fit: the image touches the screen edges on its limiting axis.
+assert.ok(
+  fitted.width >= view.width - 1 || fitted.height >= view.height - 1,
+  "image fills the screen",
+);
+const zoomLabel = page.locator("[class*=zoomControls] span").first();
+assert.equal(await zoomLabel.textContent(), "1.0×");
+const centre = { x: view.width / 2, y: view.height / 2 };
+await page.mouse.move(centre.x, centre.y);
+await page.mouse.wheel(0, -400);
+await page.waitForFunction(
+  () =>
+    document.querySelector("[class*=zoomControls] span").textContent !== "1.0×",
+);
+// Infrared band <-> color swaps the image set in place and keeps the zoom.
+const viewState = () =>
+  page.evaluate(() => {
+    const img = document.querySelector("img[alt^='Epoch']");
+    const m = new DOMMatrix(getComputedStyle(img.parentElement).transform);
+    return { src: img.getAttribute("src"), view: [m.a, m.e, m.f].join("|") };
+  });
+const grey = await viewState();
+assert.ok(!/\/lab\/demo\/(amber|inferno)\//.test(grey.src), "starts in grey");
+await page.getByRole("button", { name: "Color", exact: true }).click();
+await page.waitForFunction(() =>
+  document
+    .querySelector("img[alt^='Epoch']")
+    .getAttribute("src")
+    .includes("/lab/demo/inferno/"),
+);
+const colored = await viewState();
+assert.equal(colored.view, grey.view, "colour keeps the view");
+await page.getByText(/not the sky's real colors/).waitFor();
+await page.getByRole("button", { name: "Infrared band", exact: true }).click();
+await page.waitForFunction(
+  () =>
+    !/\/lab\/demo\/(amber|inferno)\//.test(
+      document.querySelector("img[alt^='Epoch']").getAttribute("src"),
+    ),
+);
+// A click without dragging drops a pin; the centre of the screen is the centre pixel.
+await page.mouse.click(centre.x, centre.y);
+const readout = page.getByRole("complementary", { name: "Coordinates" });
+// Chrome rounds the mouse position to a whole CSS pixel, so the coordinate can differ from the
+// exact centre by a few hundredths of an image pixel: match the digits that are stable.
+await readout.getByText(/Pin RA 269\.4462\d\d°/).waitFor();
+await readout.getByText("px 29.0, 29.0", { exact: true }).waitFor();
+// Dragging the pin moves the coordinate.
+const pin = page.getByRole("button", { name: /Coordinate pin/ });
+const pinBox = await pin.boundingBox();
+await page.mouse.move(
+  pinBox.x + pinBox.width / 2,
+  pinBox.y + pinBox.height / 2,
+);
+await page.mouse.down();
+await page.mouse.move(centre.x + 60, centre.y + 40, { steps: 5 });
+await page.mouse.up();
+assert.equal(
+  await readout.getByText("px 29.0, 29.0", { exact: true }).count(),
+  0,
+  "pin moved",
+);
+// Keyboard: 0 refits, and the pin keeps its sky position.
+await page.getByRole("application", { name: /SPHEREx image/ }).focus();
+await page.keyboard.press("0");
+await page.waitForFunction(
+  () =>
+    document.querySelector("[class*=zoomControls] span").textContent === "1.0×",
+);
+assert.equal(await readout.getByText(/Pin RA/).count(), 1);
+// Zooming switches between the 3', 6' and 15' images on its own (data-level is the one shown).
+const level = page.locator("[class*=zoomControls] [data-level]");
+await page.getByRole("application", { name: /SPHEREx image/ }).focus();
+assert.equal(await level.getAttribute("data-level"), "medium");
+await page.mouse.move(centre.x, centre.y);
+await page.mouse.wheel(0, -1500);
+await page.waitForFunction(
+  () =>
+    document
+      .querySelector("[class*=zoomControls] [data-level]")
+      .getAttribute("data-level") === "small",
+);
+await page.mouse.wheel(0, 4000);
+await page.waitForFunction(
+  () =>
+    document
+      .querySelector("[class*=zoomControls] [data-level]")
+      .getAttribute("data-level") === "large",
+);
+await page.keyboard.press("0");
+await page.waitForFunction(
+  () =>
+    document
+      .querySelector("[class*=zoomControls] [data-level]")
+      .getAttribute("data-level") === "medium",
+);
+assert.equal(
+  await readout.getByText(/Pin RA/).count(),
+  1,
+  "pin survives level changes",
+);
+await page.screenshot({ path: out + "viewer-desktop.png" });
 mode = "ready";
-await page.getByRole("link", { name: "Nebo, home" }).click();
+await page.setViewportSize({ width: 375, height: 812 });
+await page.getByRole("link", { name: "Back to the menu" }).click();
+await page.getByRole("navigation", { name: "Home panel" }).waitFor();
 const stress = [];
 for (const viewport of [
   { width: 320, height: 568 },
@@ -235,6 +345,9 @@ writeFileSync(
         "persistent preferences",
         "tutorial",
         "keyboard activation",
+        "image viewer: fit, zoom, pin, drag pin, refit",
+        "infrared/color switch keeps the view",
+        "zoom switches between the 3 sizes",
         "200% text",
         "RTL",
       ],
