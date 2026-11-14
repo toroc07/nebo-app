@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from astropy.io import fits
@@ -63,6 +65,49 @@ class Cutout:
     wcs: WCS
     wavelength_um: float
     bandwidth_um: float
+    zodi_median: float = float("nan")
+    target_pix_x: float = float("nan")
+    target_pix_y: float = float("nan")
+    flags_center: int = 0
+    science_bad_fraction: float = float("nan")
+    clean_pixel_fraction: float = float("nan")
+    corners_icrs: list[list[float]] = field(default_factory=list)
+    wcs_header_dict: dict[str, Any] = field(default_factory=dict)
+
+
+_WCS_HEADER_KEYS = (
+    "NAXIS1", "NAXIS2", "CTYPE1", "CTYPE2", "CUNIT1", "CUNIT2", "BUNIT",
+    "CRVAL1", "CRVAL2", "CRPIX1", "CRPIX2", "CDELT1", "CDELT2",
+    "CD1_1", "CD1_2", "CD2_1", "CD2_2", "PC1_1", "PC1_2", "PC2_1", "PC2_2",
+    "A_ORDER", "B_ORDER", "AP_ORDER", "BP_ORDER",
+)
+
+
+def _extract_wcs_header_dict(header: fits.Header) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in _WCS_HEADER_KEYS:
+        if key in header:
+            val = header[key]
+            if isinstance(val, (str, int, float, bool)):
+                out[key] = val
+            else:
+                out[key] = str(val)
+    return out
+
+
+def _cutout_corners_icrs(wcs: WCS, shape: tuple[int, int]) -> list[list[float]]:
+    ny, nx = shape
+    px_x = np.array([0.0, float(nx - 1), float(nx - 1), 0.0], dtype=np.float64)
+    px_y = np.array([0.0, 0.0, float(ny - 1), float(ny - 1)], dtype=np.float64)
+    try:
+        ra_vals, dec_vals = wcs.pixel_to_world_values(px_x, px_y)
+    except Exception:
+        return []
+    corners: list[list[float]] = []
+    for r, d in zip(np.asarray(ra_vals, dtype=float), np.asarray(dec_vals, dtype=float)):
+        if math.isfinite(r) and math.isfinite(d):
+            corners.append([round(float(r % 360.0), 7), round(float(d), 7)])
+    return corners
 
 
 def flag_mask(flags_header: fits.Header, names: tuple[str, ...]) -> int:
@@ -81,7 +126,11 @@ def read_cutout(data: bytes, ra: float, dec: float) -> Cutout:
     with fits.open(io.BytesIO(data)) as hdul:
         header = hdul["IMAGE"].header
         flags_header = hdul["FLAGS"].header
-        image = hdul["IMAGE"].data.astype(np.float64) - hdul["ZODI"].data.astype(np.float64)
+        zodi_data = hdul["ZODI"].data.astype(np.float64)
+        finite_zodi = zodi_data[np.isfinite(zodi_data)]
+        zodi_median = float(np.median(finite_zodi)) if finite_zodi.size else float("nan")
+
+        image = hdul["IMAGE"].data.astype(np.float64) - zodi_data
         variance = hdul["VARIANCE"].data.astype(np.float64)
         flags = hdul["FLAGS"].data.astype(np.int64)
 
@@ -95,19 +144,51 @@ def read_cutout(data: bytes, ra: float, dec: float) -> Cutout:
         variance[hidden] = np.nan
 
         science_bad = hidden | ((flags & flag_mask(flags_header, SCIENCE_EXCLUDED_FLAG_NAMES)) != 0)
+        science_bad_fraction = float(np.mean(science_bad)) if science_bad.size else float("nan")
+        clean_pixel_fraction = (
+            float(1.0 - science_bad_fraction) if math.isfinite(science_bad_fraction) else float("nan")
+        )
 
         spatial_wcs = WCS(header)
-        wavelength_um = bandwidth_um = float("nan")
+        wcs_header_dict = _extract_wcs_header_dict(header)
+        corners_icrs = _cutout_corners_icrs(spatial_wcs, image.shape)
+
+        target_pix_x = target_pix_y = float("nan")
+        flags_center = 0
         try:
             x, y = spatial_wcs.world_to_pixel_values(ra, dec)
+            target_pix_x, target_pix_y = float(x), float(y)
+            ix, iy = int(np.rint(target_pix_x)), int(np.rint(target_pix_y))
+            if 0 <= iy < flags.shape[0] and 0 <= ix < flags.shape[1]:
+                flags_center = int(flags[iy, ix])
+        except Exception:
+            logging.getLogger(__name__).debug("Failed target pixel projection", exc_info=True)
+
+        wavelength_um = bandwidth_um = float("nan")
+        try:
             spectral_wcs = WCS(header, fobj=hdul, key="W")
             spectral_wcs.sip = None
-            wavelength, bandwidth = spectral_wcs.pixel_to_world_values(x, y)
+            wavelength, bandwidth = spectral_wcs.pixel_to_world_values(target_pix_x, target_pix_y)
             wavelength_um, bandwidth_um = float(wavelength), float(bandwidth)
         except Exception:  # The spectral lookup table is optional for display purposes.
             logging.getLogger(__name__).debug("No spectral WCS for cutout", exc_info=True)
 
-    return Cutout(image, variance, science_bad, spatial_wcs, wavelength_um, bandwidth_um)
+    return Cutout(
+        image=image,
+        variance=variance,
+        science_bad=science_bad,
+        wcs=spatial_wcs,
+        wavelength_um=wavelength_um,
+        bandwidth_um=bandwidth_um,
+        zodi_median=zodi_median,
+        target_pix_x=target_pix_x,
+        target_pix_y=target_pix_y,
+        flags_center=flags_center,
+        science_bad_fraction=science_bad_fraction,
+        clean_pixel_fraction=clean_pixel_fraction,
+        corners_icrs=corners_icrs,
+        wcs_header_dict=wcs_header_dict,
+    )
 
 
 def grid_pixels(size_deg: float) -> int:
@@ -126,6 +207,62 @@ def make_target_grid(ra: float, dec: float, size_deg: float) -> tuple[WCS, tuple
     wcs.wcs.crpix = [(n + 1) / 2, (n + 1) / 2]
     wcs.wcs.cdelt = [-scale_deg, scale_deg]
     return wcs, (n, n)
+
+
+def compute_sector_coordinates(ra: float, dec: float, size_name: str, side_deg: float) -> dict[str, Any]:
+    """Compute exact tangent-plane sky-sector corners and bounding box for a patch size."""
+    wcs, (ny, nx) = make_target_grid(ra, dec, side_deg)
+    # In north-up east-left TAN projection (cdelt1 < 0), x=-0.5 is East, x=nx-0.5 is West.
+    pixel_corners = np.array(
+        [
+            [nx - 0.5, ny - 0.5],  # NW
+            [-0.5, ny - 0.5],      # NE
+            [-0.5, -0.5],          # SE
+            [nx - 0.5, -0.5],      # SW
+        ],
+        dtype=np.float64,
+    )
+    ra_vals, dec_vals = wcs.pixel_to_world_values(pixel_corners[:, 0], pixel_corners[:, 1])
+    ras = [round(float(r % 360.0), 7) for r in ra_vals]
+    decs = [round(float(d), 7) for d in dec_vals]
+    corners = {"NW": [ras[0], decs[0]], "NE": [ras[1], decs[1]], "SE": [ras[2], decs[2]], "SW": [ras[3], decs[3]]}
+    polygon_text = (
+        f"POLYGON ICRS {ras[1]:.7f} {decs[1]:.7f} {ras[0]:.7f} {decs[0]:.7f} "
+        f"{ras[3]:.7f} {decs[3]:.7f} {ras[2]:.7f} {decs[2]:.7f}"
+    )
+    return {
+        "size_name": size_name,
+        "center_ra_deg": float(ra % 360.0),
+        "center_dec_deg": float(dec),
+        "side_deg": float(side_deg),
+        "pixel_scale_arcsec": float(config.PIXEL_SCALE_ARCSEC),
+        "width_px": int(nx),
+        "height_px": int(ny),
+        "ra_min_deg": min(ras),
+        "ra_max_deg": max(ras),
+        "dec_min_deg": min(decs),
+        "dec_max_deg": max(decs),
+        "corner_nw_ra": ras[0],
+        "corner_nw_dec": decs[0],
+        "corner_ne_ra": ras[1],
+        "corner_ne_dec": decs[1],
+        "corner_se_ra": ras[2],
+        "corner_se_dec": decs[2],
+        "corner_sw_ra": ras[3],
+        "corner_sw_dec": decs[3],
+        "corners_icrs": corners,
+        "footprint_polygon_text": polygon_text,
+    }
+
+
+def compute_all_sector_coordinates(ra: float, dec: float) -> list[dict[str, Any]]:
+    """Compute coordinates for all display sizes ('small', 'medium', 'large') plus 'fetch'."""
+    sectors = [
+        compute_sector_coordinates(ra, dec, name, side_deg)
+        for name, side_deg in config.SIZES_DEG.items()
+    ]
+    sectors.append(compute_sector_coordinates(ra, dec, "fetch", config.FETCH_SIZE_DEG))
+    return sectors
 
 
 def reproject_nearest(

@@ -11,6 +11,7 @@ import sys
 import threading
 
 from . import config
+from .science_catalogs import SPHEREX_17_INDICES, SPHEREX_102_CHANNELS
 from .store import PostgresStore
 from .targets import TARGETS
 
@@ -39,6 +40,8 @@ def init_database() -> None:
     store = get_store()
     store.apply_schema(SCHEMA_PATH.read_text(encoding="utf-8"))
     store.upsert_targets(TARGETS)
+    store.upsert_spherex_channels(SPHEREX_102_CHANNELS)
+    store.upsert_spectral_indices(SPHEREX_17_INDICES)
 
 
 def main(argv: list[str]) -> int:
@@ -50,7 +53,10 @@ def main(argv: list[str]) -> int:
     except DatabaseNotConfigured as error:
         print(error, file=sys.stderr)
         return 1
-    print(f"Schema applied and {len(TARGETS)} catalogue targets seeded.")
+    print(
+        f"Schema applied, {len(TARGETS)} targets, {len(SPHEREX_102_CHANNELS)} channels, "
+        f"and {len(SPHEREX_17_INDICES)} spectral indices seeded."
+    )
     return 0
 
 

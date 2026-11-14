@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 import logging
 from typing import Literal
 
@@ -9,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from . import config, db, irsa
+from . import config, db, irsa, science_catalogs
 from .service import ServiceBusy, TargetNotFound, TimelineService, TimelineView
 from .store import Patch, Store
 
@@ -130,6 +131,7 @@ def _timeline_payload(view: TimelineView, size: str) -> dict:
                 "display_min": image.display_min,
                 "display_max": image.display_max,
                 "image_url": f"{API_PREFIX}/images/{image.id}.png",
+                **({"npz_url": f"{API_PREFIX}/images/{image.id}.npz"} if image.has_npz else {}),
             }
             for image in view.images
         ],
@@ -222,3 +224,50 @@ def get_image(image_id: int = Path(..., ge=1), store: Store = Depends(get_store)
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
+
+
+@app.get(f"{API_PREFIX}/images/{{image_id}}.npz")
+def get_image_npz(image_id: int = Path(..., ge=1), store: Store = Depends(get_store)) -> Response:
+    """Raw float32 image and variance arrays for scientific analysis (large size only)."""
+    npz = store.get_npz(image_id)
+    if npz is None:
+        raise HTTPException(status_code=404, detail="NPZ data not found.")
+    return Response(
+        content=npz,
+        media_type="application/octet-stream",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/sectors")
+def get_patch_sectors(
+    patch_id: int = Path(..., ge=1),
+    detector: int | None = Query(None, ge=1, le=6),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Stored sky-sector coordinates and per-exposure NASA IRSA sector footprints for a patch."""
+    sectors = store.list_sector_coordinates(patch_id)
+    if not sectors:
+        raise HTTPException(status_code=404, detail="Patch sector coordinates not found.")
+    exposures = store.list_nasa_sector_exposures(patch_id, detector=detector)
+    return {
+        "patch_id": patch_id,
+        "sectors": sectors,
+        "nasa_exposures": exposures,
+    }
+
+
+@app.get(f"{API_PREFIX}/catalogs/channels")
+def list_channel_catalog(store: Store = Depends(get_store)) -> list[dict]:
+    """Master table of the 102 SPHEREx spectral channels (Table 1.2, BLANKCH 51-52 marked)."""
+    rows = store.list_spherex_channels()
+    return rows or [asdict(ch) for ch in science_catalogs.SPHEREX_102_CHANNELS]
+
+
+@app.get(f"{API_PREFIX}/catalogs/spectral-indices")
+def list_spectral_index_catalog(store: Store = Depends(get_store)) -> list[dict]:
+    """Master table of the 17 diagnostic spectral indices (Table 2.5)."""
+    rows = store.list_spectral_indices()
+    if rows:
+        return rows
+    return [asdict(idx) | {"feature_channels": list(idx.feature_channels)} for idx in science_catalogs.SPHEREX_17_INDICES]
