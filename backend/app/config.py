@@ -47,9 +47,19 @@ FETCH_SIZE_DEG = round(SIZES_DEG["large"] * math.sqrt(2), 4)
 # A request this close to an existing patch centre reuses that patch.
 PATCH_MATCH_RADIUS_ARCSEC = 30.0
 
-# SPHEREx revisits the whole sky every ~6 months; frames closer than this belong to one epoch.
+# Epochs. SPHEREx revisits most of the sky every ~6 months in passes of 1-2 weeks, so most
+# fields only have one epoch per pass. The deep fields near the ecliptic poles (e.g. R Draconis)
+# are observed for months on end: a pass longer than EPOCH_MAX_SPAN_DAYS is cut into epochs of
+# that length, and an epoch with fewer than MIN_FRAMES_PER_EPOCH frames is folded into its
+# neighbour in the same pass, so no epoch is much noisier than the rest. A pass that is short as
+# a whole is kept as it is: it is the only image of that date.
+# Measured with IRSA in Nov 2026: gap 30 / span 14 / min 12 gives 3-5 epochs for most targets
+# and 5-12 for R Draconis; a smaller gap only adds epochs of 1-4 frames.
 EPOCH_GAP_DAYS = 30.0
-MAX_FRAMES_PER_EPOCH = 8
+EPOCH_MAX_SPAN_DAYS = 14.0
+MIN_FRAMES_PER_EPOCH = 12
+# Frames co-added per epoch (noise falls as 1/sqrt(n)); a pass usually has 17-24 per detector.
+MAX_FRAMES_PER_EPOCH = 16
 
 # A "building" timeline not updated for this long is considered dead and is rebuilt.
 STALE_BUILD_S = 15 * 60

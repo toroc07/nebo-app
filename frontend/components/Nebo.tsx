@@ -569,7 +569,7 @@ export default function Nebo() {
               >
                 <button
                   className="tile start-tile image-tile"
-                  onClick={() => go("/lab/observation")}
+                  onClick={() => go("Explore")}
                 >
                   <PanelImage src="/panels/cartwheel.png" />
                   <div className="tile-top">
@@ -795,7 +795,7 @@ export default function Nebo() {
                 onSelect={setSelected}
               />
               <span className="map-credit">
-                Reference map DSS2 · CDS Aladin
+                SPHEREx all-sky map · NASA/IPAC IRSA
               </span>
             </div>
             <section className="surface explorer-sidebar">

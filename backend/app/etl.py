@@ -4,9 +4,12 @@
     python -m app.etl run --targets wise-0855 --detectors 5,6
     python -m app.etl run --coords "269.4,4.77;133.76,-7.24" --detectors 3
     python -m app.etl run --file fields.csv                 # one "ra,dec" per line
+    python -m app.etl run --rebuild                         # redo ready ones (new data/settings)
     python -m app.etl worker                                # build what the API queued
 
 ``run`` builds the given fields now (ready timelines are skipped, so it is safe to re-run).
+With ``--rebuild`` ready timelines are rebuilt too, with a fresh IRSA query: they keep serving
+their old images until the new ones replace them, and keep them if the rebuild fails.
 ``worker`` is for NEBO_BUILD_MODE=queue: the API only queues new fields and this process builds
 them, so the API can run on a platform that throttles CPU between requests.
 """
@@ -44,6 +47,7 @@ def run_batch(
     targets: list[str],
     coords: list[tuple[float, float]],
     detectors: list[int],
+    rebuild: bool = False,
 ) -> int:
     """Build every (field, detector); returns how many did not end up ready."""
     patches = [service.resolve_patch(target_slug=slug) for slug in targets]
@@ -53,7 +57,12 @@ def run_batch(
         name = patch.target_slug or f"{patch.ra:.4f},{patch.dec:+.4f}"
         for detector in detectors:
             started = time.monotonic()
-            timeline = service.build_now(patch, detector)
+            try:
+                timeline = (service.rebuild_now if rebuild else service.build_now)(patch, detector)
+            except Exception as error:  # Rebuild failed; the old images are still served.
+                print(f"{name:24} D{detector}: kept old  ({type(error).__name__}: {error})")
+                failures += 1
+                continue
             status = timeline.status if timeline else "missing"
             note = f" ({timeline.error})" if timeline and timeline.error else ""
             print(f"{name:24} D{detector}: {status:8} {time.monotonic() - started:6.0f}s{note}")
@@ -79,6 +88,9 @@ def main(argv: list[str]) -> int:
     run.add_argument("--coords", help='"ra,dec;ra,dec" in ICRS degrees.')
     run.add_argument("--file", type=Path, help="Text file with one ra,dec per line.")
     run.add_argument("--detectors", default="1,2,3,4,5,6", help="Comma-separated detectors.")
+    run.add_argument(
+        "--rebuild", action="store_true", help="Also rebuild ready timelines with fresh data."
+    )
     work = commands.add_parser("worker", help="Build the timelines the API queued.")
     work.add_argument("--once", action="store_true", help="Exit when the queue is empty.")
     work.add_argument("--poll", type=float, default=5.0, help="Seconds between empty polls.")
@@ -106,7 +118,7 @@ def main(argv: list[str]) -> int:
     if not targets and not coords:
         targets = [t["slug"] for t in TARGETS]
     detectors = [int(d) for d in args.detectors.split(",")]
-    return 1 if run_batch(service, targets, coords, detectors) else 0
+    return 1 if run_batch(service, targets, coords, detectors, args.rebuild) else 0
 
 
 if __name__ == "__main__":

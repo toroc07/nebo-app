@@ -59,6 +59,49 @@ def group_into_epochs(mjds: list[float], gap_days: float = config.EPOCH_GAP_DAYS
     return groups
 
 
+def split_into_epochs(
+    mjds: list[float],
+    gap_days: float = config.EPOCH_GAP_DAYS,
+    max_span_days: float = config.EPOCH_MAX_SPAN_DAYS,
+    min_frames: int = config.MIN_FRAMES_PER_EPOCH,
+) -> list[list[int]]:
+    """Epochs of time-sorted observations: passes split on ``gap_days``, long passes cut into
+    spans of ``max_span_days``, and spans under ``min_frames`` folded into a neighbour."""
+    epochs: list[list[int]] = []
+    for observing_pass in group_into_epochs(mjds, gap_days):
+        spans: list[list[int]] = []
+        for index in observing_pass:
+            if spans and mjds[index] - mjds[spans[-1][0]] < max_span_days:
+                spans[-1].append(index)
+            else:
+                spans.append([index])
+        epochs += _fold_small_spans(spans, mjds, min_frames)
+    return epochs
+
+
+def _fold_small_spans(spans: list[list[int]], mjds: list[float], min_frames: int) -> list[list[int]]:
+    """Merge each span with fewer than ``min_frames`` into its closest neighbour in time."""
+    spans = [list(span) for span in spans]
+    while len(spans) > 1:
+        small = next((k for k, span in enumerate(spans) if len(span) < min_frames), None)
+        if small is None:
+            break
+        before = mjds[spans[small][0]] - mjds[spans[small - 1][-1]] if small > 0 else math.inf
+        after = (
+            mjds[spans[small + 1][0]] - mjds[spans[small][-1]]
+            if small < len(spans) - 1
+            else math.inf
+        )
+        # Closest in time; on a tie the smaller neighbour, so the epochs stay balanced.
+        if before == after:
+            first = small - 1 if len(spans[small - 1]) <= len(spans[small + 1]) else small
+        else:
+            first = small - 1 if before < after else small
+        spans[first] = spans[first] + spans[first + 1]  # Adjacent and sorted: still in order.
+        del spans[first + 1]
+    return spans
+
+
 def select_evenly(indices: list[int], limit: int) -> list[int]:
     """Keep at most ``limit`` items spread across the list (and so across wavelengths)."""
     if len(indices) <= limit:
@@ -319,6 +362,26 @@ class TimelineService:
         self._run_build(patch, claimed)
         return self.store.get_timeline(patch.id, detector)
 
+    def rebuild_now(self, patch: Patch, detector: int) -> Timeline | None:
+        """Rebuild a timeline synchronously with fresh IRSA data and the current settings.
+
+        A ready timeline stays ready and keeps serving its old images while the new ones are
+        built; they are swapped in one transaction. If the rebuild fails the old images stay.
+        """
+        current = self.store.get_timeline(patch.id, detector)
+        if current is None or current.status != "ready":
+            return self.build_now(patch, detector)
+        try:
+            self._build(patch, current, refresh_frames=True)
+        except Exception as error:
+            log.warning(
+                "Rebuild of patch %s detector %s failed, old images kept: %s",
+                patch.id, detector, error,
+            )
+            self.store.update_progress(current.id, "done", 0, 0)
+            raise
+        return self.store.get_timeline(patch.id, detector)
+
     # ----- build ------------------------------------------------------------------------
 
     def _run_queued_build(self, patch: Patch, timeline: Timeline) -> None:
@@ -337,14 +400,14 @@ class TimelineService:
             log.exception("Timeline build failed: patch %s detector %s", patch.id, timeline.detector)
             self.store.fail_timeline(timeline.id, f"Build failed: {type(error).__name__}")
 
-    def _build(self, patch: Patch, timeline: Timeline) -> None:
+    def _build(self, patch: Patch, timeline: Timeline, refresh_frames: bool = False) -> None:
         store, timeline_id = self.store, timeline.id
         store.update_progress(timeline_id, "querying", 0, 0)
         tap_cache_key = hashlib.sha256(
             f"irsa_tap:{patch.ra:.6f}:{patch.dec:.6f}:D{timeline.detector}".encode()
         ).hexdigest()
         records: list[irsa.FrameRecord] | None = None
-        if self._query_frames is irsa.query_frames:
+        if self._query_frames is irsa.query_frames and not refresh_frames:
             cached = store.get_cached_api(tap_cache_key)
             if cached and isinstance(cached.get("response_json"), list):
                 records = [irsa.FrameRecord(**item) for item in cached["response_json"]]
@@ -369,7 +432,7 @@ class TimelineService:
         if not records:
             raise NoDataError("No SPHEREx images cover this position with this detector yet.")
 
-        epochs = group_into_epochs([record.mjd_start for record in records])
+        epochs = split_into_epochs([record.mjd_start for record in records])
         work = [
             (epoch, records[i])
             for epoch, indices in enumerate(epochs)
@@ -429,6 +492,8 @@ class TimelineService:
             raise NoDataError("SPHEREx images were found but none could be downloaded.")
 
         exposure_rows = [p.exposure_row for p in processed if p.exposure_row is not None]
+        # A rebuild can regroup the epochs: drop the rows of the previous build first.
+        store.delete_timeline_exposures(timeline_id)
         if exposure_rows:
             store.save_nasa_sector_exposures(exposure_rows)
 
