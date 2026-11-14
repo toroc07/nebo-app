@@ -3,10 +3,28 @@ import assert from "node:assert/strict";
 import {
   validCoordinates,
   nextEpoch,
+  epochDateRange,
   releaseLabel,
   timeline,
   ApiError,
 } from "../lib/api";
+test("epoch dates show the whole span of the epoch, in UTC", () => {
+  assert.equal(
+    epochDateRange("2025-08-15T20:45:11+00:00", "2025-08-15T23:59:00+00:00"),
+    "Aug 15, 2025",
+  );
+  assert.equal(
+    epochDateRange("2026-03-19T07:25:17+00:00", "2026-05-05T01:59:28+00:00"),
+    "Mar 19 – May 5, 2026",
+  );
+  assert.equal(
+    epochDateRange("2025-12-28T10:00:00+00:00", "2026-01-03T10:00:00+00:00"),
+    "Dec 28, 2025 – Jan 3, 2026",
+  );
+  // Late on Aug 15 in UTC is still Aug 15, whatever the viewer's time zone.
+  assert.equal(epochDateRange("2025-08-15T23:30:00+00:00"), "Aug 15, 2025");
+  assert.equal(epochDateRange("not a date"), "");
+});
 test("release label comes from the data, never hard-coded", () => {
   assert.equal(releaseLabel(["qr3", "dr1", "dr1"]), "SPHEREx DR1 + QR3");
   assert.equal(releaseLabel(["dr1"]), "SPHEREx DR1");

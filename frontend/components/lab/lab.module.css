@@ -143,6 +143,18 @@
     display: none;
   }
 }
+/* Always visible while the synthetic demo is shown, so it can never pass for real data. */
+.simulated {
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #ffb000;
+  border-radius: 4px;
+  background: #3a2600;
+  color: #ffd27a;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 /* Infrared band / Color: two buttons that read as one switch. */
 .segment {
   display: inline-flex;

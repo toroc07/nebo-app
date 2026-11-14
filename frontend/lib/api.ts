@@ -145,9 +145,30 @@ export async function timeline(
 export function imageUrl(path: string) {
   return new URL(path, origin).href;
 }
+// An epoch groups exposures taken over days or weeks, so show its whole span (UTC):
+// "Aug 15, 2025", "Mar 19 – May 5, 2026" or "Dec 28, 2025 – Jan 3, 2026".
+export function epochDateRange(startUtc: string, endUtc?: string) {
+  const start = new Date(startUtc);
+  if (Number.isNaN(start.getTime())) return "";
+  const end = endUtc ? new Date(endUtc) : start;
+  const format = (d: Date, withYear: boolean) =>
+    d.toLocaleDateString("en", {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+      ...(withYear ? { year: "numeric" } : {}),
+    });
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  if (Number.isNaN(end.getTime()) || day(start) === day(end))
+    return format(start, true);
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  return `${format(start, !sameYear)} – ${format(end, true)}`;
+}
 // "SPHEREx DR1 + QR3" for an epoch, from the releases the API reports (never hard-coded).
 export function releaseLabel(releases?: string[]) {
-  const names = [...new Set((releases ?? []).map((r) => r.trim().toUpperCase()))]
+  const names = [
+    ...new Set((releases ?? []).map((r) => r.trim().toUpperCase())),
+  ]
     .filter(Boolean)
     .sort();
   return names.length ? `SPHEREx ${names.join(" + ")}` : "SPHEREx";
