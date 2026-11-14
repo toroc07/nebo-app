@@ -146,6 +146,18 @@ class MemoryStore:
             self.timelines[timeline.id] = timeline
             return timeline
 
+    def dequeue_timeline(self) -> tuple[Patch, Timeline] | None:
+        with self._lock:
+            queued = sorted(
+                (t for t in self.timelines.values() if t.status == "building" and t.stage == "queued"),
+                key=lambda t: t.updated_at,
+            )
+            if not queued:
+                return None
+            timeline = replace(queued[0], stage="querying", updated_at=_now())
+            self.timelines[timeline.id] = timeline
+            return self.patches[timeline.patch_id], timeline
+
     def _update(self, timeline_id: int, **changes) -> None:
         with self._lock:
             self.timelines[timeline_id] = replace(

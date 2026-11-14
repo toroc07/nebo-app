@@ -5,6 +5,8 @@ import {
   timeline,
   imageUrl,
   nextEpoch,
+  epochDateRange,
+  releaseLabel,
   ApiError,
   type Query,
   type Timeline,
@@ -17,12 +19,12 @@ const stages: Record<string, string> = {
   rendering: "Preparing images",
 };
 const bands = [
-  "0.75–1.09 · Stars",
-  "1.10–1.62 · Stars and red dwarfs",
-  "1.63–2.41 · Variable stars",
-  "2.42–3.82 · Stars with dust",
-  "3.83–4.41 · Brown dwarfs",
-  "4.42–5.00 · Coldest objects",
+  { range: "0.75–1.09", use: "Stars" },
+  { range: "1.10–1.62", use: "Stars and red dwarfs" },
+  { range: "1.63–2.41", use: "Variable stars" },
+  { range: "2.42–3.82", use: "Stars with dust" },
+  { range: "3.83–4.41", use: "Brown dwarfs" },
+  { range: "4.42–5.00", use: "Coldest objects" },
 ];
 export default function Field({
   query,
@@ -108,7 +110,34 @@ export default function Field({
     );
     return () => clearInterval(id);
   }, [playing, data, interval]);
+  // Preload every epoch before blinking: swapping `src` to an image that is still downloading
+  // shows half-loaded frames and makes the loading notice flicker on every step.
+  const [loaded, setLoaded] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!data) return;
+    let cancelled = false;
+    setLoaded(new Set());
+    const images = data.epochs.map((e) => {
+      const url = imageUrl(e.image_url);
+      const image = new Image();
+      // A failed preload also counts as settled; the visible <img> reports the error.
+      image.onload = image.onerror = () => {
+        if (!cancelled) setLoaded((done) => new Set(done).add(url));
+      };
+      image.src = url;
+      return image;
+    });
+    return () => {
+      cancelled = true;
+      images.forEach((image) => (image.onload = image.onerror = null));
+    };
+  }, [data, reload]);
+  const preloaded = data
+    ? data.epochs.filter((e) => loaded.has(imageUrl(e.image_url))).length
+    : 0;
+  const allPreloaded = !!data && preloaded === data.epochs.length;
   const current = data?.epochs[epoch];
+  const currentUrl = current ? imageUrl(current.image_url) : "";
   useEffect(() => {
     setImageError(false);
     setImageLoading(true);
@@ -124,8 +153,8 @@ export default function Field({
             onChange={(e) => setDetector(Number(e.target.value))}
           >
             {bands.map((b, i) => (
-              <option value={i + 1} key={b}>
-                D{i + 1} · {b} µm
+              <option value={i + 1} key={b.range}>
+                D{i + 1} · {b.range} µm · {b.use}
               </option>
             ))}
           </select>
@@ -138,7 +167,9 @@ export default function Field({
             <option value="large">15 arcminutes</option>
           </select>
         </label>
-        <span className="science-label">Observed change · SPHEREx QR2</span>
+        <span className="science-label">
+          Observed change · {releaseLabel(current?.releases)}
+        </span>
       </div>
       {error ? (
         <div className="notice" role="alert">
@@ -190,7 +221,7 @@ export default function Field({
           <div className="field-display">
             <span className="north mono">N ↑</span>
             <span className="east mono">E ←</span>
-            {imageLoading && !imageError && (
+            {imageLoading && !imageError && !loaded.has(currentUrl) && (
               <span role="status" className="image-status">
                 Loading epoch…
               </span>
@@ -224,13 +255,7 @@ export default function Field({
           </div>
           <div className="timeline-panel">
             <label htmlFor="epoch">
-              Observation date ·{" "}
-              {new Date(current.start_utc).toLocaleDateString("en", {
-                timeZone: "UTC",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}{" "}
+              Observed · {epochDateRange(current.start_utc, current.end_utc)}{" "}
               UTC
             </label>
             <input
@@ -249,11 +274,15 @@ export default function Field({
             <div className="button-row">
               <button
                 className="action"
-                disabled={data.epochs.length < 2 || imageError}
+                disabled={data.epochs.length < 2 || imageError || !allPreloaded}
                 onClick={() => setPlaying((p) => !p)}
               >
                 {playing ? <Pause size={18} /> : <Play size={18} />}{" "}
-                {playing ? "Pause" : "Compare epochs"}
+                {playing
+                  ? "Pause"
+                  : allPreloaded
+                    ? "Compare epochs"
+                    : `Loading epochs ${preloaded}/${data.epochs.length}`}
               </button>
               <label>
                 Interval

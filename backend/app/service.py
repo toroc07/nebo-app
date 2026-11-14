@@ -19,7 +19,7 @@ from typing import Any, Callable
 import numpy as np
 from astropy.time import Time
 
-from . import config, imaging, irsa, science_catalogs
+from . import config, ephemeris, imaging, irsa, science_catalogs
 from .store import EpochImage, ImageInfo, Patch, Store, Timeline
 
 log = logging.getLogger(__name__)
@@ -90,14 +90,29 @@ def _build_exposure_row(
     record: irsa.FrameRecord,
     cutout: imaging.Cutout,
     raw_fits: bytes,
+    source_position: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
+    """Metadata and quick-look photometry of one exposure.
+
+    ``source_position`` is where the catalogue object is at this exposure's time (from its
+    proper motion); without it the patch centre is measured. The 3x3 aperture flux is only
+    recorded when all its pixels are valid: saturated or flagged pixels would make the sum a
+    silent underestimate. It has no aperture correction or local background subtraction, so it
+    is a quick-look value, not science-grade photometry.
+    """
     url = irsa.cutout_url(record.uri, patch.ra, patch.dec, config.FETCH_SIZE_DEG)
     url_digest = hashlib.sha256(url.encode()).hexdigest()
     sha256_hex = hashlib.sha256(raw_fits).hexdigest()
 
     ny, nx = cutout.image.shape
-    pix_x = cutout.target_pix_x
-    pix_y = cutout.target_pix_y
+    pix_x, pix_y = cutout.target_pix_x, cutout.target_pix_y
+    if source_position is not None:
+        try:
+            pix_x, pix_y = (
+                float(v) for v in cutout.wcs.world_to_pixel_values(*source_position)
+            )
+        except Exception:
+            pix_x = pix_y = float("nan")
     target_flux = target_var = None
     aperture_flux_ujy = aperture_sigma_stat_ujy = aperture_sigma_reported_ujy = None
 
@@ -117,7 +132,7 @@ def _build_exposure_row(
             box_var = cutout.variance[y0:y1, x0:x1]
             box_bad = cutout.science_bad[y0:y1, x0:x1]
             valid_box = (~box_bad) & np.isfinite(box_img) & np.isfinite(box_var) & (box_var >= 0)
-            if valid_box.any():
+            if box_img.shape == (3, 3) and valid_box.all():
                 pix_sr = math.radians(config.PIXEL_SCALE_ARCSEC / 3600.0) ** 2
                 scale_ujy = pix_sr * 1e12
                 flux_mjy_sr = float(np.sum(box_img[valid_box]))
@@ -154,8 +169,8 @@ def _build_exposure_row(
         "cutout_size_deg": config.FETCH_SIZE_DEG,
         "cutout_corners_icrs": cutout.corners_icrs or None,
         "wcs_header_json": cutout.wcs_header_dict or None,
-        "target_pix_x": cutout.target_pix_x,
-        "target_pix_y": cutout.target_pix_y,
+        "target_pix_x": pix_x,
+        "target_pix_y": pix_y,
         "wavelength_um": cutout.wavelength_um,
         "bandwidth_um": cutout.bandwidth_um,
         "channel_id": science_catalogs.channel_for_wavelength(
@@ -265,22 +280,33 @@ class TimelineService:
         """Current state of a timeline, starting a background build when needed."""
         current = self.store.get_timeline(patch.id, detector)
         if current is None or current.status != "ready":
+            inline = config.BUILD_MODE != "queue"
             with self._pending_lock:
-                if self._pending >= config.MAX_PENDING_BUILDS and (
+                # shortcut: no backpressure in queue mode, the DB is the queue; add a cap if it grows.
+                if inline and self._pending >= config.MAX_PENDING_BUILDS and (
                     current is None or current.status == "failed"
                 ):
                     raise ServiceBusy()
                 claimed = self.store.claim_timeline(patch.id, detector)
-                if claimed is not None:
+                if claimed is not None and inline:
                     self._pending += 1
             if claimed is not None:
-                self._builds.submit(self._run_queued_build, patch, claimed)
-                current = claimed
+                if inline:
+                    self._builds.submit(self._run_queued_build, patch, claimed)
+                current = claimed  # In queue mode a worker picks it up (work_one).
             else:
                 current = self.store.get_timeline(patch.id, detector)
         assert current is not None
         images = self.store.list_images(current.id, size) if current.status == "ready" else []
         return TimelineView(current.status, patch, detector, current, images)
+
+    def work_one(self) -> bool:
+        """Build one queued timeline (queue mode). False when nothing is waiting."""
+        item = self.store.dequeue_timeline()
+        if item is None:
+            return False
+        self._run_build(*item)
+        return True
 
     def build_now(self, patch: Patch, detector: int) -> Timeline | None:
         """Build synchronously (used by the preload command). Skips ready timelines."""
@@ -357,19 +383,38 @@ class TimelineService:
         done = 0
         progress_lock = threading.Lock()
 
+        # Catalogue objects move: measure each exposure where the object is at that time.
+        target = store.get_target(patch.target_slug) if patch.target_slug else None
+        proper_motion = (
+            (target["pm_ra_mas_yr"], target["pm_dec_mas_yr"])
+            if target
+            and target.get("pm_ra_mas_yr") is not None
+            and target.get("pm_dec_mas_yr") is not None
+            else None
+        )
+
         def process(item: tuple[int, irsa.FrameRecord]) -> _Processed | None:
             nonlocal done
             epoch, record = item
             try:
                 data = self._fetch_cutout(record.uri, patch.ra, patch.dec, config.FETCH_SIZE_DEG)
                 cutout = imaging.read_cutout(data, patch.ra, patch.dec)
+                source_position = (
+                    ephemeris.expected_position(
+                        patch.ra, patch.dec, *proper_motion, record.mjd_start
+                    )
+                    if proper_motion
+                    else None
+                )
                 return _Processed(
                     epoch=epoch,
                     image=imaging.reproject_nearest(cutout.image, cutout.wcs, grid_wcs, grid_shape),
                     variance=imaging.reproject_nearest(
                         cutout.variance, cutout.wcs, grid_wcs, grid_shape
                     ),
-                    exposure_row=_build_exposure_row(patch, timeline, epoch, record, cutout, data),
+                    exposure_row=_build_exposure_row(
+                        patch, timeline, epoch, record, cutout, data, source_position
+                    ),
                 )
             except Exception as error:
                 log.warning("Skipping frame %s: %s", record.uri, error)

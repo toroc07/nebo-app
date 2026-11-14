@@ -31,6 +31,10 @@ MAX_CONCURRENT_BUILDS = int(os.environ.get("NEBO_MAX_CONCURRENT_BUILDS", "2"))
 # Builds waiting or running in this process; beyond this, new patches get "busy, retry later".
 # Keeps queued builds well below STALE_BUILD_S so they are never mistaken for dead ones.
 MAX_PENDING_BUILDS = int(os.environ.get("NEBO_MAX_PENDING_BUILDS", "6"))
+# "inline": the API builds missing timelines in its own threads. "queue": the API only queues
+# them and a separate `python -m app.etl worker` builds them (needed on Cloud Run, where CPU is
+# throttled once the response is sent).
+BUILD_MODE = os.environ.get("NEBO_BUILD_MODE", "inline").strip().lower()
 HTTP_TIMEOUT_S = float(os.environ.get("NEBO_HTTP_TIMEOUT_S", "180"))
 
 # Display sizes: side of the square patch, in degrees (3, 6 and 15 arcmin).

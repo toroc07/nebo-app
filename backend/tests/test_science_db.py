@@ -266,3 +266,16 @@ def test_gcs_storage_client_fake_bucket(monkeypatch, tmp_path):
     dest = tmp_path / "downloaded.fits"
     assert client.download_file(obj_name, dest) is True
     assert dest.read_bytes() == b"FITSBYTES"
+
+
+def test_he_i_airglow_line_is_in_channel_16_with_same_detector_anchors():
+    from app import science_catalogs as sc
+
+    channels = {ch.channel_id: ch for ch in sc.SPHEREX_102_CHANNELS}
+    assert channels[16].lambda_min_um <= 1.0830 <= channels[16].lambda_max_um
+    assert not channels[17].lambda_min_um <= 1.0830 <= channels[17].lambda_max_um
+
+    index = next(i for i in sc.SPHEREX_17_INDICES if i.index_code == "IND_HE_AIRGLOW")
+    assert index.feature_channels == (16,)
+    anchors = (channels[index.blue_anchor_channel], channels[index.red_anchor_channel])
+    assert all(anchor.band == channels[16].band for anchor in anchors)

@@ -62,8 +62,9 @@ _RAW_CHANNELS: tuple[tuple[int, int, int, float, float, float, float, float, boo
     (13, 1, 13, 1.001, 0.988, 1.014, 38.0, 0.5, False, "Línea Pa-delta (1.0049 µm)"),
     (14, 1, 14, 1.025, 1.011, 1.039, 38.0, 0.5, False, "Banda de FeH en enanas T tempranas"),
     (15, 1, 15, 1.050, 1.036, 1.064, 38.0, 0.5, False, "Pico fotométrico de banda Y en objetos fríos"),
-    (16, 1, 16, 1.075, 1.061, 1.090, 37.0, 0.4, False, "Ala azul de la línea atmosférica de He I (1.083 µm)"),
-    (17, 1, 17, 1.102, 1.086, 1.116, 37.0, 0.4, False, "Línea de Airglow de He I metaestable (1.0830 µm)"),
+    # He I 1.0830 um falls inside channel 16 (1.061-1.090 um), not channel 17 (1.086-1.116 um).
+    (16, 1, 16, 1.075, 1.061, 1.090, 37.0, 0.4, False, "Metastable He I airglow line (1.0830 µm)"),
+    (17, 1, 17, 1.102, 1.086, 1.116, 37.0, 0.4, False, "Red continuum next to the He I airglow line"),
     # Band 2 (Channels 18-34)
     (18, 2, 1, 1.113, 1.099, 1.126, 43.0, 0.7, False, "Transición de Detector 1 a 2 / Fuga de He I"),
     (19, 2, 2, 1.139, 1.124, 1.153, 42.0, 0.6, False, "Inicio de absorción molecular de H2O"),
@@ -182,7 +183,9 @@ _RAW_INDICES: tuple[
     (12, "IND_BR_ALPHA", "Línea Brackett-alpha de hidrógeno", "LINE_FLUX_DELTA_F", (75,), 73, 76, None, None, "Tasa de acreción en objetos estelares jóvenes (RW Aurigae)."),
     (13, "IND_PA_BETA", "Línea Paschen-beta de hidrógeno", "LINE_FLUX_DELTA_F", (24,), 23, 25, None, None, "Indicador de choque de acreción resistente a la extinción."),
     (14, "IND_H2_212", "Hidrógeno molecular H2 1-0 S(1)", "LINE_FLUX_DELTA_F", (46,), 45, 47, None, None, "Trazador de choques en vientos protostelares y discos."),
-    (15, "IND_HE_AIRGLOW", "Línea de He I metaestable 1.083 µm", "LINE_FLUX_DELTA_F", (17,), 15, 18, None, None, "Veto instrumental: discrimina airglow en Banda 1 de fuentes reales."),
+    # Feature channel 16 holds the line; both continuum anchors stay on detector 1 (channels 14
+    # and 17), because an anchor on another detector mixes calibrations and observation times.
+    (15, "IND_HE_AIRGLOW", "Metastable He I line at 1.083 µm", "LINE_FLUX_DELTA_F", (16,), 14, 17, None, None, "Instrumental veto: tells band-1 airglow apart from real sources."),
     (16, "COLOR_PLANET_X", "Índice térmico ultra-frío", "NSDI", (), None, None, 6, 2, "Aísla enanas marrones frías y Planeta X: valor > +0.70."),
     (17, "COLOR_YSO_DUST", "Exceso infrarrojo por polvo cálido", "COLOR_RATIO", (), None, None, 5, 3, "Diagnostica discos protoplanetarios y de escombros (RW Aur)."),
 )

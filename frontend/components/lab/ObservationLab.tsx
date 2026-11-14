@@ -3,6 +3,7 @@
 // interface (zoom, pan, click for coordinates, drag a pin); the controls are compact overlays.
 // Deliberately unstyled beyond the basics: the final look is decided by the menu.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { epochDateRange } from "@/lib/api";
 import {
   colorPalettes,
   epochImageUrl,
@@ -34,7 +35,9 @@ import s from "./lab.module.css";
 type Preload = { loaded: number; total: number; ms: number | null };
 
 export default function ObservationLab() {
-  const [source, setSource] = useState<Source>("demo");
+  // Real SPHEREx data by default. The demo images are synthetic (made-up brightness, noise and
+  // dates), so they are only shown when chosen, and always under a visible "simulated" banner.
+  const [source, setSource] = useState<Source>("api");
   const [targets, setTargets] = useState<LabTarget[]>([]);
   const [slug, setSlug] = useState("barnards-star");
   const [detector, setDetector] = useState(3);
@@ -72,6 +75,9 @@ export default function ObservationLab() {
   // Which selection `levels` was loaded for. During a source/object/detector change `levels` is
   // briefly the previous selection's, and the palette swap below must not act on it.
   const [loadedKey, setLoadedKey] = useState("");
+  // False for the one render where `source` already changed but `levels` is still the previous
+  // source's: building image URLs then mixes the two (e.g. /lab/demo/api/v1/images/4.png).
+  const fresh = loadedKey === selectionKey;
   const ready = preload.total > 0 && preload.loaded === preload.total;
   // The timeline of the level on screen; the others are only needed for the viewer's ladder.
   const data = useMemo(
@@ -162,7 +168,7 @@ export default function ObservationLab() {
   // the network. The time is shown to learn whether a strip of images should be requested from
   // the backend.
   useEffect(() => {
-    if (!levels) return;
+    if (!levels || !fresh) return;
     let cancelled = false;
     const started = performance.now();
     const urls = allImageUrls(source, levels);
@@ -188,7 +194,7 @@ export default function ObservationLab() {
     return () => {
       cancelled = true;
     };
-  }, [levels, source]);
+  }, [levels, source, fresh]);
 
   const count = data?.epochs.length ?? 0;
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -275,7 +281,7 @@ export default function ObservationLab() {
 
   return (
     <main className={s.lab}>
-      {data && current && grid && worldGrid && (
+      {fresh && data && current && grid && worldGrid && (
         <ImageViewport
           src={epochImageUrl(source, current, data.palette)}
           alt={`Epoch ${epoch + 1} of ${count}, ${current.start_utc.slice(0, 10)}`}
@@ -299,6 +305,11 @@ export default function ObservationLab() {
           ← <span className={s.backText}>Back to the menu</span>
         </a>
         <h1 className={s.title}>Observation lab</h1>
+        {source === "demo" && (
+          <p className={s.simulated} role="note">
+            Simulated data · not real SPHEREx observations
+          </p>
+        )}
         <div
           className={s.segment}
           role="group"
@@ -349,8 +360,8 @@ export default function ObservationLab() {
                 value={source}
                 onChange={(e) => setSource(e.target.value as Source)}
               >
-                <option value="demo">Demo (shared/demo)</option>
-                <option value="api">Real API</option>
+                <option value="api">Real SPHEREx data</option>
+                <option value="demo">Simulated demo (not real data)</option>
               </select>
             </label>
             <label>
@@ -467,7 +478,7 @@ export default function ObservationLab() {
               <p role="alert">{error}</p>
               {source === "api" && (
                 <button type="button" onClick={() => setSource("demo")}>
-                  Use demo data instead
+                  Show the simulated demo instead
                 </button>
               )}
             </>
@@ -526,8 +537,9 @@ export default function ObservationLab() {
             </aside>
             <footer className={s.bottom}>
               <label className={s.epoch}>
-                Epoch {epoch + 1} of {count} · {current.start_utc.slice(0, 10)}{" "}
-                UTC
+                Epoch {epoch + 1} of {count} ·{" "}
+                {epochDateRange(current.start_utc, current.end_utc)} UTC
+                {source === "demo" && " · simulated"}
                 <input
                   type="range"
                   min={0}
