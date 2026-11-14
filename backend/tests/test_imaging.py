@@ -116,3 +116,15 @@ def test_fill_enclosed_holes_skips_large_holes():
 def test_stretch_limits_handle_empty_input():
     assert imaging.stretch_limits([np.array([[np.nan]])]) == (0.0, 1.0)
 
+
+
+def test_diff_png_is_red_where_brighter_blue_where_fainter_and_transparent_without_data():
+    first = np.array([[0.0, 0.0, 0.0, np.nan]])
+    second = np.array([[5.0, -5.0, 0.0, 1.0]])
+    data, limit = imaging.to_diff_png(first, second)
+    red, _, blue, alpha = np.asarray(Image.open(io.BytesIO(data)))[0].T  # One row, so no flip.
+    assert limit > 0
+    assert red[0] > 0 and blue[0] == 0
+    assert blue[1] > 0 and red[1] == 0
+    assert red[2] == blue[2] == 0 and alpha[2] == 255
+    assert alpha[3] == 0

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import io
 import logging
 from typing import Literal
+
+import numpy as np
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +44,7 @@ app.add_middleware(
     allow_origins=config.CORS_ORIGINS,
     allow_methods=["GET"],
     allow_headers=["*"],
+    expose_headers=["X-Diff-Limit"],
 )
 
 
@@ -218,6 +222,24 @@ def list_patches(store: Store = Depends(get_store)) -> list[dict]:
     return store.list_patches_with_data()
 
 
+def _resolve(
+    service: TimelineService, ra: float | None, dec: float | None, target: str | None, detector: int | None
+) -> tuple[Patch, int]:
+    """Patch and detector of a request given as ra/dec or a catalogue target."""
+    if target is not None and (ra is not None or dec is not None):
+        raise HTTPException(status_code=422, detail="Give either target or ra and dec, not both.")
+    if target is None and (ra is None or dec is None):
+        raise HTTPException(status_code=422, detail="Give ra and dec, or a target.")
+    try:
+        patch = service.resolve_patch(ra=ra, dec=dec, target_slug=target)
+    except TargetNotFound:
+        raise HTTPException(status_code=404, detail=f"Unknown target '{target}'.") from None
+    if detector is None:
+        catalogue = service.store.get_target(patch.target_slug) if patch.target_slug else None
+        detector = catalogue["recommended_detector"] if catalogue else DEFAULT_DETECTOR
+    return patch, detector
+
+
 @app.get(f"{API_PREFIX}/timeline")
 def get_timeline(
     ra: float | None = Query(None, ge=0.0, lt=360.0, description="Right ascension, ICRS degrees."),
@@ -236,20 +258,7 @@ def get_timeline(
     200 when ready. 202 while it is being built (call again after ``Retry-After`` seconds).
     502 when the build failed (it can be retried a minute later).
     """
-    if target is not None and (ra is not None or dec is not None):
-        raise HTTPException(status_code=422, detail="Give either target or ra and dec, not both.")
-    if target is None and (ra is None or dec is None):
-        raise HTTPException(status_code=422, detail="Give ra and dec, or a target.")
-
-    try:
-        patch = service.resolve_patch(ra=ra, dec=dec, target_slug=target)
-    except TargetNotFound:
-        raise HTTPException(status_code=404, detail=f"Unknown target '{target}'.") from None
-
-    if detector is None:
-        catalogue = service.store.get_target(patch.target_slug) if patch.target_slug else None
-        detector = catalogue["recommended_detector"] if catalogue else DEFAULT_DETECTOR
-
+    patch, detector = _resolve(service, ra, dec, target, detector)
     view = service.timeline(patch, detector, size)
     payload = timeline_payload(view, size, service.store)
     if view.status == "ready":
@@ -259,6 +268,39 @@ def get_timeline(
     return JSONResponse(
         status_code=202, content=payload, headers={"Retry-After": str(RETRY_AFTER_S)}
     )
+
+
+@app.get(f"{API_PREFIX}/timeline/diff")
+def timeline_diff(
+    a: int = Query(..., ge=0, description="Reference epoch index."),
+    b: int = Query(..., ge=0, description="Epoch index compared against the reference."),
+    ra: float | None = Query(None, ge=0.0, lt=360.0),
+    dec: float | None = Query(None, ge=-90.0, le=90.0),
+    target: str | None = Query(None, pattern=r"^[a-z0-9-]{1,64}$"),
+    size: SizeName = Query(config.DEFAULT_SIZE),
+    detector: int | None = Query(None, ge=1, le=6),
+    service: TimelineService = Depends(get_service),
+) -> Response:
+    """PNG of epoch ``b`` minus epoch ``a``: red = brighter in b, blue = fainter, black = no change.
+
+    Needs a ready timeline (it never starts a build). Header ``X-Diff-Limit`` is the brightness
+    (MJy/sr) at full colour.
+    """
+    patch, detector = _resolve(service, ra, dec, target, detector)
+    store = service.store
+    timeline = store.get_timeline(patch.id, detector)
+    if timeline is None or timeline.status != "ready":
+        raise HTTPException(status_code=404, detail="Timeline not ready: request /timeline first.")
+    by_epoch = {i.epoch_index: i for i in store.list_images(timeline.id, "large")}
+    arrays = []
+    for epoch in (a, b):
+        npz = store.get_npz(by_epoch[epoch].id) if epoch in by_epoch else None
+        if npz is None:
+            raise HTTPException(status_code=404, detail=f"No float data for epoch {epoch}.")
+        arrays.append(np.load(io.BytesIO(npz))["image"])
+    side = imaging.grid_pixels(config.SIZES_DEG[size])
+    png, limit = imaging.to_diff_png(*(imaging.crop_center(x, side) for x in arrays))
+    return Response(content=png, media_type="image/png", headers={"X-Diff-Limit": f"{limit:.6g}"})
 
 
 @app.get(f"{API_PREFIX}/images/{{image_id}}.png")

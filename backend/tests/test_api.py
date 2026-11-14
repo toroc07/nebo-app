@@ -1,4 +1,7 @@
+import io
+
 import pytest
+from PIL import Image
 from fastapi.testclient import TestClient
 
 from app import db
@@ -135,3 +138,18 @@ def test_expected_position_is_null_without_catalogue_target(client):
     wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC))
     epochs = http.get("/api/v1/timeline", params=params).json()["epochs"]
     assert all(e["expected_position"] is None for e in epochs)
+
+
+def test_timeline_diff(client):
+    http, service = client
+    params = {"ra": RA, "dec": DEC, "size": "small", "detector": 3}
+    assert http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 1}).status_code == 404
+    http.get("/api/v1/timeline", params=params)
+    wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC))
+
+    diff = http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 1})
+    assert diff.status_code == 200 and diff.headers["content-type"] == "image/png"
+    assert float(diff.headers["x-diff-limit"]) > 0
+    side = http.get("/api/v1/timeline", params=params).json()["size"]["width_px"]
+    assert Image.open(io.BytesIO(diff.content)).size == (side, side)
+    assert http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 9}).status_code == 404
