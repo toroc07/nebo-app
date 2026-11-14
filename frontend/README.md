@@ -34,6 +34,11 @@ node tests/browser.mjs
 
 The tests intercept the API and save results and screenshots to `artifacts/nebo` in the workspace. For another URL use `NEBO_TEST_URL`. The report for this session is in `artifacts/nebo/verification.md`.
 
-## Observation lab
+## Observation viewer
 
-`/lab/observation` (Home → Observe → "Image lab") renders the synthetic export in `shared/demo/` or the real API, so the viewer can be tested without a backend. Findings and the types `lib/api.ts` still lacks are in `docs/observation-lab.md`.
+"Begin exploring" opens `/lab/observation`: a full-screen viewer of the SPHEREx epochs. Zoom with
+the wheel or a pinch, drag to pan, click to drop a pin that shows RA/Dec (draggable), and use the
+slider or Blink to compare epochs. Zooming switches automatically between the 3′, 6′ and 15′ images the backend serves (they are central crops of one image). The image starts at the full screen width, and the top-bar switch (or the `C` key) alternates between the grey infrared band and a color palette (demo data only; the colors are a display palette, not the sky's real colors). By default it renders the synthetic export in `shared/demo/`, so
+it works without a backend; switch to the real API in the Controls panel. Details and the types
+`lib/api.ts` still lacks are in `docs/observation-lab.md`. `tests/browser.mjs` needs `shared/demo`
+next to the frontend folder.

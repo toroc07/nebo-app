@@ -50,6 +50,8 @@ export type LabTimeline = {
   frames_found: number;
   frames_used: number;
   updated_at: string;
+  /** Which image set these epochs come from. Added by `loadTimeline`; not part of the API body. */
+  palette: Palette;
 };
 
 export type LabTarget = {
@@ -62,11 +64,29 @@ export type LabTarget = {
 
 export type Source = "demo" | "api";
 
-export const demoBase = "/lab/demo/";
+/**
+ * How an epoch image is painted. "gray" is the raw infrared band (brightness only); "amber" and
+ * "inferno" are display palettes applied to that same single band, not the sky's real colours.
+ * Only the demo export has palettes: the real API returns grey images.
+ */
+export type Palette = "gray" | "amber" | "inferno";
+export type ColorPalette = Exclude<Palette, "gray">;
+
+export const colorPalettes: { id: ColorPalette; label: string }[] = [
+  { id: "inferno", label: "Inferno" },
+  { id: "amber", label: "Amber" },
+];
+
+/** URL prefix of each demo image set; mirrors the folder map in app/lab/demo/[...path]/route.ts. */
+export function demoBase(palette: Palette = "gray"): string {
+  return palette === "gray" ? "/lab/demo/" : `/lab/demo/${palette}/`;
+}
 
 export async function loadTargets(source: Source): Promise<LabTarget[]> {
   const r = await fetch(
-    source === "demo" ? demoBase + "targets.json" : imageUrl("/api/v1/targets"),
+    source === "demo"
+      ? demoBase() + "targets.json"
+      : imageUrl("/api/v1/targets"),
   );
   if (!r.ok) throw new Error(`targets: HTTP ${r.status}`);
   return r.json();
@@ -80,28 +100,34 @@ export async function loadTimeline(
   size: string,
   signal: AbortSignal,
   onBuilding?: (stage: string, done: number, total: number) => void,
+  palette: Palette = "gray",
 ): Promise<LabTimeline> {
   if (source === "demo") {
     const r = await fetch(
-      `${demoBase}timeline/${slug}_d${detector}_${size}.json`,
-      {
-        signal,
-      },
+      `${demoBase(palette)}timeline/${slug}_d${detector}_${size}.json`,
+      { signal },
     );
     if (!r.ok)
-      throw new Error(`No demo timeline for ${slug} D${detector} ${size}`);
-    return r.json();
+      throw new Error(
+        `No ${palette} demo timeline for ${slug} D${detector} ${size}`,
+      );
+    return { ...(await r.json()), palette };
   }
   const query: Query = { target: slug };
   const data = await fetchTimeline(query, size, detector, signal, (b) =>
     onBuilding?.(b.progress.stage, b.progress.done, b.progress.total),
   );
   // The API returns more fields than lib/api.ts types; here we use them as they come.
-  return data as unknown as LabTimeline;
+  return { ...(data as unknown as LabTimeline), palette: "gray" };
 }
 
-export function epochImageUrl(source: Source, epoch: LabEpoch): string {
+/** Image URL of an epoch. `image_url` is relative to the folder of the timeline it came from. */
+export function epochImageUrl(
+  source: Source,
+  epoch: LabEpoch,
+  palette: Palette,
+): string {
   return source === "demo"
-    ? demoBase + epoch.image_url
+    ? demoBase(palette) + epoch.image_url
     : imageUrl(epoch.image_url);
 }
