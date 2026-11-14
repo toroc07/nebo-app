@@ -207,3 +207,39 @@ def test_build_now_skips_ready_timelines():
     assert service.build_now(patch, 3).status == "ready"
     assert service.build_now(patch, 3).status == "ready"
     assert len(calls) == 1
+
+
+# ----- per-exposure quick-look photometry -------------------------------------------------
+
+from app.irsa import FrameRecord  # noqa: E402
+from app.service import _build_exposure_row  # noqa: E402
+from app.store import Patch, Timeline  # noqa: E402
+
+
+def _row(source_position=None, flag_value_at_star=0):
+    patch = Patch(1, RA, DEC, "barnards-star")
+    timeline = Timeline(1, 1, 3, "building", "downloading", 0, 0, None, None, None, None)
+    record = FrameRecord("ibe/data/spherex/qr3/level2/x/3/x_D3.fits", 61000.0, 61000.1)
+    data = make_cutout_bytes(
+        RA, DEC, star_offset_px=(0, 3), shape=(31, 31), flag_value_at_star=flag_value_at_star
+    )
+    cutout = imaging.read_cutout(data, RA, DEC)
+    return _build_exposure_row(patch, timeline, 0, record, cutout, data, source_position)
+
+
+def _star_position():
+    # The fake star is 3 pixels north of the patch centre.
+    return RA, DEC + 3 * 6.15 / 3600
+
+
+def test_exposure_photometry_follows_the_moving_source():
+    at_centre = _row()
+    at_source = _row(source_position=_star_position())
+    assert at_source["aperture_flux_ujy"] > 10 * at_centre["aperture_flux_ujy"]
+    assert round(at_source["target_pix_y"]) == round(at_centre["target_pix_y"]) + 3
+
+
+def test_exposure_photometry_is_skipped_when_the_aperture_is_saturated():
+    row = _row(source_position=_star_position(), flag_value_at_star=1 << 26)  # BLOOM
+    assert row["aperture_flux_ujy"] is None
+    assert row["aperture_sigma_reported_ujy"] is None

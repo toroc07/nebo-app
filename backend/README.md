@@ -10,7 +10,8 @@ once and stored in PostgreSQL, so the frontend gets them instantly afterwards.
 1. The frontend asks for a patch (`ra`/`dec` or a catalogue `target`), a detector and a size.
 2. If the timeline is in the database, the API answers `200` with the image URLs.
 3. If not, the API answers `202` and builds it in the background:
-   - lists the SPHEREx exposures that cover the patch (IRSA TAP),
+   - lists the SPHEREx exposures that cover the patch (IRSA TAP; when TAP is down, IRSA SIA,
+     which lags about one day),
    - downloads a cutout of up to 8 exposures per epoch (IRSA is slow: 1-2 minutes in total),
    - subtracts the zodiacal light, reprojects every exposure to a common **north-up,
      east-left** grid and co-adds each epoch,
