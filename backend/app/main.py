@@ -10,8 +10,14 @@ from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from . import config, db, irsa, science_catalogs
-from .service import ServiceBusy, TargetNotFound, TimelineService, TimelineView
+from . import config, db, ephemeris, imaging, irsa, science_catalogs
+from .service import (
+    ServiceBusy,
+    TargetNotFound,
+    TimelineService,
+    TimelineView,
+    datetime_to_mjd,
+)
 from .store import Patch, Store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -72,6 +78,42 @@ def get_service(store: Store = Depends(get_store)) -> TimelineService:
 
 # ----- payloads ---------------------------------------------------------------------------
 
+DATA_SOURCE = "NASA/IPAC IRSA SPHEREx spectral images"
+
+
+def _epoch_releases(exposures: list[dict], image) -> list[str]:
+    """Data releases (e.g. "qr2") of the exposures that make up one epoch."""
+    low, high = datetime_to_mjd(image.start_utc), datetime_to_mjd(image.end_utc)
+    return sorted({e["release"] for e in exposures if low - 1e-4 <= e["mjd_start"] <= high + 1e-4})
+
+
+def _sector_payload(patch: Patch, size: str) -> dict:
+    """Centre and 4 corners of the image in ICRS degrees (the centre is the central pixel)."""
+    sector = imaging.compute_sector_coordinates(patch.ra, patch.dec, size, config.SIZES_DEG[size])
+    return {
+        "center": {"ra": sector["center_ra_deg"], "dec": sector["center_dec_deg"]},
+        "corners": sector["corners_icrs"],
+    }
+
+
+def _expected_position(patch: Patch, target: dict | None, mid_mjd: float, size: str) -> dict | None:
+    """Where the catalogue object should be at ``mid_mjd``: sky position and PNG pixel."""
+    if not target or target.get("pm_ra_mas_yr") is None or target.get("pm_dec_mas_yr") is None:
+        return None
+    ra, dec = ephemeris.expected_position(
+        patch.ra, patch.dec, target["pm_ra_mas_yr"], target["pm_dec_mas_yr"], mid_mjd
+    )
+    wcs, (side, _) = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
+    x, y = (float(v) for v in wcs.world_to_pixel_values(ra, dec))
+    y = side - 1 - y  # FITS row 0 is the bottom; the PNG is flipped.
+    return {
+        "ra": round(ra, 7),
+        "dec": round(dec, 7),
+        "x": round(x, 2),
+        "y": round(y, 2),
+        "in_image": bool(0 <= x <= side - 1 and 0 <= y <= side - 1),
+    }
+
 
 def _patch_payload(patch: Patch) -> dict:
     return {"id": patch.id, "ra": patch.ra, "dec": patch.dec, "target": patch.target_slug}
@@ -85,7 +127,7 @@ def _detector_payload(detector: int) -> dict:
     }
 
 
-def _timeline_payload(view: TimelineView, size: str) -> dict:
+def timeline_payload(view: TimelineView, size: str, store: Store) -> dict:
     base = {
         "status": view.status,
         "patch": _patch_payload(view.patch),
@@ -105,6 +147,8 @@ def _timeline_payload(view: TimelineView, size: str) -> dict:
         return base | {"error": timeline.error}
 
     side_px = view.images[0].width_px if view.images else None
+    exposures = store.list_nasa_sector_exposures(view.patch.id, detector=view.detector)
+    target = store.get_target(view.patch.target_slug) if view.patch.target_slug else None
     return base | {
         "size": {
             "name": size,
@@ -115,6 +159,8 @@ def _timeline_payload(view: TimelineView, size: str) -> dict:
             "pixel_scale_arcsec": config.PIXEL_SCALE_ARCSEC,
         },
         "orientation": "north_up_east_left",
+        "sector": _sector_payload(view.patch, size),
+        "data": {"source": DATA_SOURCE, "processed_at": timeline.updated_at.isoformat()},
         "display": {
             "stretch": "asinh",
             "unit": "MJy/sr",
@@ -130,6 +176,8 @@ def _timeline_payload(view: TimelineView, size: str) -> dict:
                 "frames_used": image.frames_used,
                 "display_min": image.display_min,
                 "display_max": image.display_max,
+                "releases": _epoch_releases(exposures, image),
+                "expected_position": _expected_position(view.patch, target, image.mid_mjd, size),
                 "image_url": f"{API_PREFIX}/images/{image.id}.png",
                 **({"npz_url": f"{API_PREFIX}/images/{image.id}.npz"} if image.has_npz else {}),
             }
@@ -203,7 +251,7 @@ def get_timeline(
         detector = catalogue["recommended_detector"] if catalogue else DEFAULT_DETECTOR
 
     view = service.timeline(patch, detector, size)
-    payload = _timeline_payload(view, size)
+    payload = timeline_payload(view, size, service.store)
     if view.status == "ready":
         return payload
     if view.status == "failed":

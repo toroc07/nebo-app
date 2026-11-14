@@ -107,3 +107,31 @@ def test_without_database_the_api_answers_503(monkeypatch):
     response = http.get("/api/v1/timeline", params={"target": "wise-0855"})
     assert response.status_code == 503
     assert response.json()["code"] == "database_not_configured"
+
+
+def test_timeline_has_corners_data_version_and_expected_position(client):
+    http, service = client
+    params = {"target": "barnards-star", "size": "medium", "detector": 3}
+    http.get("/api/v1/timeline", params=params)
+    wait_until_settled(service, service.resolve_patch(target_slug="barnards-star"))
+    body = http.get("/api/v1/timeline", params=params).json()
+
+    assert set(body["sector"]["corners"]) == {"NW", "NE", "SE", "SW"}
+    assert body["sector"]["center"]["ra"] == pytest.approx(269.446223)
+    assert body["data"]["source"] and body["data"]["processed_at"]
+    for epoch in body["epochs"]:
+        assert epoch["releases"], "every epoch names the data release of its exposures"
+        position = epoch["expected_position"]
+        assert position["in_image"] and 0 <= position["x"] <= body["size"]["width_px"] - 1
+    # Barnard moves north between the two epochs (dec grows, PNG y shrinks).
+    first, last = (e["expected_position"] for e in body["epochs"])
+    assert last["dec"] > first["dec"] and last["y"] < first["y"]
+
+
+def test_expected_position_is_null_without_catalogue_target(client):
+    http, service = client
+    params = {"ra": RA, "dec": DEC, "size": "small", "detector": 3}
+    http.get("/api/v1/timeline", params=params)
+    wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC))
+    epochs = http.get("/api/v1/timeline", params=params).json()["epochs"]
+    assert all(e["expected_position"] is None for e in epochs)
