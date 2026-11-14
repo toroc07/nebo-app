@@ -60,7 +60,7 @@ A.init.then(() => {                    // WASM: always wait for A.init
 ## Science: honest limits (part of the product)
 
 - Visible labels: "observed change" / "candidate signal". Never "Planet X found".
-- Catalogued objects separate from uncatalogued movements; show the observation date and the data release (QR2).
+- Catalogued objects separate from uncatalogued movements; show the observation date and the data release from the API (`epochs[].releases`, e.g. DR1, QR3); never hard-code it.
 - Decorative background stars, separated visually and programmatically from real detections.
 
 ## Conventions

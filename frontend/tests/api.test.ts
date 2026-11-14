@@ -1,6 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validCoordinates, nextEpoch, timeline, ApiError } from "../lib/api";
+import {
+  validCoordinates,
+  nextEpoch,
+  releaseLabel,
+  timeline,
+  ApiError,
+} from "../lib/api";
+test("release label comes from the data, never hard-coded", () => {
+  assert.equal(releaseLabel(["qr3", "dr1", "dr1"]), "SPHEREx DR1 + QR3");
+  assert.equal(releaseLabel(["dr1"]), "SPHEREx DR1");
+  assert.equal(releaseLabel([]), "SPHEREx");
+  assert.equal(releaseLabel(undefined), "SPHEREx");
+});
 test("coordinates accept poles and reject blanks, infinities and out of range", () => {
   for (const [ra, dec] of [
     ["0", "-90"],

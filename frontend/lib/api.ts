@@ -23,6 +23,8 @@ export type Epoch = {
   end_utc: string;
   image_url: string;
   frames_used: number;
+  // SPHEREx data releases of the exposures in this epoch, e.g. ["dr1"] or ["dr1", "qr3"].
+  releases?: string[];
 };
 export type Timeline = {
   status: "ready";
@@ -142,6 +144,13 @@ export async function timeline(
 }
 export function imageUrl(path: string) {
   return new URL(path, origin).href;
+}
+// "SPHEREx DR1 + QR3" for an epoch, from the releases the API reports (never hard-coded).
+export function releaseLabel(releases?: string[]) {
+  const names = [...new Set((releases ?? []).map((r) => r.trim().toUpperCase()))]
+    .filter(Boolean)
+    .sort();
+  return names.length ? `SPHEREx ${names.join(" + ")}` : "SPHEREx";
 }
 export function nextEpoch(index: number, count: number) {
   return count > 1 ? (index + 1) % count : 0;

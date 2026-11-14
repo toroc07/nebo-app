@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import {
@@ -67,6 +68,7 @@ function PanelImage({ src }: { src: string }) {
   );
 }
 export default function Nebo() {
+  const router = useRouter();
   const [view, setView] = useState<View>("Home"),
     [prefs, setPrefs] = useState(defaults),
     [loaded, setLoaded] = useState(false),
@@ -396,7 +398,7 @@ export default function Nebo() {
               <div className="observe-grid">
                 <button
                   className="tile start-tile"
-                  onClick={() => go("Explore")}
+                  onClick={() => router.push("/lab/observation")}
                 >
                   <div className="tile-top">
                     <span className="mono">01 / NO SET COURSE</span>
@@ -408,9 +410,12 @@ export default function Nebo() {
                       <br />
                       exploring
                     </h2>
-                    <p>Browse the sky map and pick an object to observe.</p>
+                    <p>
+                      Open the SPHEREx images full screen: zoom, pan and read
+                      coordinates.
+                    </p>
                     <span className="tile-link">
-                      Open the sky <ArrowUpRight />
+                      Open the images <ArrowUpRight />
                     </span>
                   </div>
                 </button>
@@ -439,15 +444,6 @@ export default function Nebo() {
                   </div>
                 </button>
               </div>
-            )}
-            {view === "Observe" && (
-              // Entry point to the /lab/observation test route (demo images, no backend).
-              // Plain link on purpose: it leaves the grid and the menu state untouched.
-              <p>
-                <a className="secondary" href="/lab/observation">
-                  Image lab (demo, no backend)
-                </a>
-              </p>
             )}
             {view === "Coordinates" && (
               <form
@@ -549,7 +545,7 @@ export default function Nebo() {
                 <p>
                   {
                     [
-                      "Go to Observe and press Begin exploring. The map shows the sky; the list offers five objects to start with.",
+                      "Go to Observe and press Begin exploring. The image fills your screen: scroll or pinch to zoom, drag to pan, and click to read a coordinate.",
                       "Select an object and press View images. If you already know a position, you can enter its right ascension and declination in degrees.",
                       "Move the date selector or play the comparison. Always use the same detector to compare one band. Variations are observed changes, not confirmation of a new planet.",
                     ][step]

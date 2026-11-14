@@ -1,13 +1,15 @@
 """Access to SPHEREx Level 2 spectral images at NASA/IPAC IRSA.
 
 Follows the method of the official IRSA tutorial "Download a collection of SPHEREx Spectral
-Image cutouts": a TAP query lists every image that covers a position, and appending
-``?center=<ra>,<dec>d&size=<deg>`` to an image URL makes IRSA return only a cutout.
+Image cutouts": a TAP query lists every image that covers a position (with the SIA service as
+fallback), and appending ``?center=<ra>,<dec>d&size=<deg>`` to an image URL makes IRSA return
+only a cutout.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import logging
 import random
 import time
@@ -16,7 +18,8 @@ from pathlib import Path
 
 import numpy as np
 import requests
-from astroquery.ipac.irsa import Irsa
+from astropy.io.votable import parse as parse_votable
+from astropy.table import Table
 
 from . import config
 from .gcs_storage import GCSStorageClient
@@ -95,9 +98,123 @@ def _opt_float(row, cols: set[str], name: str) -> float | None:
     return f if np.isfinite(f) else None
 
 
+TAP_SYNC_URL = f"{config.IRSA_BASE_URL}/TAP/sync"
+SIA_URL = f"{config.IRSA_BASE_URL}/SIA"
+SIA_COLLECTIONS = ("spherex_dr1", "spherex_qr3", "spherex_dr1_deep", "spherex_qr3_deep")
+SIA_SEARCH_RADIUS_DEG = 0.0001
+# (connect, read) seconds. Queries go straight to IRSA with requests: astroquery/pyvo set no
+# time limit (one stuck TAP call hung for 13 minutes) and first fetch a "capabilities"
+# document, which is one more request that can fail.
+QUERY_TIMEOUT_S = (10, 60)
+TAP_ATTEMPTS = 2
+SIA_ATTEMPTS = 3
+
+
+class IrsaQueryError(RuntimeError):
+    """IRSA answered, but reported an error inside the VOTable."""
+
+
+def _fetch_votable(method: str, url: str, params) -> Table:
+    response = requests.request(
+        method,
+        url,
+        params=params if method == "GET" else None,
+        data=params if method == "POST" else None,
+        timeout=QUERY_TIMEOUT_S,
+    )
+    response.raise_for_status()
+    votable = parse_votable(io.BytesIO(response.content), verify="ignore")
+    for resource in votable.resources:
+        for info in resource.infos:
+            if info.name == "QUERY_STATUS" and info.value == "ERROR":
+                raise IrsaQueryError(f"IRSA query error: {(info.content or '').strip()[:200]}")
+    # SIA answers start with a "meta" resource (service self-description); the rows are in the
+    # resource of type "results", so take its table rather than the first one found.
+    for resource in votable.resources:
+        if resource.type == "results" and resource.tables:
+            return resource.tables[0].to_table(use_names_over_ids=True)
+    tables = list(votable.iter_tables())
+    return tables[0].to_table(use_names_over_ids=True) if tables else Table()
+
+
+def _tap_table(query: str) -> Table:
+    return _fetch_votable(
+        "POST",
+        TAP_SYNC_URL,
+        {"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "votable", "QUERY": query},
+    )
+
+
+def _sia_table(ra: float, dec: float) -> Table:
+    params = [
+        ("POS", f"CIRCLE {ra:.7f} {dec:.7f} {SIA_SEARCH_RADIUS_DEG}"),
+        ("RESPONSEFORMAT", "votable"),
+        *[("COLLECTION", collection) for collection in SIA_COLLECTIONS],
+    ]
+    return _fetch_votable("GET", SIA_URL, params)
+
+
+def _with_retries(label: str, attempts: int, call):
+    """Run an IRSA query, retrying transient failures with a short backoff."""
+    for attempt in range(attempts):
+        try:
+            return call()
+        except Exception as error:
+            if attempt == attempts - 1:
+                raise
+            wait = 5.0 * 2**attempt
+            log.info("IRSA %s query failed (%s), retrying in %.0f s", label, error, wait)
+            time.sleep(wait)
+    raise AssertionError("unreachable")
+
+
 def query_frames(ra: float, dec: float, detector: int) -> list[FrameRecord]:
-    """List the spectral images of one detector that cover (ra, dec), oldest first."""
-    table = Irsa.query_tap(build_frames_query(ra, dec, detector)).to_table()
+    """List the spectral images of one detector that cover (ra, dec), oldest first.
+
+    Uses IRSA TAP, which sees new images as soon as they are ingested. IRSA's TAP service
+    goes down under load (it answered 502 for hours during the hackathon), so when it keeps
+    failing the same list is requested from the SIA service, which lags about one day.
+    """
+    try:
+        return _with_retries("TAP", TAP_ATTEMPTS, lambda: _query_frames_tap(ra, dec, detector))
+    except Exception as tap_error:
+        log.warning("IRSA TAP unavailable (%s); falling back to SIA", tap_error)
+        return _with_retries("SIA", SIA_ATTEMPTS, lambda: _query_frames_sia(ra, dec, detector))
+
+
+def _query_frames_sia(ra: float, dec: float, detector: int) -> list[FrameRecord]:
+    table = _sia_table(ra, dec)
+    cols = set(table.colnames)
+    prefix = f"{config.IRSA_BASE_URL}/"
+    wanted = bandpass_name(detector)
+    records = []
+    for row in table:
+        if str(row["energy_bandpassname"]) != wanted:
+            continue
+        if "dataproduct_subtype" in cols and str(row["dataproduct_subtype"]) != "science":
+            continue
+        url = str(row["access_url"])
+        uri = url[len(prefix):] if url.startswith(prefix) else url
+        if not uri.startswith(SPHEREX_PATH_PREFIX):
+            log.warning("Skipping unexpected IRSA URL: %s", url)
+            continue
+        records.append(
+            FrameRecord(
+                uri=uri,
+                mjd_start=float(row["t_min"]),
+                mjd_end=float(row["t_max"]),
+                plane_id=None,
+                nasa_poly_icrs=_opt_str(row, cols, "s_region"),
+                energy_bounds_lower_m=_opt_float(row, cols, "em_min"),
+                energy_bounds_upper_m=_opt_float(row, cols, "em_max"),
+                time_exposure_s=_opt_float(row, cols, "t_exptime"),
+            )
+        )
+    return sorted(records, key=lambda record: record.mjd_start)
+
+
+def _query_frames_tap(ra: float, dec: float, detector: int) -> list[FrameRecord]:
+    table = _tap_table(build_frames_query(ra, dec, detector))
     cols = set(table.colnames)
     records = []
     for row in table:

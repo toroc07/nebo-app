@@ -1,23 +1,35 @@
 "use client";
-// Observation module lab: loads each epoch's image and covers the basics (preload, blink,
-// slider, expected-position marker, metadata). Deliberately unstyled: the look is decided by
-// the menu. Kept isolated in components/lab/.
+// Observation viewer: a full-screen, interactive view of the SPHEREx epochs. The image is the
+// interface (zoom, pan, click for coordinates, drag a pin); the controls are compact overlays.
+// Deliberately unstyled beyond the basics: the final look is decided by the menu.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  colorPalettes,
   epochImageUrl,
   loadTargets,
-  loadTimeline,
+  type ColorPalette,
   type LabTarget,
-  type LabTimeline,
+  type Palette,
   type Source,
 } from "@/lib/lab/contract";
+import type { SizeName } from "@/lib/lab/fov";
+import {
+  allImageUrls,
+  levelGeometry,
+  loadImage,
+  loadLevels,
+  loadedLevels,
+  type LabLevels,
+} from "@/lib/lab/levels";
+import {
+  formatDec,
+  formatRa,
+  gridFrom,
+  skyToPixel,
+  type SkyPoint,
+} from "@/lib/lab/sky";
+import ImageViewport, { type Hover } from "./ImageViewport";
 import s from "./lab.module.css";
-
-const sizes = ["small", "medium", "large"];
-
-// `expected_position.x/y` is a 0-based pixel index, drawn at the pixel's centre. If the marker
-// ever lands half a pixel off, this is the only number to adjust.
-const PIXEL_CENTER_OFFSET = 0.5;
 
 type Preload = { loaded: number; total: number; ms: number | null };
 
@@ -26,8 +38,10 @@ export default function ObservationLab() {
   const [targets, setTargets] = useState<LabTarget[]>([]);
   const [slug, setSlug] = useState("barnards-star");
   const [detector, setDetector] = useState(3);
-  const [size, setSize] = useState("medium");
-  const [data, setData] = useState<LabTimeline | null>(null);
+  // The three field-of-view levels of the selected object, and the one currently shown. The
+  // viewer picks the level from the zoom (lib/lab/fov.ts), so there is no size selector.
+  const [levels, setLevels] = useState<LabLevels | null>(null);
+  const [levelName, setLevelName] = useState<SizeName>("medium");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [preload, setPreload] = useState<Preload>({
@@ -40,7 +54,30 @@ export default function ObservationLab() {
   const [interval, setIntervalMs] = useState(800);
   const [marker, setMarker] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  // The pin is stored as a sky position, so it survives epoch, level and detector changes.
+  const [pin, setPin] = useState<SkyPoint | null>(null);
+  const [hover, setHover] = useState<Hover>(null);
+  const [announce, setAnnounce] = useState("");
+  const [copied, setCopied] = useState(false);
+  // "infrared" = the raw single band in grey; "color" = the same band painted with a palette.
+  const [display, setDisplay] = useState<"infrared" | "color">("infrared");
+  const [colorPalette, setColorPalette] = useState<ColorPalette>("inferno");
+  // Only the demo export has colour images; the real API returns grey.
+  const wanted: Palette =
+    source === "demo" && display === "color" ? colorPalette : "gray";
+  const wantedRef = useRef(wanted);
+  wantedRef.current = wanted;
+  const selectionKey = `${source}|${slug}|${detector}`;
+  // Which selection `levels` was loaded for. During a source/object/detector change `levels` is
+  // briefly the previous selection's, and the palette swap below must not act on it.
+  const [loadedKey, setLoadedKey] = useState("");
   const ready = preload.total > 0 && preload.loaded === preload.total;
+  // The timeline of the level on screen; the others are only needed for the viewer's ladder.
+  const data = useMemo(
+    () => levels?.[levelName] ?? loadedLevels(levels ?? {})[0] ?? null,
+    [levels, levelName],
+  );
 
   useEffect(() => {
     const abort = new AbortController();
@@ -51,27 +88,30 @@ export default function ObservationLab() {
     return () => abort.abort();
   }, [source]);
 
-  // Every selection change requests a new timeline and resets playback.
+  // Every selection change requests the levels again and resets playback.
   useEffect(() => {
     const abort = new AbortController();
-    setData(null);
+    setLevels(null);
+    setLevelName("medium");
     setError("");
     setStatus("Loading…");
     setEpoch(0);
     setPlaying(false);
     setImageError(false);
+    setHover(null);
     setPreload({ loaded: 0, total: 0, ms: null });
-    loadTimeline(
+    loadLevels(
       source,
       slug,
       detector,
-      size,
+      wantedRef.current,
       abort.signal,
       (stage, done, total) => setStatus(`Building: ${stage} ${done}/${total}`),
     )
-      .then((d) => {
+      .then((l) => {
         if (abort.signal.aborted) return;
-        setData(d);
+        setLevels(l);
+        setLoadedKey(selectionKey);
         setStatus("");
       })
       .catch((e: Error) => {
@@ -80,40 +120,75 @@ export default function ObservationLab() {
         setStatus("");
       });
     return () => abort.abort();
-  }, [source, slug, detector, size]);
+  }, [source, slug, detector]);
 
-  // Preload every epoch before allowing blink, and time it to learn whether a strip of
-  // images should be requested from the backend.
+  // Switching between infrared and colour swaps the image sets in place: the epochs, positions
+  // and pixels are identical (checked in tests/demo-palettes.test.ts), only the painting
+  // differs. The new sets are downloaded first and swapped in one go, so there is no flash and
+  // the zoom, pan, pin, epoch and level are all kept. `levels` is deliberately not reset, which
+  // keeps the viewer's resetKey (and therefore its view) unchanged.
+  const shownPalette = data?.palette;
   useEffect(() => {
-    if (!data) return;
+    if (!levels || loadedKey !== selectionKey || shownPalette === wanted)
+      return;
+    const abort = new AbortController();
+    loadLevels(source, slug, detector, wanted, abort.signal)
+      .then(async (next) => {
+        await Promise.all(allImageUrls(source, next).map(loadImage));
+        if (abort.signal.aborted) return;
+        setLevels(next);
+        setEpoch((i) =>
+          Math.min(i, (loadedLevels(next)[0]?.epochs.length ?? 1) - 1),
+        );
+      })
+      .catch((e: Error) => {
+        if (abort.signal.aborted) return;
+        setError(e.message);
+        setDisplay("infrared");
+      });
+    return () => abort.abort();
+  }, [
+    levels,
+    shownPalette,
+    loadedKey,
+    selectionKey,
+    wanted,
+    source,
+    slug,
+    detector,
+  ]);
+
+  // Preload every epoch of every level, so neither blinking nor changing level ever waits for
+  // the network. The time is shown to learn whether a strip of images should be requested from
+  // the backend.
+  useEffect(() => {
+    if (!levels) return;
     let cancelled = false;
     const started = performance.now();
-    const total = data.epochs.length;
+    const urls = allImageUrls(source, levels);
+    const total = urls.length;
     setPreload({ loaded: 0, total, ms: null });
     let loaded = 0;
-    data.epochs.forEach((e) => {
-      const img = new Image();
-      const done = () => {
-        if (cancelled) return;
-        loaded += 1;
-        setPreload({
-          loaded,
-          total,
-          ms: loaded === total ? Math.round(performance.now() - started) : null,
-        });
-      };
-      img.onload = done;
-      img.onerror = () => {
+    const done = () => {
+      if (cancelled) return;
+      loaded += 1;
+      setPreload({
+        loaded,
+        total,
+        ms: loaded === total ? Math.round(performance.now() - started) : null,
+      });
+    };
+    urls.forEach((url) =>
+      loadImage(url).then(done, () => {
         if (cancelled) return;
         setImageError(true);
         done();
-      };
-      img.src = epochImageUrl(source, e);
-    });
+      }),
+    );
     return () => {
       cancelled = true;
     };
-  }, [data, source]);
+  }, [levels, source]);
 
   const count = data?.epochs.length ?? 0;
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -129,149 +204,214 @@ export default function ObservationLab() {
   }, [playing, count, interval, ready]);
 
   const current = data?.epochs[epoch];
+  // `grid` is the sky grid of the level on screen (pixel readouts); `worldGrid` is the largest
+  // level's, the space the viewer works in.
+  const grid = useMemo(() => (data ? gridFrom(data) : null), [data]);
+  const worldGrid = useMemo(() => {
+    const all = loadedLevels(levels ?? {});
+    return all.length ? gridFrom(all[all.length - 1]) : null;
+  }, [levels]);
+  const viewerLevels = useMemo(() => levelGeometry(levels ?? {}), [levels]);
+  const activeLevel = (data?.size.name ?? levelName) as SizeName;
   const releases = useMemo(
     () => [...new Set(data?.epochs.flatMap((e) => e.releases ?? []))],
     [data],
   );
   const position = current?.expected_position;
+  const markerPx =
+    marker && position?.in_image ? { x: position.x, y: position.y } : null;
+
+  // Pin position in the current image, for the readout. null = the pin is outside this image.
+  const pinPx = useMemo(() => {
+    if (!pin || !grid) return null;
+    const p = skyToPixel(grid, pin.ra, pin.dec);
+    const inside =
+      p.x >= -0.5 &&
+      p.y >= -0.5 &&
+      p.x <= grid.width - 0.5 &&
+      p.y <= grid.height - 0.5;
+    return inside ? p : null;
+  }, [pin, grid]);
+
+  function handlePin(next: SkyPoint | null, final: boolean) {
+    setPin(next);
+    setCopied(false);
+    // Announce only settled positions; during a drag the screen reader would be flooded.
+    if (final) {
+      setAnnounce(
+        next
+          ? `Pin at RA ${formatRa(next.ra)}, Dec ${formatDec(next.dec)}`
+          : "Pin removed",
+      );
+    }
+  }
+
+  function showDisplay(next: "infrared" | "color") {
+    if (source !== "demo") return;
+    setDisplay(next);
+    setAnnounce(
+      next === "color"
+        ? `Showing the ${colorPalette} color palette`
+        : "Showing the infrared band in grey",
+    );
+  }
+  // Based on what is actually shown (`wanted`), not on the last choice: with the real API the
+  // image is always grey, whatever was picked before.
+  const toggleDisplay = () =>
+    showDisplay(wanted === "gray" ? "color" : "infrared");
+
+  async function copyPin() {
+    if (!pin) return;
+    try {
+      await navigator.clipboard.writeText(
+        `${pin.ra.toFixed(6)} ${pin.dec.toFixed(6)}`,
+      );
+      setCopied(true);
+    } catch {
+      // Clipboard can be blocked (insecure context, permissions); the coordinates stay visible.
+      setCopied(false);
+    }
+  }
 
   return (
     <main className={s.lab}>
-      <a href="/">← Back to the menu</a>
-      <h1>Observation lab</h1>
-      <p className={s.note}>
-        Test route, linked from Observe. The demo source uses the synthetic
-        images in shared/demo (do not judge contrast by them).
-      </p>
+      {data && current && grid && worldGrid && (
+        <ImageViewport
+          src={epochImageUrl(source, current, data.palette)}
+          alt={`Epoch ${epoch + 1} of ${count}, ${current.start_utc.slice(0, 10)}`}
+          grid={worldGrid}
+          levels={viewerLevels}
+          levelName={activeLevel}
+          startLevel="medium"
+          onLevelChange={setLevelName}
+          resetKey={selectionKey}
+          marker={markerPx}
+          pin={pin}
+          onPinChange={handlePin}
+          onHover={setHover}
+          onImageError={() => setImageError(true)}
+          onToggleDisplay={toggleDisplay}
+        />
+      )}
 
-      <div className={s.controls}>
-        <label>
-          Source
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value as Source)}
+      <header className={s.top}>
+        <a href="/" className={s.back} aria-label="Back to the menu">
+          ← <span className={s.backText}>Back to the menu</span>
+        </a>
+        <h1 className={s.title}>Observation lab</h1>
+        <div
+          className={s.segment}
+          role="group"
+          aria-label="Image display"
+          title={
+            source === "demo"
+              ? "Press C on the image to switch"
+              : "Color images are only available in the demo data for now"
+          }
+        >
+          <button
+            type="button"
+            aria-pressed={wanted === "gray"}
+            onClick={() => showDisplay("infrared")}
           >
-            <option value="demo">Demo (shared/demo)</option>
-            <option value="api">Real API</option>
-          </select>
-        </label>
-        <label>
-          Object
-          <select value={slug} onChange={(e) => setSlug(e.target.value)}>
-            {(targets.length ? targets : [{ slug, name: slug }]).map((t) => (
-              <option key={t.slug} value={t.slug}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Detector
-          <select
-            value={detector}
-            onChange={(e) => setDetector(Number(e.target.value))}
+            Infrared band
+          </button>
+          <button
+            type="button"
+            aria-pressed={wanted !== "gray"}
+            disabled={source !== "demo"}
+            onClick={() => showDisplay("color")}
           >
-            {(source === "demo" ? [3, 6] : [1, 2, 3, 4, 5, 6]).map((d) => (
-              <option key={d} value={d}>
-                D{d}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Size
-          <select value={size} onChange={(e) => setSize(e.target.value)}>
-            {sizes.map((x) => (
-              <option key={x}>{x}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+            Color
+          </button>
+        </div>
+        <button
+          type="button"
+          className={s.panelButton}
+          aria-expanded={panelOpen}
+          aria-controls="viewer-panel"
+          onClick={() => setPanelOpen((o) => !o)}
+        >
+          Controls
+        </button>
+      </header>
 
-      {status && <p role="status">{status}</p>}
-      {error && <p role="alert">{error}</p>}
-
-      {data && current && (
-        <div className={s.body}>
-          <div>
-            <div
-              className={s.frame}
-              style={{
-                aspectRatio: `${data.size.width_px} / ${data.size.height_px}`,
-              }}
-            >
-              {imageError ? (
-                <p role="alert">This epoch's image could not be loaded.</p>
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={epochImageUrl(source, current)}
-                  alt={`Epoch ${epoch + 1} of ${count}, ${current.start_utc.slice(0, 10)}`}
-                  className={s.image}
-                />
-              )}
-              {marker && position?.in_image && (
-                <span
-                  className={s.marker}
-                  title={`Expected position RA ${position.ra.toFixed(5)} Dec ${position.dec.toFixed(5)}`}
-                  style={{
-                    left: `${((position.x + PIXEL_CENTER_OFFSET) / data.size.width_px) * 100}%`,
-                    top: `${((position.y + PIXEL_CENTER_OFFSET) / data.size.height_px) * 100}%`,
-                  }}
-                />
-              )}
-            </div>
-            <p className={s.mono}>
-              N up · E left · {data.size.side_arcmin}′ · {data.size.width_px}×
-              {data.size.height_px}px
-            </p>
-          </div>
-
-          <div className={s.panel}>
+      {panelOpen && (
+        <aside
+          id="viewer-panel"
+          className={s.panel}
+          aria-label="Viewer controls and image details"
+        >
+          <div className={s.controls}>
             <label>
-              Epoch {epoch + 1} of {count} · {current.start_utc.slice(0, 10)}{" "}
-              UTC
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, count - 1)}
-                value={epoch}
-                disabled={count < 2}
-                onChange={(e) => {
-                  setPlaying(false);
-                  setEpoch(Number(e.target.value));
-                }}
-              />
-            </label>
-            <div className={s.row}>
-              <button
-                disabled={count < 2 || !ready || imageError}
-                onClick={() => setPlaying((p) => !p)}
+              Source
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value as Source)}
               >
-                {playing ? "Pause" : "Blink"}
-              </button>
-              <label>
-                Interval
-                <select
-                  value={interval}
-                  onChange={(e) => setIntervalMs(Number(e.target.value))}
-                >
-                  <option value={400}>0.4 s</option>
-                  <option value={800}>0.8 s</option>
-                  <option value={1500}>1.5 s</option>
-                </select>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={marker}
-                  onChange={(e) => setMarker(e.target.checked)}
-                />
-                Expected position
-              </label>
-            </div>
-
+                <option value="demo">Demo (shared/demo)</option>
+                <option value="api">Real API</option>
+              </select>
+            </label>
+            <label>
+              Object
+              <select value={slug} onChange={(e) => setSlug(e.target.value)}>
+                {(targets.length ? targets : [{ slug, name: slug }]).map(
+                  (t) => (
+                    <option key={t.slug} value={t.slug}>
+                      {t.name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label>
+              Detector
+              <select
+                value={detector}
+                onChange={(e) => setDetector(Number(e.target.value))}
+              >
+                {(source === "demo" ? [3, 6] : [1, 2, 3, 4, 5, 6]).map((d) => (
+                  <option key={d} value={d}>
+                    D{d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Color palette
+              <select
+                value={colorPalette}
+                disabled={source !== "demo"}
+                onChange={(e) =>
+                  setColorPalette(e.target.value as ColorPalette)
+                }
+              >
+                {colorPalettes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={s.check}>
+              <input
+                type="checkbox"
+                checked={marker}
+                onChange={(e) => setMarker(e.target.checked)}
+              />
+              Expected position
+            </label>
+          </div>
+          {data && current && (
             <dl className={s.meta}>
+              <dt>Orientation</dt>
+              <dd>North up · East left</dd>
+              <dt>Image</dt>
+              <dd>
+                {data.size.side_arcmin}′ · {data.size.width_px}×
+                {data.size.height_px}px · chosen by the zoom
+              </dd>
               <dt>Preload</dt>
               <dd>
                 {preload.loaded}/{preload.total}
@@ -315,8 +455,112 @@ export default function ObservationLab() {
                 {current.frames_used} used of {current.frames_available}
               </dd>
             </dl>
-          </div>
+          )}
+        </aside>
+      )}
+
+      {(status || error) && (
+        <div className={s.message}>
+          {status && <p role="status">{status}</p>}
+          {error && (
+            <>
+              <p role="alert">{error}</p>
+              {source === "api" && (
+                <button type="button" onClick={() => setSource("demo")}>
+                  Use demo data instead
+                </button>
+              )}
+            </>
+          )}
         </div>
+      )}
+      {imageError && (
+        <div className={s.message}>
+          <p role="alert">This epoch&apos;s image could not be loaded.</p>
+        </div>
+      )}
+
+      {data && current && grid && (
+        <>
+          <p className={s.sr} role="status" aria-live="polite">
+            {announce}
+          </p>
+          <div className={s.dock}>
+            <p className={s.note}>
+              {data.palette === "gray"
+                ? `Infrared band D${data.detector.id} · ${data.detector.wavelength_range_um.join("–")} µm · grey = brightness`
+                : `${data.palette[0].toUpperCase()}${data.palette.slice(1)} palette on infrared band D${data.detector.id} · ${data.detector.wavelength_range_um.join("–")} µm · not the sky's real colors`}
+            </p>
+            <aside className={s.readout} aria-label="Coordinates">
+              {(hover || !pin) && (
+                <p className={s.mono}>
+                  {hover
+                    ? `Cursor  RA ${hover.sky.ra.toFixed(5)}°  Dec ${hover.sky.dec.toFixed(5)}°  · px ${hover.px.x.toFixed(1)}, ${hover.px.y.toFixed(1)}`
+                    : "Click or tap the image to drop a coordinate pin."}
+                </p>
+              )}
+              {pin && (
+                <div className={s.pinInfo}>
+                  <p className={s.mono}>
+                    <strong>Pin</strong> RA {pin.ra.toFixed(6)}° · Dec{" "}
+                    {pin.dec.toFixed(6)}°
+                  </p>
+                  <p className={s.mono}>
+                    {formatRa(pin.ra)} · {formatDec(pin.dec)} ·{" "}
+                    <span>
+                      {pinPx
+                        ? `px ${pinPx.x.toFixed(1)}, ${pinPx.y.toFixed(1)}`
+                        : "outside this image (kept for the next one)"}
+                    </span>
+                  </p>
+                  <div className={s.row}>
+                    <button type="button" onClick={copyPin}>
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                    <button type="button" onClick={() => handlePin(null, true)}>
+                      Clear pin
+                    </button>
+                  </div>
+                </div>
+              )}
+            </aside>
+            <footer className={s.bottom}>
+              <label className={s.epoch}>
+                Epoch {epoch + 1} of {count} · {current.start_utc.slice(0, 10)}{" "}
+                UTC
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(0, count - 1)}
+                  value={epoch}
+                  disabled={count < 2}
+                  onChange={(e) => {
+                    setPlaying(false);
+                    setEpoch(Number(e.target.value));
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={count < 2 || !ready || imageError}
+                onClick={() => setPlaying((p) => !p)}
+              >
+                {playing ? "Pause" : "Blink"}
+              </button>
+              <label>
+                Interval
+                <select
+                  value={interval}
+                  onChange={(e) => setIntervalMs(Number(e.target.value))}
+                >
+                  <option value={400}>0.4 s</option>
+                  <option value={800}>0.8 s</option>
+                  <option value={1500}>1.5 s</option>
+                </select>
+              </label>
+            </footer>
+          </div>
+        </>
       )}
     </main>
   );
