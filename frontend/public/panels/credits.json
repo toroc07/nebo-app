@@ -1,0 +1,12 @@
+[
+  {
+    "asset": "nebula.png",
+    "page": "https://science.nasa.gov/asset/webb/pillars-of-creation-nircam-image/",
+    "image": "https://assets.science.nasa.gov/content/dam/science/missions/webb/science/2022/10/STScI-01GGF8H15VZ09MET9HFBRQX4S3.png/jcr:content/renditions/cq5dam.web.1280.1280.png"
+  },
+  {
+    "asset": "telescope.jpg",
+    "page": "https://science.nasa.gov/asset/hubble/nasas-hubble-space-telescope/",
+    "image": "https://assets.science.nasa.gov/content/dam/science/missions/hubble/releases/2005/09/STScI-01EVVMDW8FN1R4Y07FQCYBH01W.tif/jcr:content/renditions/cq5dam.web.1280.1280.jpeg"
+  }
+]

@@ -1,0 +1,77 @@
+/* Estilos mínimos y neutros a propósito: la estética final no se decide aquí. */
+.lab {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+  font-family: system-ui, sans-serif;
+  color: #e8e8e8;
+  background: #111;
+  min-height: 100vh;
+}
+.note {
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+.controls,
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin: 12px 0;
+}
+.controls label,
+.panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+.body {
+  display: grid;
+  grid-template-columns: minmax(240px, 420px) 1fr;
+  gap: 24px;
+}
+@media (max-width: 720px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+}
+.frame {
+  position: relative;
+  width: 100%;
+  /* Fondo en damero para que se vean los píxeles transparentes (sin dato). */
+  background:
+    repeating-conic-gradient(#2a2a2a 0 25%, #1c1c1c 0 50%) 50% / 16px 16px;
+}
+.image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.marker {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffb000;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  font-size: 0.85rem;
+}
+.meta dt {
+  opacity: 0.65;
+}
+.meta dd {
+  margin: 0;
+}
+.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
