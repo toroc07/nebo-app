@@ -190,6 +190,27 @@ so responses are cached for a year (`immutable`).
 - `GET /timeline` creates the patch on first use, so the first request for a new position
   answers `202`.
 
+## For the frontend: extra fields, diff and static export
+
+`GET /timeline` (ready) also returns:
+
+- `sector`: `center` and `corners` (`NW`, `NE`, `SE`, `SW`) of the image in ICRS degrees.
+- `data`: `source` and `processed_at` (when the timeline was built).
+- per epoch: `releases` (data release of its exposures, e.g. `["qr2"]`) and
+  `expected_position`: `{ra, dec, x, y, in_image}` from the catalogue proper motion at the
+  epoch's mid time, or `null` for objects outside the catalogue. `x`/`y` are PNG pixels
+  (origin top-left, pixel centres at integers).
+
+`GET /timeline/diff?a=0&b=1` (same `ra`/`dec`/`target`, `size`, `detector` as `/timeline`):
+PNG of epoch `b` minus epoch `a`. Red = brighter in `b`, blue = fainter, black = unchanged,
+transparent = no data. Header `X-Diff-Limit` is the brightness (MJy/sr) at full colour. The
+timeline must be ready (otherwise `404`); it never starts a build. Uses the float32 arrays.
+
+Static export for a demo without internet: `python -m app.export --out <folder>` writes
+`targets.json`, `timeline/<slug>_d<detector>_<size>.json` (same body as the API, with
+`image_url` relative to the folder) and `images/<id>.png`. Only ready timelines are exported;
+the diff images are not.
+
 ## Float data for analysis (work in progress)
 
 The PNGs are stretched and 8-bit, so they cannot be used to subtract epochs or measure
@@ -197,15 +218,7 @@ fluxes. For the `large` size the build also produces `EpochImage.npz`: a compres
 with float32 `image` and `variance` (co-added, no stretch, holes **not** filled; NaN =
 no data). Smaller sizes are central crops of it.
 
-**Not stored yet.** `PostgresStore.complete_timeline` ignores `npz`, and no endpoint serves
-it. Pending on the database side:
-
-1. nullable `npz bytea` column in `timeline_images`;
-2. save it in `complete_timeline` and add `get_npz(image_id)` to `Store`;
-3. an `/images/{id}.npz` endpoint.
-
-Do **not** run `python -m app.preload` before that: ready timelines are skipped, so they
-would never get their arrays. Delete them to rebuild.
+Served at `/images/{id}.npz` (`npz_url` in each epoch of the `large` size). Timelines built before the `npz` column existed have no arrays (and `/timeline/diff` answers `404`): delete them to rebuild.
 
 Spectra need one row per exposure (wavelength, flux), not the per-epoch co-add. Not done.
 
