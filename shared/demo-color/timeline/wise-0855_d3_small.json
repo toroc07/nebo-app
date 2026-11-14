@@ -1,0 +1,127 @@
+{
+  "status": "ready",
+  "patch": {
+    "id": 3,
+    "ra": 133.75931,
+    "dec": -7.242145,
+    "target": "wise-0855"
+  },
+  "detector": {
+    "id": 3,
+    "bandpass": "SPHEREx-D3",
+    "wavelength_range_um": [
+      1.63,
+      2.41
+    ]
+  },
+  "size": {
+    "name": "small",
+    "side_deg": 0.05,
+    "side_arcmin": 3.0,
+    "width_px": 31,
+    "height_px": 31,
+    "pixel_scale_arcsec": 6.15
+  },
+  "orientation": "north_up_east_left",
+  "sector": {
+    "center": {
+      "ra": 133.75931,
+      "dec": -7.242145
+    },
+    "corners": {
+      "NW": [
+        133.7326195,
+        -7.2156651
+      ],
+      "NE": [
+        133.7860005,
+        -7.2156651
+      ],
+      "SE": [
+        133.7860037,
+        -7.2686234
+      ],
+      "SW": [
+        133.7326163,
+        -7.2686234
+      ]
+    }
+  },
+  "data": {
+    "source": "NASA/IPAC IRSA SPHEREx spectral images",
+    "processed_at": "2026-11-14T18:52:03.787660+00:00"
+  },
+  "display": {
+    "stretch": "asinh",
+    "unit": "MJy/sr",
+    "note": "Zodiacal light subtracted; pixels without data are transparent."
+  },
+  "epochs": [
+    {
+      "index": 0,
+      "start_utc": "2025-08-01T00:00:00+00:00",
+      "end_utc": "2025-08-01T00:00:00+00:00",
+      "mid_mjd": 60888.0,
+      "frames_available": 1,
+      "frames_used": 1,
+      "display_min": 0.4052348828315735,
+      "display_max": 25.619353496551305,
+      "releases": [
+        "qr2"
+      ],
+      "expected_position": {
+        "ra": 133.7607178,
+        "dec": -7.2422607,
+        "x": 14.18,
+        "y": 15.07,
+        "in_image": true
+      },
+      "image_url": "images/37.png"
+    },
+    {
+      "index": 1,
+      "start_utc": "2026-02-01T00:00:00+00:00",
+      "end_utc": "2026-02-01T00:00:00+00:00",
+      "mid_mjd": 61072.0,
+      "frames_available": 1,
+      "frames_used": 1,
+      "display_min": 0.4052348828315735,
+      "display_max": 25.619353496551305,
+      "releases": [
+        "qr2"
+      ],
+      "expected_position": {
+        "ra": 133.7595719,
+        "dec": -7.2421665,
+        "x": 14.85,
+        "y": 15.01,
+        "in_image": true
+      },
+      "image_url": "images/38.png"
+    },
+    {
+      "index": 2,
+      "start_utc": "2026-08-02T00:00:00+00:00",
+      "end_utc": "2026-08-02T00:00:00+00:00",
+      "mid_mjd": 61254.0,
+      "frames_available": 1,
+      "frames_used": 1,
+      "display_min": 0.4052348828315735,
+      "display_max": 25.619353496551305,
+      "releases": [
+        "qr2"
+      ],
+      "expected_position": {
+        "ra": 133.7584384,
+        "dec": -7.2420733,
+        "x": 15.51,
+        "y": 14.96,
+        "in_image": true
+      },
+      "image_url": "images/39.png"
+    }
+  ],
+  "frames_found": 3,
+  "frames_used": 3,
+  "updated_at": "2026-11-14T18:52:03.787660+00:00"
+}

@@ -128,3 +128,14 @@ def test_diff_png_is_red_where_brighter_blue_where_fainter_and_transparent_witho
     assert blue[1] > 0 and red[1] == 0
     assert red[2] == blue[2] == 0 and alpha[2] == 255
     assert alpha[3] == 0
+
+
+def test_colorize_png_maps_grey_to_palette_and_keeps_transparency():
+    grey = imaging.to_png(np.array([[0.0, 1.0], [np.nan, 2.0]]), 0.0, 2.0)
+    pixels = np.asarray(Image.open(io.BytesIO(imaging.colorize_png(grey, "amber"))))
+    # Rows are flipped: PNG row 0 holds the FITS top row [nan, 2.0].
+    assert pixels[0, 0, 3] == 0  # NaN stays transparent
+    assert tuple(pixels[0, 1]) == (255, 255, 255, 255)  # the brightest pixel is white
+    assert tuple(pixels[1, 0]) == (0, 0, 0, 255)  # zero is black
+    r, g, b, _ = pixels[1, 1]
+    assert r == 255 and 176 < g < 255 and 0 < b < 255  # between amber and white

@@ -395,3 +395,25 @@ def to_png(image: np.ndarray, low: float, high: float, softening: float = 10.0) 
     buffer = io.BytesIO()
     Image.fromarray(pixels).save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+# Display palettes: (position 0-1, (r, g, b)) stops. Colour is added for display only; the data
+# is a single band, so it carries no real colour.
+PALETTES = {
+    "amber": [(0.0, (0, 0, 0)), (0.6, (255, 176, 0)), (1.0, (255, 255, 255))],
+}
+
+
+def colorize_png(png: bytes, palette: str) -> bytes:
+    """Recolour a grey+alpha PNG from ``to_png`` with a palette; alpha is kept."""
+    grey_alpha = np.asarray(Image.open(io.BytesIO(png)).convert("LA"))
+    stops = PALETTES[palette]
+    level = grey_alpha[..., 0] / 255.0
+    rgb = [
+        np.rint(np.interp(level, [x for x, _ in stops], [color[i] for _, color in stops]))
+        for i in range(3)
+    ]
+    pixels = np.dstack([*rgb, grey_alpha[..., 1]]).astype(np.uint8)
+    buffer = io.BytesIO()
+    Image.fromarray(pixels).save(buffer, format="PNG")
+    return buffer.getvalue()

@@ -18,3 +18,14 @@ Not included: `/timeline/diff` images, `.npz` files, `202 building` responses.
 
 Regenerate with `cd backend && python -m tests.demo_export --out ../shared/demo`.
 When real data exists, `python -m app.export --out <folder>` writes the same layout.
+
+## demo-color/
+
+Same files and names as `demo/` (same JSON shape, same ids), but the PNGs use the **amber**
+palette (black, amber, white) instead of grey. SPHEREx images are single-band infrared, so the
+colour is a display palette and not the sky's real colour: say so in the UI. The JSON is
+regenerated, so `processed_at` and ids can differ from `demo/`; use one folder or the other.
+
+Regenerate: `cd backend && python -m tests.demo_export --out ../shared/demo-color --palette amber`.
+Real data has no such option yet; IRSA's cutout APIs return FITS only, and its viewer offers
+colour tables, stretches and 3-colour composites that we would have to reproduce.
