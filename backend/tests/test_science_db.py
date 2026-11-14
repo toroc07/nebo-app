@@ -256,13 +256,13 @@ def test_gcs_storage_client_fake_bucket(monkeypatch, tmp_path):
             return FakeBucket()
 
     client = gcs_storage.GCSStorageClient(
-        bucket_name="run-sources-traficcolector-us-central1",
-        project="traficcolector",
+        bucket_name="nebo-514718-spherex-assets",
+        project="nebo-514718",
         client=FakeClient(),
     )
     obj_name = client.build_object_name("cutouts", "ab", "test.fits")
     ref = client.upload_bytes(obj_name, b"FITSBYTES", content_type="application/fits")
-    assert ref.gcs_uri == "gs://run-sources-traficcolector-us-central1/nebo-spherex/cutouts/ab/test.fits"
+    assert ref.gcs_uri == "gs://nebo-514718-spherex-assets/nebo-spherex/cutouts/ab/test.fits"
     dest = tmp_path / "downloaded.fits"
     assert client.download_file(obj_name, dest) is True
     assert dest.read_bytes() == b"FITSBYTES"

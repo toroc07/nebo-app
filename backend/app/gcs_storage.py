@@ -9,8 +9,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-DEFAULT_GCS_PROJECT = "traficcolector"
-DEFAULT_GCS_BUCKET = "run-sources-traficcolector-us-central1"
+DEFAULT_GCS_PROJECT = "nebo-514718"
+DEFAULT_GCS_BUCKET = "nebo-514718-spherex-assets"
 DEFAULT_GCS_PREFIX = "nebo-spherex"
 
 log = logging.getLogger(__name__)
