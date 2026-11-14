@@ -5,15 +5,16 @@ from __future__ import annotations
 from dataclasses import asdict
 import io
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
-from . import config, db, ephemeris, imaging, irsa, science_catalogs
+from . import config, db, ephemeris, imaging, irsa, metrics, models, science_catalogs
 from .service import (
     ServiceBusy,
     TargetNotFound,
@@ -42,7 +43,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
     expose_headers=["X-Diff-Limit"],
 )
@@ -361,3 +362,286 @@ def list_spectral_index_catalog(store: Store = Depends(get_store)) -> list[dict]
     if rows:
         return rows
     return [asdict(idx) | {"feature_channels": list(idx.feature_channels)} for idx in science_catalogs.SPHEREX_17_INDICES]
+
+
+# ----- science metrics, 17 spectral indices & ML Models 1, 2, 3 -------------------------
+
+
+class EventClassifyRequest(BaseModel):
+    patch_id: int | None = Field(default=None, ge=1)
+    target: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    feature_vector: dict[str, float] | None = None
+    temperature_t: float = Field(default=1.15, gt=0.05, le=10.0)
+
+
+class SpectrumClassifyRequest(BaseModel):
+    patch_id: int | None = Field(default=None, ge=1)
+    target: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    spectrum: dict[str, Any] | None = None
+
+
+class ForecastRequest(BaseModel):
+    patch_id: int | None = Field(default=None, ge=1)
+    target: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    times_mjd: list[float] | None = None
+    fluxes_mjy: list[float] | None = None
+    sigmas_mjy: list[float] | None = None
+    horizon_days: float = Field(default=180.0, gt=1.0, le=730.0)
+    period_days: float | None = Field(default=None, gt=0.01)
+
+
+class AnalyzePatchRequest(BaseModel):
+    scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
+    force_recompute: bool = True
+
+
+class CitizenVoteRequest(BaseModel):
+    epoch_index: int = Field(default=-1, ge=-1)
+    vote: Literal["REAL_CHANGE", "ARTIFACT", "MOVER", "UNSURE"]
+    voter_token: str | None = Field(default=None, max_length=128)
+    comment: str | None = Field(default=None, max_length=500)
+
+
+def _patch_or_404(store: Store, patch_id: int) -> Patch:
+    patch = store.get_patch(patch_id)
+    if patch is None:
+        raise HTTPException(status_code=404, detail=f"Patch {patch_id} not found.")
+    return patch
+
+
+def _resolve_optional_patch(
+    service: TimelineService, patch_id: int | None, target: str | None
+) -> Patch | None:
+    if patch_id is not None:
+        return _patch_or_404(service.store, patch_id)
+    if target is not None:
+        try:
+            return service.resolve_patch(ra=None, dec=None, target_slug=target)
+        except TargetNotFound:
+            raise HTTPException(status_code=404, detail=f"Unknown target '{target}'.") from None
+    return None
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/spectrum")
+def get_patch_spectrum(
+    patch_id: int = Path(..., ge=1),
+    epoch_index: int = Query(-1, ge=-1),
+    auto_compute: bool = Query(True),
+    store: Store = Depends(get_store),
+) -> dict:
+    """102-channel SPHEREx spectrum (BLANKCH 51-52 preserved as null) and 17 spectral indices."""
+    patch = _patch_or_404(store, patch_id)
+    spec = store.get_patch_spectrum(patch_id, epoch_index=epoch_index)
+    if spec is None and auto_compute:
+        bundle = models.analyze_patch_science(store, patch, force_recompute=False)
+        spec = bundle["spectrum"]
+    if spec is None:
+        raise HTTPException(status_code=404, detail="Patch spectrum not found.")
+    return spec
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/metrics")
+def get_patch_metrics(
+    patch_id: int = Path(..., ge=1),
+    detector: int | None = Query(None, ge=1, le=6),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Full scientific metrics bundle (photometry, variability, confidence, 17 spectral indices)."""
+    patch = _patch_or_404(store, patch_id)
+    bundle = models.analyze_patch_science(store, patch, force_recompute=False)
+    image_photometry: list[dict[str, Any]] = []
+    if detector is not None:
+        tl = store.get_timeline(patch_id, detector)
+        if tl is not None and tl.status == "ready":
+            for img_info in store.list_images(tl.id, "large"):
+                npz = store.get_npz(img_info.id)
+                if npz is None:
+                    continue
+                data = np.load(io.BytesIO(npz))
+                phot = metrics.extract_optimal_psf_photometry(data["image"], data["variance"])
+                image_photometry.append({"epoch_index": img_info.epoch_index, "mid_mjd": img_info.mid_mjd, **phot})
+    return {
+        "patch": bundle["patch"],
+        "confidence": bundle["confidence"],
+        "variability": bundle["variability"],
+        "spectral_indices": bundle["spectrum"].get("indices", []),
+        "image_photometry": image_photometry,
+    }
+
+
+@app.post(f"{API_PREFIX}/patches/{{patch_id}}/analyze")
+def analyze_patch(
+    patch_id: int = Path(..., ge=1),
+    body: AnalyzePatchRequest | None = None,
+    store: Store = Depends(get_store),
+) -> dict:
+    """Run and persist the complete science pipeline (102 channels, 17 indices, Models 1, 2, 3)."""
+    patch = _patch_or_404(store, patch_id)
+    req = body or AnalyzePatchRequest()
+    return models.analyze_patch_science(
+        store,
+        patch,
+        scenario=req.scenario,
+        force_recompute=req.force_recompute,
+    )
+
+
+@app.post(f"{API_PREFIX}/models/classify-event")
+def classify_event(
+    body: EventClassifyRequest,
+    service: TimelineService = Depends(get_service),
+) -> dict:
+    """Model 1: Classify an astrophysical/instrumental event from 16 physical features."""
+    store = service.store
+    patch = _resolve_optional_patch(service, body.patch_id, body.target)
+    if body.feature_vector is not None:
+        fv = body.feature_vector
+    elif patch is not None:
+        profile_key = patch.target_slug or "barnards-star"
+        if profile_key not in models.DEMO_PROFILE_SPECS:
+            profile_key = "barnards-star"
+        fv = models.DEMO_PROFILE_SPECS[profile_key]["features"]
+    else:
+        raise HTTPException(status_code=422, detail="Provide feature_vector, patch_id, or target.")
+
+    result = models.run_model1_event_classifier(fv, temperature_t=body.temperature_t)
+    if patch is not None:
+        return store.save_model1_attribution(patch.id, -1, result)
+    return result
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/models/event")
+def get_patch_event_model(
+    patch_id: int = Path(..., ge=1),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Retrieve stored Model 1 event attribution for a patch (computes if missing)."""
+    patch = _patch_or_404(store, patch_id)
+    row = store.get_model1_attribution(patch_id, epoch_index=-1)
+    if row is None:
+        row = models.analyze_patch_science(store, patch, force_recompute=False)["model1_event"]
+    return row
+
+
+@app.post(f"{API_PREFIX}/models/classify-spectrum")
+def classify_spectrum(
+    body: SpectrumClassifyRequest,
+    service: TimelineService = Depends(get_service),
+) -> dict:
+    """Model 2: Fit 102-channel SPHEREx spectrum (BLANKCH 51-52 excluded) + Bayesian fusion."""
+    store = service.store
+    patch = _resolve_optional_patch(service, body.patch_id, body.target)
+    if body.spectrum is not None:
+        result = models.run_model2_spectral_classifier(body.spectrum)
+        if patch is not None:
+            return store.save_model2_classification(patch.id, result)
+        return result
+
+    if patch is not None:
+        bundle = models.analyze_patch_science(
+            store, patch, scenario=body.scenario, force_recompute=bool(body.scenario)
+        )
+        return bundle["model2_spectrum"]
+
+    scenario = body.scenario or body.target
+    if scenario and scenario in models.DEMO_PROFILE_SPECS:
+        spec = models.build_demo_spectrum_payload(scenario)
+        return models.run_model2_spectral_classifier(spec)
+    raise HTTPException(status_code=422, detail="Provide spectrum, patch_id, target, or scenario.")
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/models/spectrum")
+def get_patch_spectrum_model(
+    patch_id: int = Path(..., ge=1),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Retrieve stored Model 2 spectral classification for a patch (computes if missing)."""
+    patch = _patch_or_404(store, patch_id)
+    row = store.get_model2_classification(patch_id)
+    if row is None:
+        row = models.analyze_patch_science(store, patch, force_recompute=False)["model2_spectrum"]
+    return row
+
+
+@app.post(f"{API_PREFIX}/models/forecast-temporal")
+def forecast_temporal(
+    body: ForecastRequest,
+    service: TimelineService = Depends(get_service),
+) -> dict:
+    """Model 3: GP light-curve forecast, astrometric cone, and Model 1 alert handshake."""
+    store = service.store
+    patch = _resolve_optional_patch(service, body.patch_id, body.target)
+    if body.times_mjd is not None and body.fluxes_mjy is not None:
+        if len(body.times_mjd) != len(body.fluxes_mjy) or len(body.times_mjd) < 2:
+            raise HTTPException(status_code=422, detail="times_mjd and fluxes_mjy must match and have length >= 2.")
+        sigmas = body.sigmas_mjy or [
+            science_catalogs.compute_reported_sigma(f, 0.015 * abs(f)) for f in body.fluxes_mjy
+        ]
+        m1_row = store.get_model1_attribution(patch.id, -1) if patch is not None else None
+        ra = patch.ra if patch is not None else 0.0
+        dec = patch.dec if patch is not None else 0.0
+        result = models.run_model3_temporal_forecast(
+            body.times_mjd,
+            body.fluxes_mjy,
+            sigmas,
+            ra_deg=ra,
+            dec_deg=dec,
+            horizon_days=body.horizon_days,
+            period_days=body.period_days,
+            model1_result=m1_row,
+            model1_attribution_id=m1_row["id"] if m1_row else None,
+        )
+        if patch is not None:
+            return store.save_model3_forecast(patch.id, result)
+        return result
+
+    if patch is not None:
+        bundle = models.analyze_patch_science(
+            store, patch, scenario=body.scenario, force_recompute=bool(body.scenario)
+        )
+        return bundle["model3_forecast"]
+
+    raise HTTPException(status_code=422, detail="Provide times_mjd + fluxes_mjy, patch_id, or target.")
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/models/forecast")
+def get_patch_forecast_model(
+    patch_id: int = Path(..., ge=1),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Retrieve stored Model 3 temporal forecast for a patch (computes if missing)."""
+    patch = _patch_or_404(store, patch_id)
+    row = store.get_model3_forecast(patch_id)
+    if row is None:
+        row = models.analyze_patch_science(store, patch, force_recompute=False)["model3_forecast"]
+    return row
+
+
+@app.post(f"{API_PREFIX}/patches/{{patch_id}}/votes")
+def submit_citizen_vote(
+    body: CitizenVoteRequest,
+    patch_id: int = Path(..., ge=1),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Record a citizen-science classification vote on a patch."""
+    _patch_or_404(store, patch_id)
+    return store.save_citizen_vote(
+        patch_id,
+        body.epoch_index,
+        body.vote,
+        voter_token=body.voter_token,
+        comment=body.comment,
+    )
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/votes")
+def list_citizen_votes(
+    patch_id: int = Path(..., ge=1),
+    epoch_index: int | None = Query(None, ge=-1),
+    store: Store = Depends(get_store),
+) -> list[dict]:
+    """List citizen-science votes recorded for a patch."""
+    _patch_or_404(store, patch_id)
+    return store.list_citizen_votes(patch_id, epoch_index=epoch_index)

@@ -89,6 +89,9 @@ class MemoryStore:
         matches = [p for p in self.patches.values() if p.target_slug == slug]
         return min(matches, key=lambda p: p.id) if matches else None
 
+    def get_patch(self, patch_id: int) -> Patch | None:
+        return self.patches.get(patch_id)
+
     def create_patch(self, ra: float, dec: float, target_slug: str | None) -> Patch:
         sectors = imaging.compute_all_sector_coordinates(ra, dec)
         with self._lock:

@@ -1,0 +1,230 @@
+"""Verification suite for SPHEREx metrics, 17 spectral indices, Models 1-3, and API endpoints."""
+
+from __future__ import annotations
+
+import math
+
+import numpy as np
+from fastapi.testclient import TestClient
+
+from app import main, metrics, models, science_catalogs
+from tests.memory_store import MemoryStore
+
+
+def _make_gaussian_cutout(
+    size: int = 21,
+    cx: float = 10.0,
+    cy: float = 10.0,
+    peak: float = 100.0,
+    noise_sigma: float = 0.5,
+) -> tuple[np.ndarray, np.ndarray]:
+    yy, xx = np.mgrid[0:size, 0:size]
+    sigma_psf = 1.22 / 2.35482
+    img = peak * np.exp(-(((xx - cx) ** 2 + (yy - cy) ** 2) / (2.0 * sigma_psf * sigma_psf)))
+    var = np.full((size, size), noise_sigma ** 2, dtype=np.float64)
+    return img, var
+
+
+def test_psf_photometry_enforces_3pct_floor_and_photometry_mask():
+    img, var = _make_gaussian_cutout(peak=5000.0, noise_sigma=0.2)
+    flags = np.zeros_like(img, dtype=np.int64)
+    # Corrupt one corner pixel inside the 5x5 aperture with SNOWBALL (0x08000000)
+    flags[9, 9] = 0x08000000
+    img[9, 9] = 1.0e7  # Must be ignored by MASK_PHOTOMETRY
+
+    phot = metrics.extract_optimal_psf_photometry(img, var, flags=flags, center_xy=(10, 10))
+    assert phot["flux_hat"] > 1000.0
+    assert phot["flux_hat"] < 50000.0
+    assert phot["sigma_reported"] >= 0.03 * abs(phot["flux_hat"]) - 1e-6
+    assert phot["n_valid_pixels"] == 24
+
+
+def test_difference_snr_and_mahalanobis_displacement():
+    img1, var1 = _make_gaussian_cutout(cx=10.0, cy=10.0, peak=120.0, noise_sigma=0.5)
+    img2, var2 = _make_gaussian_cutout(cx=12.0, cy=10.0, peak=120.0, noise_sigma=0.5)
+
+    diff = metrics.compute_difference_snr_map(img1, var1, img2, var2)
+    assert diff["z_dipole"] > 10.0
+    assert diff["dipole_symmetry"] > 0.85
+    assert diff["angular_shift_arcsec"] > 6.0
+
+    astro = metrics.compute_centroid_and_mahalanobis(img1, var1, img2, var2, mjd_t1=60800.0, mjd_t2=60982.625)
+    assert astro["mahalanobis_dm"] >= 3.0
+    assert astro["is_significant_motion"] is True
+    assert astro["shift_arcsec"] > 6.0
+
+
+def test_variability_metrics_and_global_confidence():
+    t = np.array([60800.0, 60840.0, 60880.0, 60920.0, 60960.0, 61000.0])
+    y = 100.0 + 30.0 * np.sin(2.0 * math.pi * (t - 60800.0) / 120.0)
+    s = np.full_like(y, 1.5)
+    var_res = metrics.compute_variability_metrics(t, y, s)
+    assert var_res["chi2_var_reduced"] > 3.0
+    assert var_res["is_variable"] is True
+    assert var_res["lomb_scargle_power"] > 0.5
+
+    conf = metrics.compute_global_confidence_score(
+        snr=15.0, dipole_symmetry=0.95, angular_shift_px=1.0, active_flag_names=(), q_fit_epsf=1.0
+    )
+    assert 85.0 <= conf["c_global"] <= 100.0
+
+    conf_art = metrics.compute_global_confidence_score(
+        snr=15.0, dipole_symmetry=0.95, angular_shift_px=1.0, active_flag_names=("SNOWBALL",), q_fit_epsf=1.0
+    )
+    assert conf_art["c_global"] == 0.0
+
+
+def test_17_spectral_indices_on_catalogue_targets_and_blankch_null():
+    # WISE 0855: ultra-cold Y dwarf -> COLOR_PLANET_X > 0.70, CH4 & H2O ice
+    spec_wise = models.build_demo_spectrum_payload("wise-0855")
+    assert spec_wise["flux_mjy"][50] is None and spec_wise["flux_mjy"][51] is None
+    assert spec_wise["valid_mask"][50] is False and spec_wise["valid_mask"][51] is False
+
+    idx_wise = {r["index_code"]: r for r in metrics.compute_all_17_spectral_indices(spec_wise)}
+    assert len(idx_wise) == 17
+    assert idx_wise["COLOR_PLANET_X"]["is_valid"] is True
+    assert idx_wise["COLOR_PLANET_X"]["value"] > 0.70
+    assert idx_wise["COLOR_PLANET_X"]["is_significant_3s"] is True
+    assert idx_wise["IND_CH4_33"]["value"] > 0.3
+
+    # RW Aurigae: YSO disk -> dust excess + Pa-beta & Br-alpha emission
+    spec_rw = models.build_demo_spectrum_payload("rw-aurigae")
+    idx_rw = {r["index_code"]: r for r in metrics.compute_all_17_spectral_indices(spec_rw)}
+    assert idx_rw["COLOR_YSO_DUST"]["value"] > 1.2
+    assert idx_rw["IND_BR_ALPHA"]["value"] > 0.0
+    assert idx_rw["IND_PA_BETA"]["value"] > 0.0
+
+    # R Draconis: AGB Mira -> CO 2-0 overtone via blue extrapolation avoiding BLANKCH 51-52
+    spec_rdra = models.build_demo_spectrum_payload("r-draconis")
+    idx_rdra = {r["index_code"]: r for r in metrics.compute_all_17_spectral_indices(spec_rdra)}
+    assert idx_rdra["IND_CO_23"]["is_valid"] is True
+    assert idx_rdra["IND_CO_23"]["value"] > 0.15
+
+
+def test_models_1_2_3_and_artifact_veto_handshake():
+    # Model 1: Moving object, Variable star, Artifact, and He I Airglow hard bound
+    m1_wise = models.run_model1_event_classifier(models.DEMO_PROFILE_SPECS["wise-0855"]["features"])
+    assert m1_wise["predicted_class"] == "MOVING_OBJECT"
+    assert math.isclose(sum(m1_wise["probabilities"].values()), 1.0, abs_tol=1e-4)
+    assert len(m1_wise["treeshap_values"]["top_drivers"]) == 5
+
+    m1_rw = models.run_model1_event_classifier(models.DEMO_PROFILE_SPECS["rw-aurigae"]["features"])
+    assert m1_rw["predicted_class"] == "VARIABLE_STAR_OR_TRANSIENT"
+
+    m1_art = models.run_model1_event_classifier(models.DEMO_PROFILE_SPECS["artifact_injection"]["features"])
+    assert m1_art["predicted_class"] == "INSTRUMENTAL_ARTIFACT"
+
+    he_airglow_fv = dict(models.DEMO_PROFILE_SPECS["rw-aurigae"]["features"])
+    he_airglow_fv.update({"is_he_1083_channel": 1.0, "bg_gradient_ratio": 4.2, "q_fit_epsf": 2.5})
+    m1_air = models.run_model1_event_classifier(he_airglow_fv)
+    assert m1_air["predicted_class"] == "AIRGLOW_OR_ZODI_STRIPE"
+
+    # Model 2: All 5 catalogue targets + comet classified correctly using <= 100 valid channels
+    expected_m2 = {
+        "wise-0855": "ULTRACOLD_Y_DWARF",
+        "eps-indi-b": "COLD_BROWN_DWARF_T",
+        "barnards-star": "HIGH_PROPER_MOTION_M_DWARF",
+        "rw-aurigae": "YOUNG_STELLAR_OBJECT_ACCRETION",
+        "r-draconis": "PULSATING_MIRA_VARIABLE",
+        "solar_system_mover": "SOLAR_SYSTEM_COMET",
+    }
+    for slug, expected_cls in expected_m2.items():
+        spec = models.build_demo_spectrum_payload(slug)
+        m2 = models.run_model2_spectral_classifier(spec)
+        assert m2["valid_channels_used"] == 100
+        assert m2["predicted_class"] == expected_cls
+        assert math.isclose(sum(m2["bayesian_posteriors"].values()), 1.0, abs_tol=1e-4)
+
+    # Model 3: RW Aurigae triggers alert; artifact_injection is VETOED by Model 1
+    rw_cfg = models.DEMO_PROFILE_SPECS["rw-aurigae"]
+    rw_sig = [science_catalogs.compute_reported_sigma(f, 0.015 * f) for f in rw_cfg["fluxes_mjy"]]
+    m3_rw = models.run_model3_temporal_forecast(
+        rw_cfg["times_mjd"],
+        rw_cfg["fluxes_mjy"],
+        rw_sig,
+        ra_deg=76.956587,
+        dec_deg=30.40129,
+        model1_result=m1_rw,
+    )
+    assert m3_rw["alert_triggered"] is True
+    assert m3_rw["z_alert"] >= 3.0
+    assert len(m3_rw["forecast_series"]) == 13
+
+    art_cfg = models.DEMO_PROFILE_SPECS["artifact_injection"]
+    art_sig = [science_catalogs.compute_reported_sigma(f, 0.015 * f) for f in art_cfg["fluxes_mjy"]]
+    m3_art = models.run_model3_temporal_forecast(
+        art_cfg["times_mjd"],
+        art_cfg["fluxes_mjy"],
+        art_sig,
+        ra_deg=10.0,
+        dec_deg=20.0,
+        model1_result=m1_art,
+    )
+    assert m3_art["alert_triggered"] is False
+    assert m3_art["citizen_level1"]["vetoed_by_model1"] is True
+
+
+def test_api_end_to_end_science_pipeline_and_votes():
+    store = MemoryStore()
+    store.upsert_targets(
+        [
+            {
+                "slug": "wise-0855",
+                "name": "WISE 0855-0714",
+                "ra": 133.75931,
+                "dec": -7.242145,
+                "kind": "brown_dwarf",
+                "note": "Coldest known brown dwarf.",
+                "pm_ra_mas_yr": -8123.7,
+                "pm_dec_mas_yr": 673.2,
+                "recommended_detector": 6,
+            }
+        ]
+    )
+    patch = store.create_patch(133.75931, -7.242145, "wise-0855")
+    main.app.dependency_overrides[main.get_store] = lambda: store
+    try:
+        client = TestClient(main.app)
+
+        r_an = client.post(f"/api/v1/patches/{patch.id}/analyze", json={"force_recompute": True})
+        assert r_an.status_code == 200
+        body = r_an.json()
+        assert body["model1_event"]["predicted_class"] == "MOVING_OBJECT"
+        assert body["model2_spectrum"]["predicted_class"] == "ULTRACOLD_Y_DWARF"
+        assert body["spectrum"]["blankch_51_is_null"] is True
+        assert body["spectrum"]["blankch_52_is_null"] is True
+
+        r_spec = client.get(f"/api/v1/patches/{patch.id}/spectrum")
+        assert r_spec.status_code == 200
+        assert len(r_spec.json()["indices"]) == 17
+
+        r_met = client.get(f"/api/v1/patches/{patch.id}/metrics")
+        assert r_met.status_code == 200
+        assert 0.0 <= r_met.json()["confidence"]["c_global"] <= 100.0
+
+        r_m1 = client.post(
+            "/api/v1/models/classify-event",
+            json={"patch_id": patch.id, "feature_vector": models.DEMO_PROFILE_SPECS["wise-0855"]["features"]},
+        )
+        assert r_m1.status_code == 200
+        assert r_m1.json()["predicted_class"] == "MOVING_OBJECT"
+
+        r_m2 = client.post("/api/v1/models/classify-spectrum", json={"patch_id": patch.id})
+        assert r_m2.status_code == 200
+        assert r_m2.json()["predicted_class"] == "ULTRACOLD_Y_DWARF"
+
+        r_m3 = client.post("/api/v1/models/forecast-temporal", json={"patch_id": patch.id})
+        assert r_m3.status_code == 200
+        assert "predicted_cone" in r_m3.json()
+
+        r_vote = client.post(
+            f"/api/v1/patches/{patch.id}/votes",
+            json={"epoch_index": 0, "vote": "MOVER", "voter_token": "tester-1"},
+        )
+        assert r_vote.status_code == 200
+        r_votes = client.get(f"/api/v1/patches/{patch.id}/votes")
+        assert r_votes.status_code == 200
+        assert len(r_votes.json()) == 1
+        assert r_votes.json()[0]["vote"] == "MOVER"
+    finally:
+        main.app.dependency_overrides.clear()
