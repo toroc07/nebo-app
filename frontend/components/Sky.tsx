@@ -1,0 +1,127 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+import type { Target } from "@/lib/api";
+// Aladin's distributed package has no TypeScript declarations.
+// The small interface below describes only the public methods used here.
+type Viewer = {
+  gotoRaDec: (ra: number, dec: number) => void;
+  setFoV: (fov: number) => void;
+  addCatalog: (c: unknown) => void;
+};
+export default function Sky({
+  targets,
+  selected,
+  onSelect,
+}: {
+  targets: Target[];
+  selected: Target | null;
+  onSelect: (t: Target) => void;
+}) {
+  const host = useRef<HTMLDivElement>(null),
+    viewer = useRef<Viewer | null>(null),
+    catalog = useRef<{
+      removeAll: () => void;
+      addSources: (s: unknown[]) => void;
+    } | null>(null),
+    api = useRef<any>(null),
+    callback = useRef(onSelect);
+  const [error, setError] = useState(false),
+    [ready, setReady] = useState(false),
+    [retry, setRetry] = useState(0);
+  callback.current = onSelect;
+  useEffect(() => {
+    let cancelled = false;
+    setError(false);
+    setReady(false);
+    const node = host.current;
+    if (!node) return;
+    import("aladin-lite")
+      .then(async (m) => {
+        const A = m.default;
+        await A.init;
+        if (cancelled) return;
+        api.current = A;
+        viewer.current = A.aladin(node, {
+          survey: "P/DSS2/color",
+          target: "269.446 4.769",
+          fov: 180,
+          projection: "AIT",
+          showFullscreenControl: false,
+          showShareControl: false,
+          showSimbadPointerControl: false,
+          showCooGridControl: true,
+        });
+        catalog.current = A.catalog({
+          name: "Objetos Nebo",
+          sourceSize: 18,
+          color: "#edc181",
+          onClick: (source: { data: { slug: string } }) => {
+            const t = callbackTargets.current.find(
+              (t) => t.slug === source.data.slug,
+            );
+            if (t) callback.current(t);
+          },
+        });
+        viewer.current!.addCatalog(catalog.current);
+        setReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      });
+    return () => {
+      cancelled = true;
+      viewer.current = null;
+      catalog.current = null;
+      node.replaceChildren();
+    };
+  }, [retry]);
+  const callbackTargets = useRef(targets);
+  callbackTargets.current = targets;
+  useEffect(() => {
+    if (!ready || !api.current) return;
+    catalog.current?.removeAll();
+    catalog.current?.addSources(
+      targets.map((t) =>
+        api.current.source(t.ra, t.dec, { slug: t.slug, name: t.name }),
+      ),
+    );
+  }, [targets, ready]);
+  useEffect(() => {
+    if (selected && ready) {
+      viewer.current?.gotoRaDec(selected.ra, selected.dec);
+      viewer.current?.setFoV(8);
+    }
+  }, [selected, ready]);
+  return (
+    <>
+      <div
+        className="aladin-host"
+        ref={host}
+        role="region"
+        aria-label="Mapa celeste; selección alternativa en la lista de objetos"
+      />
+      {!ready && (
+        <div className="sky-message" role="status">
+          {error ? (
+            <>
+              <p>No se pudo cargar el mapa celeste.</p>
+              <p>Puedes elegir un objeto en la lista.</p>
+              <button
+                className="secondary"
+                onClick={() => setRetry((x) => x + 1)}
+              >
+                Reintentar mapa
+              </button>
+            </>
+          ) : (
+            <p>Cargando mapa celeste…</p>
+          )}
+        </div>
+      )}
+      <p className="sky-help">
+        Arrastra para recorrer el cielo. También puedes elegir un objeto en la
+        lista.
+      </p>
+    </>
+  );
+}
