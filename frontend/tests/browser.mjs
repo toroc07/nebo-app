@@ -318,7 +318,7 @@ const heading = (name) =>
   page.getByRole("heading", { level: 1, name, exact: true });
 await page.getByRole("button", { name: /Featured objects/ }).click();
 await page.getByRole("button", { name: /Barnard/ }).click();
-await page.getByLabel("Observation date").waitFor();
+await page.getByLabel(/^Observed ·/).waitFor();
 await backButton.click();
 await heading("Featured objects").waitFor();
 await backButton.click();
@@ -328,7 +328,7 @@ await page.getByRole("button", { name: /Search by coordinates/ }).click();
 await page.getByLabel("Right ascension").fill("269.446");
 await page.getByLabel("Declination").fill("4.768");
 await page.getByRole("button", { name: "View images", exact: true }).click();
-await page.getByLabel("Observation date").waitFor();
+await page.getByLabel(/^Observed ·/).waitFor();
 await backButton.click();
 await heading("Find your field.").waitFor();
 await page.getByRole("link", { name: "Nebo, home" }).click();
