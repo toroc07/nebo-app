@@ -1,9 +1,9 @@
-# --- Secretos ---
+# --- Secrets ---
 .env
 .env.*
 !.env.example
 
-# --- Datos pesados ---
+# --- Large data files ---
 data/raw/
 *.fits
 *.fits.gz
@@ -33,13 +33,14 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# --- Editores y sistema operativo ---
+# --- Editors and OS ---
 .idea/
 *.swp
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# --- Configuración local de herramientas de IA ---
+# --- Local AI tool settings and output ---
 .claude/settings.local.json
 CLAUDE.local.md
+.playwright-mcp/
