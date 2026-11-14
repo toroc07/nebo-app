@@ -687,6 +687,10 @@ footer .mono {
   pointer-events: none;
   transition: opacity var(--micro);
 }
+/* r3f sets pointer-events: auto on its own nodes, which would block the page. */
+.flight * {
+  pointer-events: none !important;
+}
 .image-status {
   position: absolute;
   top: 40%;
