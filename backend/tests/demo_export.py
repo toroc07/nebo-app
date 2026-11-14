@@ -1,6 +1,7 @@
 """Static demo export with SYNTHETIC images (no IRSA, no database), for frontend work.
 
     python -m tests.demo_export --out ../shared/demo
+    python -m tests.demo_export --out ../shared/demo-color --palette amber
 
 Each catalogue target gets 3 epochs. The target star moves with its real proper motion (so
 Barnard and WISE 0855 visibly shift); the other stars are fixed. Brightness and noise are made
@@ -16,7 +17,7 @@ from pathlib import Path
 from astropy.io import fits
 import numpy as np
 
-from app import config, ephemeris
+from app import config, ephemeris, imaging
 from app.export import export
 from app.irsa import FrameRecord
 from app.service import TimelineService
@@ -46,7 +47,7 @@ def _decorate(data: bytes, static_seed: int, noise_seed: int) -> bytes:
     return buffer.getvalue()
 
 
-def build(out: Path, detectors: list[int]) -> int:
+def build(out: Path, detectors: list[int], palette: str | None = None) -> int:
     store = MemoryStore()
     store.upsert_targets(TARGETS)
     for target in TARGETS:
@@ -71,9 +72,11 @@ def build(out: Path, detectors: list[int]) -> int:
         patch = service.resolve_patch(target_slug=target["slug"])
         for detector in detectors:
             service.build_now(patch, detector)
-    return export(
-        store, out, [t["slug"] for t in TARGETS], detectors, list(config.SIZES_DEG)
-    )
+    skipped = export(store, out, [t["slug"] for t in TARGETS], detectors, list(config.SIZES_DEG))
+    if palette:
+        for path in (out / "images").glob("*.png"):
+            path.write_bytes(imaging.colorize_png(path.read_bytes(), palette))
+    return skipped
 
 
 def hash_seed(text: str) -> int:
@@ -84,5 +87,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--detectors", default="3,6")
+    parser.add_argument("--palette", choices=list(imaging.PALETTES), help="Colour the PNGs.")
     args = parser.parse_args()
-    raise SystemExit(build(args.out, [int(d) for d in args.detectors.split(",")]))
+    raise SystemExit(build(args.out, [int(d) for d in args.detectors.split(",")], args.palette))

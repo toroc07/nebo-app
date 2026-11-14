@@ -395,3 +395,31 @@ def to_png(image: np.ndarray, low: float, high: float, softening: float = 10.0) 
     buffer = io.BytesIO()
     Image.fromarray(pixels).save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+# Display palettes: (position 0-1, (r, g, b)) stops. Colour is added for display only; the data
+# is a single band, so it carries no real colour.
+PALETTES = {
+    "amber": [(0.0, (0, 0, 0)), (0.6, (255, 176, 0)), (1.0, (255, 255, 255))],
+    # Matplotlib "inferno" sampled every 0.1 (the palette IRSA's SPHEREx tutorial uses).
+    "inferno": [
+        (0.0, (0, 0, 4)), (0.1, (22, 11, 57)), (0.2, (66, 10, 104)), (0.3, (106, 23, 110)),
+        (0.4, (147, 38, 103)), (0.5, (188, 55, 84)), (0.6, (221, 81, 58)), (0.7, (243, 120, 25)),
+        (0.8, (252, 165, 10)), (0.9, (246, 215, 70)), (1.0, (252, 255, 164)),
+    ],
+}
+
+
+def colorize_png(png: bytes, palette: str) -> bytes:
+    """Recolour a grey+alpha PNG from ``to_png`` with a palette; alpha is kept."""
+    grey_alpha = np.asarray(Image.open(io.BytesIO(png)).convert("LA"))
+    stops = PALETTES[palette]
+    level = grey_alpha[..., 0] / 255.0
+    rgb = [
+        np.rint(np.interp(level, [x for x, _ in stops], [color[i] for _, color in stops]))
+        for i in range(3)
+    ]
+    pixels = np.dstack([*rgb, grey_alpha[..., 1]]).astype(np.uint8)
+    buffer = io.BytesIO()
+    Image.fromarray(pixels).save(buffer, format="PNG")
+    return buffer.getvalue()
