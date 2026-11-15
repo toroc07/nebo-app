@@ -25,6 +25,7 @@ import {
   type Query,
 } from "@/lib/api";
 import Field from "./Field";
+import { launchWarp } from "@/lib/warp";
 const Sky = dynamic(() => import("./Sky"), {
   ssr: false,
   loading: () => <p className="sky-loading">Loading sky…</p>,
@@ -81,6 +82,9 @@ export default function Nebo() {
     [reload, setReload] = useState(0),
     [patchKnown, setPatchKnown] = useState(false);
   const [selected, setSelected] = useState<Target | null>(null),
+    [skyCoordinates, setSkyCoordinates] = useState<{ ra: number; dec: number } | null>(null),
+    [skyCommand, setSkyCommand] = useState<{ id: number; action: "in" | "out" | "all" } | null>(null),
+    [coordinateOpen, setCoordinateOpen] = useState(false),
     [query, setQuery] = useState<Query | null>(null),
     [ra, setRa] = useState(""),
     [dec, setDec] = useState(""),
@@ -257,6 +261,10 @@ export default function Nebo() {
   }
   const go = contextSafe((destination: Destination) => {
     if (departing.current || destination === view) return;
+    // The tunnel starts right away and runs as the loading screen of the destination (the sky
+    // globe, or the observation viewer across the route change): components/WarpOverlay.tsx.
+    if (destination === "Explore") launchWarp("explore");
+    else if (destination === "/lab/observation") launchWarp("viewer");
     pending.current = destination;
     const main = root.current?.querySelector<HTMLElement>(".view-content");
     if (
@@ -541,7 +549,7 @@ export default function Nebo() {
                 Back
               </button>
               <h1
-                className={view === "Observe" ? "sr-only" : undefined}
+                className={["Observe", "Explore"].includes(view) ? "sr-only" : undefined}
                 tabIndex={-1}
                 ref={heading}
               >
@@ -792,28 +800,49 @@ export default function Nebo() {
               <Sky
                 targets={targets}
                 selected={selected}
-                onSelect={setSelected}
+                coordinates={skyCoordinates}
+                command={skyCommand}
+                onSelect={(target) => { setSkyCoordinates(null); setSelected(target); }}
               />
               <span className="map-credit">
                 SPHEREx all-sky map · NASA/IPAC IRSA
               </span>
             </div>
-            <section className="surface explorer-sidebar">
-              <h2>Objects to get started</h2>
-              {catalog}
-              {selected && (
-                <div className="selection">
-                  <h2>{selected.name}</h2>
-                  <p>{labels[selected.slug] || selected.note}</p>
-                  <p className="mono">
-                    RA {selected.ra.toFixed(5)}°<br />
-                    Dec {selected.dec.toFixed(5)}°
-                  </p>
-                  <button className="action" onClick={() => open(selected)}>
-                    View images <ArrowRight size={20} />
-                  </button>
-                </div>
-              )}
+            <section className="flight-console" aria-label="Sky navigation console">
+              <div className="console-main">
+                <div className="console-identity"><span className="mono">NEBO · FLIGHT DECK / 01</span><strong>Sky navigation</strong><span className="console-led" aria-hidden="true">● LIVE SURVEY</span></div>
+                <label className="console-target">Destination
+                  <select value={selected?.slug ?? ""} onChange={(e) => {
+                    const target = targets.find((t) => t.slug === e.target.value) ?? null;
+                    setSkyCoordinates(null);
+                    setSelected(target);
+                  }} disabled={catalogLoading || !!catalogError}>
+                    <option value="">Select object</option>
+                    {targets.map((t) => <option key={t.slug} value={t.slug}>{t.name}</option>)}
+                  </select>
+                </label>
+                <button type="button" className="console-switch" aria-expanded={coordinateOpen} aria-controls="console-coordinates" onClick={() => setCoordinateOpen((open) => !open)}><Crosshair size={18} /> RA / Dec</button>
+                <div className="console-position mono" aria-live="polite"><span>POSITION / ICRS</span><strong>{selected ? `${selected.ra.toFixed(3)}° / ${selected.dec.toFixed(3)}°` : skyCoordinates ? `${skyCoordinates.ra.toFixed(3)}° / ${skyCoordinates.dec.toFixed(3)}°` : "SELECT TARGET"}</strong></div>
+                <div className="console-zoom" role="group" aria-label="Map zoom"><span className="mono">FIELD OF VIEW</span><div><button type="button" aria-label="Zoom out" onClick={() => setSkyCommand({ id: Date.now(), action: "out" })}>−</button><button type="button" aria-label="Zoom in" onClick={() => setSkyCommand({ id: Date.now(), action: "in" })}>+</button><button type="button" onClick={() => setSkyCommand({ id: Date.now(), action: "all" })}>All sky</button></div></div>
+                <button type="button" className="console-action" disabled={!selected && !skyCoordinates} onClick={() => {
+                  if (selected) open(selected);
+                  else if (skyCoordinates) { setSelected(null); setQuery(skyCoordinates); go("Field"); }
+                }}>View images <ArrowRight size={18} /></button>
+              </div>
+              {coordinateOpen && <form id="console-coordinates" className="console-coordinates" onSubmit={(e) => {
+                e.preventDefault();
+                if (!validCoordinates(ra, dec)) { setFormError("Enter RA from 0 to less than 360°, and Dec from −90 to 90°."); return; }
+                setFormError("");
+                setSelected(null);
+                setSkyCoordinates({ ra: Number(ra), dec: Number(dec) });
+                setCoordinateOpen(false);
+              }}>
+                <label>RA (°)<input type="number" step="any" min="0" max="359.999999" value={ra} onChange={(e) => setRa(e.target.value)} required placeholder="269.446" /></label>
+                <label>Dec (°)<input type="number" step="any" min="-90" max="90" value={dec} onChange={(e) => setDec(e.target.value)} required placeholder="4.769" /></label>
+                <button type="submit" className="console-switch">Go to position <ArrowRight size={18} /></button>
+                {formError && <p role="alert">{formError}</p>}
+              </form>}
+              {(catalogLoading || catalogError) && <p className="console-status" role={catalogError ? "alert" : "status"}>{catalogError || "Loading destinations…"} {catalogError && <button type="button" onClick={() => setReload((x) => x + 1)}>Retry</button>}</p>}
             </section>
           </div>
         )}

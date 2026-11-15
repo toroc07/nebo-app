@@ -13,17 +13,23 @@ type Viewer = {
   ) => unknown;
   setImageLayer: (layer: unknown) => void;
 };
+type SkyCommand = { id: number; action: "in" | "out" | "all" };
 const SKY_FRAME = 40; // ~1.86 µm, inside detector 3
 export default function Sky({
   targets,
   selected,
+  coordinates,
+  command,
   onSelect,
 }: {
   targets: Target[];
   selected: Target | null;
+  coordinates: { ra: number; dec: number } | null;
+  command: SkyCommand | null;
   onSelect: (t: Target) => void;
 }) {
   const host = useRef<HTMLDivElement>(null),
+    fieldOfView = useRef(180),
     viewer = useRef<Viewer | null>(null),
     catalog = useRef<{
       removeAll: () => void;
@@ -103,22 +109,35 @@ export default function Sky({
     if (selected && ready) {
       viewer.current?.gotoRaDec(selected.ra, selected.dec);
       viewer.current?.setFoV(8);
+      fieldOfView.current = 8;
     }
   }, [selected, ready]);
+  useEffect(() => {
+    if (coordinates && ready) {
+      viewer.current?.gotoRaDec(coordinates.ra, coordinates.dec);
+      viewer.current?.setFoV(8);
+      fieldOfView.current = 8;
+    }
+  }, [coordinates, ready]);
+  useEffect(() => {
+    if (!command || !ready) return;
+    fieldOfView.current = command.action === "all" ? 180 : Math.max(0.1, Math.min(180, fieldOfView.current * (command.action === "in" ? 0.5 : 2)));
+    viewer.current?.setFoV(fieldOfView.current);
+  }, [command, ready]);
   return (
     <>
       <div
         className="aladin-host"
         ref={host}
         role="region"
-        aria-label="Sky map; the object list is an alternative way to select"
+        aria-label="SPHEREx sky map; use the console below to choose an object or coordinates"
       />
       {!ready && (
         <div className="sky-message" role="status">
           {error ? (
             <>
               <p>The sky map could not be loaded.</p>
-              <p>You can pick an object from the list.</p>
+              <p>You can pick an object in the console.</p>
               <button
                 className="secondary"
                 onClick={() => setRetry((x) => x + 1)}
@@ -132,7 +151,7 @@ export default function Sky({
         </div>
       )}
       <p className="sky-help">
-        Drag to move around the sky. You can also pick an object from the list.
+        Drag to move around the sky. Use the console below to choose a destination.
       </p>
     </>
   );
