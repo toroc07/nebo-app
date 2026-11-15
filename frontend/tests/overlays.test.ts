@@ -6,6 +6,10 @@ import {
   alignmentFor,
   changeLabel,
   detailFor,
+  isPreloaded,
+  labelledChanges,
+  MAX_CHANGE_LABELS,
+  layerLine,
   trajectory,
   wiseMarks,
   type Alignment,
@@ -100,11 +104,11 @@ test("detailFor converts parsecs to light-years and handles missing parallax", (
 
 test("changeLabel separates known objects from cold candidates", () => {
   const c = {
-    label: "candidate_signal",
+    classification: "candidate_signal",
     gaia_match: null,
   } as CandidateDetection;
   assert.equal(
-    changeLabel({ ...c, label: "catalogued_object" }),
+    changeLabel({ ...c, classification: "catalogued_object" }),
     "Catalogued object",
   );
   assert.equal(changeLabel(c), "Cold candidate (no Gaia)");
@@ -140,4 +144,30 @@ test("alignmentFor returns the real row, or a labelled simulated offset", () => 
   assert.equal(sim.status, "offset_warning");
   assert.equal(sim.simulated, true);
   assert.equal(sim.stars_used, 12);
+});
+
+test("layerLine explains an empty or failed layer", () => {
+  assert.equal(layerLine("CatWISE", { error: "IRSA did not answer." }, "sources"), "CatWISE: IRSA did not answer.");
+  assert.equal(layerLine("CatWISE", null, "sources"), "CatWISE: loading…");
+  assert.equal(layerLine("CatWISE", { value: {} }, "sources", 0, 0), "CatWISE: no sources returned for this field");
+  assert.equal(layerLine("Gaia", { value: {} }, "stars", 5, 0), "Gaia: 5 stars, none inside this image");
+  assert.equal(layerLine("Gaia", { value: {} }, "stars", 138, 120), "Gaia: 120 stars on this image");
+});
+
+test("isPreloaded matches within 30 arcsec, across RA 0", () => {
+  const patches = [{ ra: 359.999, dec: 0 }];
+  assert.equal(isPreloaded({ ra: 0.004, dec: 0 }, patches), true); // 18″ away across RA 0
+  assert.equal(isPreloaded({ ra: 0.02, dec: 0 }, patches), false); // 76″
+  assert.equal(isPreloaded({ ra: 359.999, dec: 1 }, patches), false);
+});
+
+test("labelledChanges labels every cold candidate and the strongest others", () => {
+  const change = (x: number, snr: number, classification: CandidateDetection["classification"], gaia = true) =>
+    ({ x, y: 0, snr, classification, gaia_match: gaia ? { source_id: "g", g_mag: 9, dist_arcsec: 1 } : null }) as CandidateDetection;
+  const many = Array.from({ length: 20 }, (_, i) => change(i, i, "candidate_signal"));
+  const cold = change(99, 1, "candidate_signal", false);
+  const keys = labelledChanges([...many, cold]);
+  assert.equal(keys.size, MAX_CHANGE_LABELS);
+  assert.ok(keys.has("99,0")); // the weak cold candidate still gets its badge
+  assert.ok(keys.has("19,0") && !keys.has("0,0")); // strongest first
 });

@@ -163,13 +163,13 @@ export default function EpochDiffTriplet({
                 <span
                   key={`${c.x}-${c.y}-${idx}`}
                   className={`${s.candidateMarker} ${
-                    c.label === "candidate_signal" ? s.candidateSignal : s.candidateCatalogued
+                    c.classification === "candidate_signal" ? s.candidateSignal : s.candidateCatalogued
                   }`}
                   style={{
                     left: `${((c.x + 0.5) / widthPx) * 100}%`,
                     top: `${((c.y + 0.5) / heightPx) * 100}%`,
                   }}
-                  title={`${c.label === "candidate_signal" ? "Candidate signal" : "Catalogued object"} · SNR ${c.snr.toFixed(1)}`}
+                  title={`${c.classification === "candidate_signal" ? "Candidate signal" : "Catalogued object"} · SNR ${c.snr.toFixed(1)}`}
                 />
               ))}
           </div>

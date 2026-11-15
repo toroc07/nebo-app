@@ -53,3 +53,12 @@ test("the copied link reads back as the same field", () => {
     epoch: 3,
   });
 });
+
+test("a coordinate link can carry a display name", () => {
+  const url = fieldLink("/", { ra: 217.39, dec: -62.68 }, "medium", 3, 0, "Proxima Centauri");
+  assert.equal(parseFieldLink(url.slice(1))?.name, "Proxima Centauri");
+  assert.equal(parseFieldLink("?ra=1&dec=2&name=%20%20")?.name, undefined);
+  assert.equal(parseFieldLink(`?ra=1&dec=2&name=${"x".repeat(81)}`)?.name, undefined);
+  // Catalogue targets are named by the catalogue, never by the link.
+  assert.equal(parseFieldLink("?target=barnards-star&name=Fake")?.name, undefined);
+});

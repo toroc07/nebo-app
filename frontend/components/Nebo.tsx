@@ -418,7 +418,8 @@ export default function Nebo() {
                 query={query}
                 target={selected}
                 catalog={targets}
-                title={selected?.name || "Your observation field"}
+                title={selected?.name || (link?.query === query && link.name) || "Your observation field"}
+                name={link?.query === query ? link.name : undefined}
                 headingRef={heading}
                 onBack={back}
                 powered={screenPowered}

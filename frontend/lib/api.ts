@@ -23,6 +23,8 @@ export type Epoch = {
   end_utc: string;
   image_url: string;
   frames_used: number;
+  /** Mid date of the epoch (MJD): where catalog overlays place moving stars. */
+  mid_mjd?: number;
   // SPHEREx data releases of the exposures in this epoch, e.g. ["dr1"] or ["dr1", "qr3"].
   releases?: string[];
 };
@@ -179,7 +181,9 @@ export type CandidateDetection = {
   dec: number;
   snr: number;
   delta_flux: number;
-  label: "catalogued_object" | "candidate_signal";
+  // The API field is `classification` (backend/app/crossmatch.py).
+  classification: "catalogued_object" | "candidate_signal";
+  polarity?: "positive" | "negative";
   gaia_match?: { source_id: string; g_mag: number; dist_arcsec: number } | null;
   wise_match?: { source_id: string; w1_mag: number; w2_mag: number; dist_arcsec: number } | null;
 };

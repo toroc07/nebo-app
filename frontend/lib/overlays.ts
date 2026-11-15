@@ -222,7 +222,7 @@ export function detailFor(sel: Selection): {
 
 /** Known vs new: the badge text of a detected change. Never claims a discovery. */
 export function changeLabel(c: CandidateDetection): string {
-  if (c.label === "catalogued_object") return "Catalogued object";
+  if (c.classification === "catalogued_object") return "Catalogued object";
   return c.gaia_match ? "Candidate signal" : "Cold candidate (no Gaia)";
 }
 
@@ -248,4 +248,49 @@ export function alignmentFor(
     status: "offset_warning",
     simulated: true,
   };
+}
+
+/** Stable id of a selection, to highlight the clicked marker. */
+export function selectionId(sel: Selection): string {
+  return sel.kind === "gaia"
+    ? `gaia:${sel.star.source_id}`
+    : sel.kind === "wise"
+      ? `wise:${sel.source.source_id}`
+      : `change:${sel.change.x},${sel.change.y}`;
+}
+
+/** What a lazily loaded layer holds: nothing yet, a value, or why it failed. */
+export type LayerState = { value?: unknown; error?: string } | null;
+
+/**
+ * Status line of one switched-on layer, so a button that is on but draws nothing says why.
+ * `total` is what the API returned; `inImage` how many fall inside the image at this epoch.
+ */
+export function layerLine(name: string, state: LayerState, noun: string, total?: number, inImage?: number): string {
+  if (state?.error) return `${name}: ${state.error}`;
+  if (!state?.value || total === undefined) return `${name}: loading…`;
+  if (total === 0) return `${name}: no ${noun} returned for this field`;
+  if (inImage === 0) return `${name}: ${total} ${noun}, none inside this image`;
+  return `${name}: ${inImage ?? total} ${noun} on this image`;
+}
+
+/** Whether a destination opens instantly: a preloaded patch within 30″ (the backend's reuse rule). */
+export function isPreloaded(d: { ra: number; dec: number }, patches: { ra: number; dec: number }[]): boolean {
+  const cosDec = Math.cos((d.dec * Math.PI) / 180);
+  // RA difference wrapped to [-180, 180) so fields at RA 359.9° and 0.1° are close.
+  return patches.some((p) => Math.hypot((((p.ra - d.ra + 540) % 360) - 180) * cosDec, p.dec - d.dec) * 3600 <= 30);
+}
+
+/** Changes that get a text badge; the rest are drawn as dots so the image stays readable. */
+export const MAX_CHANGE_LABELS = 8;
+
+/**
+ * Keys ("x,y") of the changes to label: every cold candidate (the reason to look) plus the
+ * strongest others by SNR, up to MAX_CHANGE_LABELS in total.
+ */
+export function labelledChanges(changes: CandidateDetection[]): Set<string> {
+  const key = (c: CandidateDetection) => `${c.x},${c.y}`;
+  const cold = changes.filter((c) => c.classification === "candidate_signal" && !c.gaia_match);
+  const rest = changes.filter((c) => !cold.includes(c)).sort((a, b) => b.snr - a.snr);
+  return new Set([...cold, ...rest].slice(0, Math.max(MAX_CHANGE_LABELS, cold.length)).map(key));
 }
