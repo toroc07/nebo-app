@@ -45,6 +45,21 @@ def test_wise_query_cone_retries_then_raises(monkeypatch):
     assert "catwise_2020" in calls[0]
 
 
+
+def test_wise_query_cone_rejects_non_csv_answer(monkeypatch):
+    monkeypatch.setattr(wise.time, "sleep", lambda s: None)
+    monkeypatch.setattr(
+        wise.requests, "post", lambda url, data, timeout: FakeResponse(200, "<html>Proxy Error</html>")
+    )
+    with pytest.raises(wise.WiseQueryError):
+        wise.query_cone(RA, DEC, 0.2)
+
+
+def test_wise_query_cone_accepts_header_only_answer(monkeypatch):
+    header = WISE_CSV.splitlines()[0] + "\n"
+    monkeypatch.setattr(wise.requests, "post", lambda url, data, timeout: FakeResponse(200, header))
+    assert wise.query_cone(RA, DEC, 0.2) == []
+
 def test_wise_endpoint_crossmatches_gaia_and_flags_cold_candidate(client, monkeypatch):  # noqa: F811
     http, service = client
     patch = service.resolve_patch(ra=RA, dec=DEC)

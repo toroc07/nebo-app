@@ -661,7 +661,8 @@ def _patch_wise_sources(store: Store, patch: Patch, w2_max: float) -> list[wise.
         f":{wise.MAX_ROWS}".encode()
     ).hexdigest()
     cached = store.get_cached_api(key)
-    if cached and isinstance(cached.get("response_json"), list):
+    # An empty cached list is ignored: older builds stored IRSA error pages as zero rows.
+    if cached and isinstance(cached.get("response_json"), list) and cached["response_json"]:
         return [wise.WiseSource(**row) for row in cached["response_json"]]
     sources = wise.query_cone(patch.ra, patch.dec, GAIA_RADIUS_DEG, w2_max=w2_max)
     store.set_cached_api(

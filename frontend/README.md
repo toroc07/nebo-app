@@ -47,7 +47,35 @@ else 3); `epoch` is 1-based like the viewer (default 1, clamped to the last one)
 ignores the whole link and the app starts at Home. Coordinates within 30″ of a catalogued object open that object's field
 and show its name and type (from `patch.target` in `/timeline`), whether they come from a link,
 the RA/Dec form or the map centre. "Copy link" in the viewer writes the current
-field as such a link; a field that is not cached shows the usual building screen.
+field as such a link; a field that is not cached shows the usual building screen. A coordinate
+link may carry `name` (≤ 80 characters, e.g. `&name=Proxima+Centauri`): the viewer shows it as the
+title and object name for a field that is not in the catalogue. Catalogue targets ignore it.
+
+## Field viewer layers
+
+`components/Field.tsx` draws catalog layers over the field image with `components/FieldOverlays.tsx`
+(helpers and types in `lib/overlays.ts`, Gaia in `lib/lab/gaia.ts`). Each layer is off by default and
+fetched the first time it is switched on (right column, above the cards):
+
+- **Gaia DR3** (`/patches/{id}/gaia`): green rings, magenta for fast movers (≥ 100 mas/yr) with a
+  dashed first→last epoch trajectory. Stars are propagated to each epoch's `mid_mjd`, so they move
+  with the slider and the blink.
+- **CatWISE** (`/patches/{id}/wise`): amber diamonds; sources with no Gaia counterpart and red
+  W1−W2 are dashed pink rings ("cold candidate"), which pulse unless reduced motion is on.
+- **Changes** (`/patches/{id}/candidates`, first vs last epoch, read from `classification`):
+  badges "Catalogued object", "Candidate signal" or "Cold candidate (no Gaia)". Cold candidates and
+  the strongest changes (8 in total) get a text badge; the rest are clickable dots.
+- **Alignment** (top-right of the image, `/patches/{id}/alignment`): per-epoch offset against slow
+  Gaia stars. "Simulate an offset" shifts the last epoch by 2 px to show the warning; the banner
+  always says "Simulation".
+
+A status line under the switches says what each active layer holds, or why it is empty
+("the archive did not answer", "no sources returned", "not available for this field yet"); a
+failed switch turns amber. Clicking a marker or badge fills the "Selected source" card (distance in pc and light-years,
+brightness, proper motion, colour, status). "Suggested in Explore" (`/explore/suggested`) lists
+nearby or fast Gaia stars around the field as named links to their own field, tagged "opens
+instantly" (a preloaded patch within 30″ for this detector, from `/patches`) or "new download ·
+1–3 min".
 
 ## Observation viewer
 

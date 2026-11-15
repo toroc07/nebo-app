@@ -16,6 +16,11 @@ import {
   Square,
   X,
   Microscope,
+  ScanLine,
+  Sparkles,
+  Star,
+  Radar,
+  TriangleAlert,
 } from "lucide-react";
 import {
   timeline,
@@ -24,6 +29,9 @@ import {
   epochDateRange,
   releaseLabel,
   ApiError,
+  fetchPatchCandidates,
+  read,
+  type Patch,
   type Query,
   type Target,
   type Timeline,
@@ -32,6 +40,22 @@ import {
 import { fieldLink } from "@/lib/fieldLink";
 import { decToParts, raToParts } from "@/lib/coordinates";
 import { pixelToSky } from "@/lib/lab/sky";
+import { gaiaMarks, loadGaia } from "@/lib/lab/gaia";
+import {
+  alignmentFor,
+  detailFor,
+  isPreloaded,
+  layerLine,
+  loadAlignment,
+  MAX_CHANGE_LABELS,
+  loadSuggestions,
+  loadWise,
+  SIMULATED_OFFSET_PX,
+  wiseMarks,
+  type AlignmentEpoch,
+  type Selection,
+} from "@/lib/overlays";
+import FieldOverlays from "./FieldOverlays";
 import dynamic from "next/dynamic";
 import ConsoleSelect from "./ConsoleSelect";
 import EpochDiffTriplet from "./science/EpochDiffTriplet";
@@ -81,6 +105,7 @@ export default function Field({
   target: chosen,
   catalog = [],
   title,
+  name,
   headingRef,
   onBack,
   recommended,
@@ -95,6 +120,8 @@ export default function Field({
   /** Catalogue, to name a field opened by coordinates that lands on a catalogued object. */
   catalog?: Target[];
   title: string;
+  /** Label from a shared link for a field that is not a catalogue object (suggested stars). */
+  name?: string;
   headingRef?: Ref<HTMLHeadingElement>;
   onBack: () => void;
   recommended: number;
@@ -264,6 +291,7 @@ export default function Field({
   const [cursor, setCursor] = useState<{ ra: number; dec: number; x: number; y: number } | null>(null);
   const [difference, setDifference] = useState(false);
   const [pixels, setPixels] = useState<{ w: number; h: number } | null>(null);
+
   const [phase, setPhase] = useState<"off" | "boot" | "on" | "shutdown">(() =>
     powered ? (reduced ? "on" : "boot") : "off",
   );
@@ -335,6 +363,78 @@ export default function Field({
   const building = !!progress;
   const canCompare = count > 1 && !imageError && !building;
   const elapsed = buildStart.current ? Math.max(0, Math.floor((now - buildStart.current) / 1000)) : 0;
+
+  // Catalog layers: off by default, each fetched the first time it is switched on for a field.
+  const [layers, setLayers] = useState({ gaia: false, wise: false, changes: false, alignment: false });
+  const [simulateOffset, setSimulateOffset] = useState(false);
+  const [selected, setSelected] = useState<Selection | null>(null);
+  const toggle = (layer: keyof typeof layers) => setLayers((l) => ({ ...l, [layer]: !l[layer] }));
+  const ready = !!data && !progress;
+  const patchId = data?.patch.id ?? 0;
+  const mjds = (data?.epochs ?? []).map((e) => e.mid_mjd ?? NaN);
+  const catalogKey = ready && mjds.every(Number.isFinite) ? `${patchId}|${size}|${mjds.join()}` : "";
+  const fieldKey = ready ? `${patchId}|${size}|${detector}|${count}` : "";
+  const gaiaLayer = useLayer(layers.gaia, catalogKey, (signal) => loadGaia(patchId, size, mjds, signal));
+  const wiseLayer = useLayer(layers.wise, catalogKey, (signal) => loadWise(patchId, size, mjds, signal));
+  // Badges compare the first and last epochs, so they stay put while blinking.
+  const changesLayer = useLayer(layers.changes && count > 1, fieldKey, (signal) =>
+    fetchPatchCandidates(patchId, { detector, size, epoch_a: 0, epoch_b: count - 1 }, signal),
+  );
+  const alignmentLayer = useLayer(layers.alignment, fieldKey, (signal) =>
+    loadAlignment(patchId, detector, size, signal),
+  );
+  const suggestions = useLayer(ready, ready ? `${data!.patch.ra}|${data!.patch.dec}` : "", async (signal) => {
+    const [found, patches] = await Promise.all([
+      loadSuggestions(data!.patch.ra, data!.patch.dec, signal),
+      // Without the patch list every chip is simply untagged.
+      read<Patch[]>("/patches", signal).catch(() => null),
+    ]);
+    const destinations = found.destinations
+      // The field on screen is not a destination.
+      .filter((d) => Math.hypot(d.ra - data!.patch.ra, d.dec - data!.patch.dec) > 0.05)
+      .map((d) => ({
+        ...d,
+        // The link opens the same detector, so only a patch already built for it is instant.
+        preloaded: patches ? isPreloaded(d, patches.filter((p) => p.detectors_ready.includes(detector))) : null,
+      }))
+      // Fields that open instantly first (stable sort keeps the API order otherwise).
+      .sort((a, b) => Number(b.preloaded === true) - Number(a.preloaded === true));
+    return { source: found.source, destinations };
+  });
+  useEffect(() => setSelected(null), [catalogKey, fieldKey]);
+  // The simulated offset moves the last epoch only, so blinking shows the jump against the others.
+  const simulated = layers.alignment && simulateOffset && count > 1 && epoch === count - 1;
+  const alignmentRow = layers.alignment ? alignmentFor(alignmentLayer?.value ?? null, epoch, simulated) : null;
+  const detail = selected && detailFor(selected);
+  const imageSize = pixels ? { width: pixels.w, height: pixels.h } : null;
+  const layerButtons = [
+    ["gaia", "Gaia DR3", Star, gaiaLayer, !ready],
+    ["wise", "CatWISE", Radar, wiseLayer, !ready],
+    ["changes", "Changes", Sparkles, changesLayer, !ready || count < 2],
+  ] as const;
+  const layerLines = [
+    layers.gaia &&
+      layerLine(
+        "Gaia",
+        gaiaLayer,
+        "stars",
+        gaiaLayer?.value?.stars.length,
+        gaiaLayer?.value && imageSize ? gaiaMarks(gaiaLayer.value, epoch, imageSize, imageSize).length : undefined,
+      ),
+    layers.wise &&
+      layerLine(
+        "CatWISE",
+        wiseLayer,
+        "sources",
+        wiseLayer?.value?.sources.length,
+        wiseLayer?.value ? wiseMarks(wiseLayer.value, epoch).length : undefined,
+      ),
+    layers.changes &&
+      layerLine("Changes (first→last epoch)", changesLayer, "changes", changesLayer?.value?.candidates.length) +
+        ((changesLayer?.value?.candidates.length ?? 0) > MAX_CHANGE_LABELS
+          ? ` · labels on cold candidates and the strongest; dots for the rest`
+          : ""),
+  ].filter((line): line is string => !!line);
 
   function stepEpoch(direction: 1 | -1) {
     setPlaying(false);
@@ -566,6 +666,13 @@ export default function Field({
                       alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}${showDifference ? ", shown as the difference from the first epoch" : ""}`}
                       width={420}
                       height={420}
+                      style={
+                        simulated && pixels
+                          ? {
+                              translate: `${(SIMULATED_OFFSET_PX.dx / pixels.w) * 100}% ${(SIMULATED_OFFSET_PX.dy / pixels.h) * 100}%`,
+                            }
+                          : undefined
+                      }
                       onLoad={(e) => {
                         setImageLoading(false);
                         setPixels({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
@@ -597,6 +704,45 @@ export default function Field({
                     )}
                     {/* The patch centre is the central pixel, which is where the target sits. */}
                     <span className={s.reticle} aria-hidden="true" />
+                    {pixels && !building && (
+                      <FieldOverlays
+                        width={pixels.w}
+                        height={pixels.h}
+                        epoch={epoch}
+                        gaia={layers.gaia ? (gaiaLayer?.value ?? null) : null}
+                        wise={layers.wise ? (wiseLayer?.value ?? null) : null}
+                        changes={layers.changes ? (changesLayer?.value?.candidates ?? null) : null}
+                        selected={selected}
+                        onSelect={setSelected}
+                      />
+                    )}
+                    {!building && data?.patch.id && (
+                      <button
+                        type="button"
+                        className={`${s.diffToggle} ${s.alignToggle}`}
+                        aria-pressed={layers.alignment}
+                        title="Check this epoch against the fixed Gaia stars"
+                        onClick={() => toggle("alignment")}
+                      >
+                        <ScanLine aria-hidden="true" /> Alignment
+                      </button>
+                    )}
+                    {layers.alignment && !building ? (
+                      <div
+                        className={`${s.alignBanner} ${alignmentRow?.status === "offset_warning" ? s.alignWarn : ""}`}
+                        role="status"
+                      >
+                        <p>{alignmentText(alignmentRow, alignmentLayer?.error, !!alignmentLayer?.value)}</p>
+                        <button
+                          type="button"
+                          aria-pressed={simulateOffset}
+                          disabled={count < 2}
+                          onClick={() => setSimulateOffset((v) => !v)}
+                        >
+                          Simulate an offset on the last epoch
+                        </button>
+                      </div>
+                    ) : null}
                     <button
                       type="button"
                       className={s.diffToggle}
@@ -622,6 +768,48 @@ export default function Field({
             </div>
 
             <div className={s.cards}>
+              <div className={s.layers} role="group" aria-label="Catalog layers" aria-describedby="layer-status">
+                {layerButtons.map(([key, label, Icon, state, disabled]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={layers[key]}
+                    disabled={disabled}
+                    data-error={(layers[key] && !!state?.error) || undefined}
+                    title={layers[key] ? (state?.error ?? undefined) : undefined}
+                    onClick={() => toggle(key)}
+                  >
+                    {layers[key] && state?.error ? <TriangleAlert aria-hidden="true" /> : <Icon aria-hidden="true" />}{" "}
+                    {label}
+                  </button>
+                ))}
+                {layerLines.length > 0 && (
+                  <p id="layer-status" className={s.layerStatus} aria-live="polite">
+                    {layerLines.map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </p>
+                )}
+              </div>
+              {(selected || Object.values(layers).some(Boolean)) && (
+                <section className={s.card} aria-labelledby="field-selected" aria-live="polite">
+                  <h2 id="field-selected">
+                    <Crosshair aria-hidden="true" /> {detail ? detail.title : "Selected source"}
+                  </h2>
+                  {detail ? (
+                    <dl>
+                      {detail.rows.map(([label, value]) => (
+                        <div key={label}>
+                          <dt>{label}</dt>
+                          <dd>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className={s.cardHint}>Click a marker on the image.</p>
+                  )}
+                </section>
+              )}
               <section className={s.card} aria-labelledby="field-coordinates">
                 <h2 id="field-coordinates">
                   <Crosshair aria-hidden="true" /> Coordinates (ICRS)
@@ -665,11 +853,17 @@ export default function Field({
                 <dl>
                   <div>
                     <dt>Name</dt>
-                    <dd>{target?.name ?? "Custom position"}</dd>
+                    <dd>{target?.name ?? name ?? "Custom position"}</dd>
                   </div>
                   <div>
                     <dt>Type</dt>
-                    <dd>{target ? humanKind(target.kind) : "Field chosen by coordinates"}</dd>
+                    <dd>
+                      {target
+                        ? humanKind(target.kind)
+                        : name
+                          ? "Suggested star · not in Nebo's catalogue"
+                          : "Field chosen by coordinates"}
+                    </dd>
                   </div>
                   <div>
                     <dt>Band</dt>
@@ -685,6 +879,35 @@ export default function Field({
                   </div>
                 </dl>
               </section>
+              {suggestions?.value && suggestions.value.destinations.length > 0 && (
+                <nav className={s.suggest} aria-label="Suggested destinations">
+                  {/* A preview of what the sky explorer would propose: nearby or very fast Gaia stars. */}
+                  <span>
+                    Suggested in Explore
+                    <small>{suggestions.value.source === "curated_fallback" ? "curated list" : "Gaia DR3"}</small>
+                  </span>
+                  <ul>
+                    {suggestions.value.destinations.map((d) => (
+                      <li key={d.source_id}>
+                        <a
+                          href={fieldLink(location.pathname, { ra: d.ra, dec: d.dec }, size, detector, 0, d.name)}
+                          title={
+                            d.preloaded === false
+                              ? "Not preloaded: Nebo must download its images from NASA/IPAC IRSA (1–3 min)."
+                              : undefined
+                          }
+                        >
+                          <strong>{d.name}</strong>
+                          {d.pm_total_mas_yr != null && ` · ${Math.round(d.pm_total_mas_yr)} mas/yr`}
+                          {d.distance_pc != null && ` · ${d.distance_pc.toFixed(1)} pc`}
+                          {d.preloaded === true && <em className={s.instant}>opens instantly</em>}
+                          {d.preloaded === false && <em className={s.download}>new download · 1–3 min</em>}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+              )}
             </div>
 
             <div className={s.timeline}>
@@ -968,5 +1191,61 @@ function PlanetIcon() {
       <circle cx="32" cy="32" r="15" />
       <path d="M12.5 44.5C4 50 2 54.5 6 56c6 2.2 22-4.6 36-15.5S62 15.6 58 9.6C56 6.8 50 8 43 12" />
     </svg>
+  );
+}
+
+/**
+ * One lazily loaded catalog layer. It is fetched when `on` and `key` are set and the layer holds
+ * nothing for that key yet; switching it off and on again retries a failed load.
+ */
+function useLayer<T>(on: boolean, key: string, load: (signal: AbortSignal) => Promise<T>) {
+  const [state, setState] = useState<{ key: string; value?: T; error?: string } | null>(null);
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  useEffect(() => {
+    if (!on || !key) return;
+    if (state?.key === key && !state.error) return;
+    const abort = new AbortController();
+    setState({ key });
+    loadRef
+      .current(abort.signal)
+      .then((value) => {
+        if (!abort.signal.aborted) setState({ key, value });
+      })
+      .catch((e: unknown) => {
+        if (abort.signal.aborted) return;
+        setState({
+          key,
+          error:
+            e instanceof ApiError && e.status === 502
+              ? "the archive (Gaia or IRSA) did not answer. Switch the layer off and on to retry."
+              : e instanceof ApiError && e.status === 404
+                ? "not available for this field yet (it needs its float images)."
+                : "could not be loaded.",
+        });
+      });
+    return () => {
+      abort.abort();
+      // An interrupted load leaves nothing behind, so the next switch-on fetches again.
+      setState((s) => (s?.key === key && !s.value && !s.error ? null : s));
+    };
+    // `state` is left out on purpose: storing the answer must not trigger a new request.
+  }, [on, key]);
+  return state?.key === key ? state : null;
+}
+
+/** The alignment banner of the epoch on screen. A simulated row always says so. */
+function alignmentText(row: AlignmentEpoch | null, error: string | undefined, loaded: boolean) {
+  if (error) return `Alignment: ${error}`;
+  if (!row)
+    return loaded
+      ? "No alignment measurement for this epoch (the field has no float images yet)."
+      : "Checking alignment against Gaia…";
+  const prefix = row.simulated ? "Simulation · " : "";
+  if (row.status === "insufficient_stars") return "Too few Gaia reference stars to check this epoch.";
+  if (row.status === "ok") return `${prefix}Aligned with Gaia · rms ${row.rms_arcsec?.toFixed(1)}″ (${row.stars_used} stars)`;
+  return (
+    `${prefix}Instrumental offset Δx ${row.median_dx_px?.toFixed(1)} px, Δy ${row.median_dy_px?.toFixed(1)} px: ` +
+    "changes on this epoch may be misalignment, not motion."
   );
 }

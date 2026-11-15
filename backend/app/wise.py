@@ -154,6 +154,10 @@ def query_cone(
         try:
             response = requests.post(TAP_SYNC_URL, data=params, timeout=QUERY_TIMEOUT_S)
             response.raise_for_status()
+            # IRSA can answer 200 with an HTML or VOTable error page; read as CSV it would be
+            # "no sources" and get cached for good. A real answer starts with the header row.
+            if not response.text.lstrip().startswith(COLUMNS[0]):
+                raise requests.RequestException("IRSA answer is not a CSV table")
             return parse_csv(response.text)
         except requests.RequestException as error:
             if attempt == QUERY_ATTEMPTS - 1:
