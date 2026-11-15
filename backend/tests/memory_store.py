@@ -34,6 +34,7 @@ class MemoryStore:
         self.patches: dict[int, Patch] = {}
         self.timelines: dict[int, Timeline] = {}
         self.images: dict[int, tuple[int, EpochImage]] = {}  # id -> (timeline_id, image)
+        self.image_written: dict[int, datetime] = {}  # id -> last write (versions the URL)
         self.sector_coordinates: dict[int, dict[str, dict[str, Any]]] = {}
         self.nasa_sector_exposures: dict[tuple[int, int, str], dict[str, Any]] = {}
         self.spherex_channels: dict[int, dict[str, Any]] = {}
@@ -174,10 +175,26 @@ class MemoryStore:
             self._update_locked(timeline_id, **changes)
 
     def _replace_images_locked(self, timeline_id: int, images: list[EpochImage]) -> None:
-        for image_id in [i for i, (t, _) in self.images.items() if t == timeline_id]:
-            del self.images[image_id]
+        """Like PostgresStore: upsert by (epoch, size), keeping ids; drop only stale keys."""
+        existing = {
+            (i.epoch_index, i.size): image_id
+            for image_id, (t, i) in self.images.items()
+            if t == timeline_id
+        }
+        keep = {(i.epoch_index, i.size) for i in images}
+        for key, image_id in existing.items():
+            if key not in keep:
+                del self.images[image_id]
+                self.image_written.pop(image_id, None)
         for image in images:
-            self.images[self._next("image")] = (timeline_id, image)
+            image_id = existing.get((image.epoch_index, image.size)) or self._next("image")
+            self.images[image_id] = (timeline_id, image)
+            # Strictly increasing, even for two writes within one clock tick.
+            previous = self.image_written.get(image_id)
+            now = datetime.now(timezone.utc)
+            self.image_written[image_id] = (
+                now if previous is None or now > previous else previous + timedelta(microseconds=1)
+            )
 
     def update_progress(self, timeline_id: int, stage: str, done: int, total: int) -> None:
         self._update(timeline_id, stage=stage, progress_done=done, progress_total=total)
@@ -249,7 +266,7 @@ class MemoryStore:
                     end_utc=i.end_utc, mid_mjd=i.mid_mjd, frames_available=i.frames_available,
                     frames_used=i.frames_used, width_px=i.width_px, height_px=i.height_px,
                     display_min=i.display_min, display_max=i.display_max,
-                    has_npz=(i.npz is not None),
+                    has_npz=(i.npz is not None), updated_at=self.image_written.get(image_id),
                 )
                 for image_id, (t, i) in self.images.items()
                 if t == timeline_id and i.size == size

@@ -548,6 +548,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — `timeline_images.updated_at` (`ADD COLUMN IF NOT EXISTS`, set on every upsert):
+  image rows now keep their id across partial and final saves, so `/timeline` versions
+  `image_url`, `npz_url` and `mask_url` with `?v=`; without it a refined image kept the URL (and
+  the year-long immutable cache) of its one-frame preview.
 - **2026-11-15** — Consistency fixes: `store._replace_timeline_images_conn` now upserts by
   `(timeline_id, epoch_index, size)` instead of `DELETE + INSERT` (preserving image IDs across
   partial saves), `alignmentFor` uses `data.size.pixel_scale_arcsec`, `SpectrumChart` band edges

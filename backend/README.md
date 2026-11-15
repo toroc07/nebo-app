@@ -226,8 +226,10 @@ database is not configured.
 ### `GET /images/{id}.png`
 
 The processed image: 8-bit greyscale with an alpha channel, where pixels without data are
-transparent. Row 0 is north, and east is on the left. Ids change when a timeline is rebuilt,
-so responses are cached for a year (`immutable`).
+transparent. Row 0 is north, and east is on the left. Images are upserted by (timeline,
+epoch, size), so a row keeps its id when a preview is refined or a timeline rebuilt; the URLs in
+`/timeline` (`image_url`, `npz_url`, `mask_url`) carry `?v=` (the row's `updated_at`), so each
+version is a new URL and responses can be cached for a year (`immutable`). Use the URLs as given.
 
 ### `GET /patches/{id}/gaia?size=medium&mjd=<mid_mjd>&mjd=<mid_mjd>...`
 

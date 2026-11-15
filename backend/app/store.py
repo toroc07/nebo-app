@@ -75,6 +75,8 @@ class ImageInfo:
     display_min: float
     display_max: float
     has_npz: bool = False
+    # Last write of the row: images are upserted in place, so this versions their URLs (?v=).
+    updated_at: datetime | None = None
 
 
 class Store(Protocol):
@@ -267,7 +269,7 @@ TIMELINE_COLUMNS = (
 )
 IMAGE_INFO_COLUMNS = (
     "id, epoch_index, size, start_utc, end_utc, mid_mjd, frames_available, frames_used, "
-    "width_px, height_px, display_min, display_max, (npz IS NOT NULL) AS has_npz"
+    "width_px, height_px, display_min, display_max, (npz IS NOT NULL) AS has_npz, updated_at"
 )
 
 
@@ -594,7 +596,8 @@ class PostgresStore:
                     display_min = EXCLUDED.display_min,
                     display_max = EXCLUDED.display_max,
                     png = EXCLUDED.png,
-                    npz = EXCLUDED.npz
+                    npz = EXCLUDED.npz,
+                    updated_at = now()
                 """,
                 [
                     (

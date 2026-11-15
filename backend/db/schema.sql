@@ -224,6 +224,12 @@ CREATE TABLE IF NOT EXISTS nasa_sector_exposures (
 CREATE INDEX IF NOT EXISTS idx_nasa_sector_exposures_patch_det
     ON nasa_sector_exposures (patch_id, detector, mjd_start);
 
+-- When an image row was last written. Partial and final saves upsert by (timeline, epoch, size)
+-- and keep the row id, so the API adds this as ?v= to the image URLs: the long immutable cache
+-- then applies per version, and a refined image never hides behind its cached preview.
+ALTER TABLE timeline_images
+    ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
 -- Any OVERFLOW/SUR_ERROR pixel in the 5x5 photometry box at the object's propagated position.
 ALTER TABLE nasa_sector_exposures
     ADD COLUMN IF NOT EXISTS saturated_near_target boolean;

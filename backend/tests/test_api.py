@@ -154,7 +154,7 @@ def test_timeline_has_corners_data_version_and_expected_position(client):
         assert quality["clean_fraction"] + quality["flagged_fraction"] == pytest.approx(1.0, abs=1e-3)
         assert isinstance(epoch["warnings"], list)
         assert all({"code", "text"} <= set(w) for w in epoch["warnings"])
-        assert epoch["mask_url"].endswith("/mask.png?size=medium")
+        assert "/mask.png?size=medium&v=" in epoch["mask_url"]
         position = epoch["expected_position"]
         assert position["in_image"] and 0 <= position["x"] <= body["size"]["width_px"] - 1
     # Barnard moves north between the two epochs (dec grows, PNG y shrinks).

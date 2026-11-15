@@ -535,3 +535,30 @@ def test_background_backfill_retries_what_irsa_refused_one_at_a_time(monkeypatch
     backfill_background.main(workers=2)
     assert sorted(v[-1] for v in written) == [1, 2]
     assert all(v[0] == 0.75 for v in written)
+
+
+def test_a_refined_image_keeps_its_id_but_gets_a_new_url_version():
+    """Partial and final saves upsert by (epoch, size): the id stays, the URL version changes,
+    so a browser never keeps showing the cached one-frame preview (images are immutable-cached)."""
+    from datetime import datetime, timezone
+
+    from app import main
+    from app.store import EpochImage
+
+    store = MemoryStore()
+    patch = store.create_patch(RA, DEC, None)
+    timeline = store.claim_timeline(patch.id, 3)
+    t = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def image(frames: int, epoch: int = 0) -> EpochImage:
+        return EpochImage(epoch, "medium", t, t, 61000.0, 16, frames, 59, 59, 0.0, 1.0, b"png")
+
+    store.save_partial_timeline(
+        timeline.id, [image(1)], stage="first_light", done=1, total=2, frames_found=16, frames_used=1
+    )
+    (preview,) = store.list_images(timeline.id, "medium")
+    store.complete_timeline(timeline.id, [image(16), image(16, epoch=1)], 32, 32)
+    final = store.list_images(timeline.id, "medium")
+    assert final[0].id == preview.id and final[0].frames_used == 16
+    assert main._image_version(final[0]) != main._image_version(preview)
+    assert len(final) == 2

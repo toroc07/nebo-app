@@ -106,7 +106,7 @@ await page.waitForFunction(() => document.documentElement.dataset.reduced);
 
 // --- start screen ------------------------------------------------------------------------------
 const menu = page.getByRole("navigation", { name: "Start menu" });
-assert.equal(await menu.getByRole("button").count(), 2, "START and TUTORIAL");
+assert.equal(await menu.getByRole("button").count(), 3, "START, TUTORIAL and CREW");
 assert.ok(
   await page
     .locator('[data-scene="home"] img')
@@ -118,6 +118,13 @@ await page.addScriptTag({ path: "node_modules/axe-core/axe.min.js" });
 const axe = await page.evaluate(async () => (await window.axe.run()).violations);
 writeFileSync(path.join(out, "axe.json"), JSON.stringify(axe, null, 2));
 assert.deepEqual(axe.map((v) => v.id), [], "no axe violations on the start screen");
+
+// --- crew: the team panel replaces the menu, and Back returns to it ----------------------------
+await menu.getByRole("button", { name: /Crew/ }).click();
+await page.getByRole("heading", { level: 2, name: "Crew", exact: true }).waitFor();
+assert.equal(await page.locator("section[aria-labelledby='crew-title'] li").count(), 5, "five crew members");
+await page.getByRole("button", { name: "Back", exact: true }).click();
+await menu.getByRole("button", { name: /Tutorial/ }).waitFor();
 
 // --- tutorial: every step, buttons and keyboard, and back to the menu --------------------------
 const step = (title) => page.getByRole("heading", { level: 2, name: title, exact: true });
@@ -211,6 +218,7 @@ writeFileSync(
       stress,
       checks: [
         "start screen: menu, art, axe",
+        "crew panel and back",
         "tutorial: 7 steps, buttons, keyboard, back to the menu",
         "200% text and RTL at desktop sizes",
         "START -> cockpit unlocked",

@@ -297,7 +297,7 @@ def _epochs_payload(view: TimelineView, size: str, store: Store) -> list[dict]:
     # The mask layer reads the float data, stored only with the largest size's final images.
     largest = max(config.SIZES_DEG, key=config.SIZES_DEG.get)
     with_npz = {
-        i.epoch_index: i.id
+        i.epoch_index: i
         for i in (view.images if size == largest else store.list_images(view.timeline.id, largest))
         if i.has_npz
     }
@@ -319,15 +319,30 @@ def _epochs_payload(view: TimelineView, size: str, store: Store) -> list[dict]:
             "quality": quality,
             "warnings": epoch_warnings(quality, coverage, galactic_b),
             "expected_position": _expected_position(view.patch, target, image.mid_mjd, size),
-            "image_url": f"{API_PREFIX}/images/{image.id}.png",
+            "image_url": f"{API_PREFIX}/images/{image.id}.png?v={_image_version(image)}",
             **(
-                {"mask_url": f"{API_PREFIX}/images/{with_npz[image.epoch_index]}/mask.png?size={size}"}
+                {
+                    "mask_url": f"{API_PREFIX}/images/{with_npz[image.epoch_index].id}/mask.png"
+                    f"?size={size}&v={_image_version(with_npz[image.epoch_index])}"
+                }
                 if image.epoch_index in with_npz
                 else {}
             ),
-            **({"npz_url": f"{API_PREFIX}/images/{image.id}.npz"} if image.has_npz else {}),
+            **(
+                {"npz_url": f"{API_PREFIX}/images/{image.id}.npz?v={_image_version(image)}"}
+                if image.has_npz
+                else {}
+            ),
         })
     return epochs
+
+
+def _image_version(image: Any) -> str:
+    """Version of an image row for its URL (?v=). Rows are upserted in place and keep their id,
+    while the files are served as immutable for a year: without a version, a refined image would
+    keep the URL of its cached preview and never be fetched again."""
+    written = getattr(image, "updated_at", None)
+    return str(int(written.timestamp() * 1_000_000)) if written else "0"
 
 
 def _timeline_meta_payload(
