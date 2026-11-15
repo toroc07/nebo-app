@@ -1,6 +1,6 @@
 "use client";
 import { useState, type CSSProperties, type Ref } from "react";
-import { BookOpen, Crosshair, Rocket, Settings, Sparkles } from "lucide-react";
+import { BookOpen, Rocket } from "lucide-react";
 import s from "./home.module.css";
 
 /*
@@ -26,16 +26,10 @@ export default function HomeScene({
   headingRef,
   onStart,
   onTutorial,
-  onFeatured,
-  onCoordinates,
-  onSettings,
 }: {
   headingRef?: Ref<HTMLHeadingElement>;
   onStart: () => void;
   onTutorial: () => void;
-  onFeatured: () => void;
-  onCoordinates: () => void;
-  onSettings: () => void;
 }) {
   const [off, setOff] = useState(false);
   /** START: the wall screen switches off first, then the camera turns to the cockpit. */
@@ -78,18 +72,6 @@ export default function HomeScene({
             </span>
           </button>
         </nav>
-        {/* Direct routes for those who already know where they are going (and for keyboard users). */}
-        <div className={s.shortcuts}>
-          <button type="button" onClick={onFeatured}>
-            <Sparkles aria-hidden="true" /> Featured objects
-          </button>
-          <button type="button" onClick={onCoordinates}>
-            <Crosshair aria-hidden="true" /> Search by coordinates
-          </button>
-          <button type="button" onClick={onSettings}>
-            <Settings aria-hidden="true" /> Settings
-          </button>
-        </div>
       </div>
     </section>
   );

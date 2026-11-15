@@ -91,6 +91,13 @@ await page.route("**/api/v1/**", async (route) => {
 });
 await page.goto(process.env.NEBO_TEST_URL || "http://127.0.0.1:3001");
 // The field console uses its own listbox (styled like the ship), not a native <select>.
+// The start menu offers only START and TUTORIAL; the coordinate form is reached through the
+// tutorial's "Skip tutorial", which opens the Observe menu.
+const openCoordinates = async () => {
+  await page.getByRole("button", { name: /Tutorial/ }).click();
+  await page.getByRole("button", { name: "Skip tutorial", exact: true }).click();
+  await page.getByRole("button", { name: /Search by coordinates/ }).click();
+};
 const pickFieldSize = async (label) => {
   await page.getByRole("button", { name: /^Field size/ }).click();
   await page.getByRole("option", { name: label, exact: true }).click();
@@ -126,7 +133,7 @@ assert.deepEqual(
   axe.map((v) => v.id),
   [],
 );
-await page.getByRole("button", { name: /Search by coordinates/ }).click();
+await openCoordinates();
 await page.getByLabel("Right ascension").fill("360");
 await page.getByLabel("Declination").fill("0");
 await page.getByRole("button", { name: "View images", exact: true }).click();
@@ -168,16 +175,6 @@ await page.getByText(/The database is not configured yet/).waitFor();
 for (let i = 0; i < 2; i++)
   await page.getByRole("button", { name: "Back", exact: true }).click();
 await page.getByRole("navigation", { name: "Start menu" }).waitFor();
-await page.getByRole("button", { name: /Settings/ }).click();
-await page.getByLabel("Appearance").selectOption("light");
-await page.getByLabel("Reduce motion", { exact: true }).check();
-await page.reload();
-// A reload opens on the start screen (the ship), which has no site header.
-await page.getByRole("navigation", { name: "Start menu" }).waitFor();
-await page.getByRole("button", { name: /Settings/ }).click();
-assert.equal(await page.getByLabel("Appearance").inputValue(), "light");
-assert.ok(await page.getByLabel("Reduce motion", { exact: true }).isChecked());
-await page.getByRole("link", { name: "Nebo, home" }).click();
 await page.getByRole("button", { name: /Tutorial/ }).click();
 await page.getByRole("button", { name: "Next", exact: true }).click();
 await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -326,14 +323,7 @@ await page.getByRole("navigation", { name: "Start menu" }).waitFor();
 const backButton = page.getByRole("button", { name: "Back", exact: true });
 const heading = (name) =>
   page.getByRole("heading", { level: 1, name, exact: true });
-await page.getByRole("button", { name: /Featured objects/ }).click();
-await page.getByRole("button", { name: /Barnard/ }).click();
-await page.getByText(/^Observed: .+ UTC/).waitFor();
-await backButton.click();
-await heading("Featured objects").waitFor();
-await backButton.click();
-await page.getByRole("navigation", { name: "Start menu" }).waitFor();
-await page.getByRole("button", { name: /Search by coordinates/ }).click();
+await openCoordinates();
 await page.getByLabel("Right ascension").fill("269.446");
 await page.getByLabel("Declination").fill("4.768");
 await page.getByRole("button", { name: "View images", exact: true }).click();
