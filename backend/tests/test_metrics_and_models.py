@@ -39,6 +39,16 @@ def test_psf_photometry_enforces_3pct_floor_and_photometry_mask():
     assert phot["n_valid_pixels"] == 24
 
 
+def test_psf_photometry_is_stable_for_a_moving_star():
+    # A moving star (Barnard) lands on a different sub-pixel spot each epoch; flux must not jump.
+    fluxes = []
+    for cx, cy in [(10.0, 10.0), (10.4, 9.6), (9.5, 10.5), (11.0, 10.3)]:
+        img, _ = _make_gaussian_cutout(cx=cx, cy=cy, peak=5000.0)
+        var = 1.0 + img  # Poisson-like: the star dominates its own variance
+        fluxes.append(metrics.extract_optimal_psf_photometry(img, var, center_xy=(cx, cy))["flux_hat"])
+    assert max(fluxes) / min(fluxes) < 1.2, fluxes
+
+
 def test_difference_snr_and_mahalanobis_displacement():
     img1, var1 = _make_gaussian_cutout(cx=10.0, cy=10.0, peak=120.0, noise_sigma=0.5)
     img2, var2 = _make_gaussian_cutout(cx=12.0, cy=10.0, peak=120.0, noise_sigma=0.5)

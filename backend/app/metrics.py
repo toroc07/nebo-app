@@ -46,7 +46,7 @@ def extract_optimal_psf_photometry(
     image: np.ndarray,
     variance: np.ndarray,
     flags: np.ndarray | None = None,
-    center_xy: tuple[int, int] | None = None,
+    center_xy: tuple[float, float] | None = None,
     fwhm_px: float = 1.22,
 ) -> dict[str, Any]:
     """Compute ePSF-weighted flux, 3%-floored uncertainty, morphology, and flag purity.
@@ -57,7 +57,8 @@ def extract_optimal_psf_photometry(
     img = np.asarray(image, dtype=np.float64)
     var = np.asarray(variance, dtype=np.float64)
     h, w = img.shape
-    cx, cy = center_xy if center_xy is not None else (w // 2, h // 2)
+    fx, fy = center_xy if center_xy is not None else (w // 2, h // 2)
+    cx, cy = round(fx), round(fy)
 
     r_ap = 2
     x0, x1 = max(0, cx - r_ap), min(w, cx + r_ap + 1)
@@ -100,7 +101,8 @@ def extract_optimal_psf_photometry(
         p_clean_flags = float(np.mean(valid)) if valid.size > 0 else 0.0
         f_artifact_flags = 1.0 - p_clean_flags
 
-    psf_full = gaussian_epsf_kernel(size=5, fwhm_px=fwhm_px)
+    # The PSF is ~1 px wide: ignoring the sub-pixel offset loses a large, position-dependent share of flux.
+    psf_full = gaussian_epsf_kernel(size=5, fwhm_px=fwhm_px, center_offset=(fx - cx, fy - cy))
     py0 = r_ap - (cy - y0)
     py1 = py0 + (y1 - y0)
     px0 = r_ap - (cx - x0)
