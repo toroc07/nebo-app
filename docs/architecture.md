@@ -354,6 +354,7 @@ erDiagram
     text release
     float mjd_start
     float aperture_flux_ujy
+    bool saturated_near_target
   }
   api_query_cache {
     text cache_key PK
@@ -546,6 +547,15 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Saturation: `nasa_sector_exposures.saturated_near_target` (OVERFLOW/SUR_ERROR
+  in the 5×5 photometry box at the object's propagated position). `/metrics` `image_photometry`
+  adds tri-state `saturated` plus `saturated_frames`, `checked_frames`, `total_frames`,
+  `saturated_frac`; saturated epochs return `snr`/`sigma`
+  as `null` and the UI shows the flux as an approximate lower limit (≥). Older rows:
+  `python -m app.backfill_saturation [--download]`.
+- **2026-11-15** — `/metrics` `image_photometry`: `snr = flux_hat / sigma_stat` (noise
+  propagated from the co-add variance), no longer capped at 33.3 by the 3% floor; `sigma_reported`
+  keeps the floor. Epochs without usable pixels or variance return `null` (UI: "n/a").
 - **2026-11-15** — `/metrics` `image_photometry`: moving targets are measured at their
   proper-motion position for each epoch (sub-pixel), not at the image centre. Fixes Barnard's
   ×7 flux jump between epochs; the co-add was already a weighted mean.

@@ -212,6 +212,10 @@ CREATE TABLE IF NOT EXISTS nasa_sector_exposures (
 CREATE INDEX IF NOT EXISTS idx_nasa_sector_exposures_patch_det
     ON nasa_sector_exposures (patch_id, detector, mjd_start);
 
+-- Any OVERFLOW/SUR_ERROR pixel in the 5x5 photometry box at the object's propagated position.
+ALTER TABLE nasa_sector_exposures
+    ADD COLUMN IF NOT EXISTS saturated_near_target boolean;
+
 CREATE INDEX IF NOT EXISTS idx_nasa_sector_exposures_channel
     ON nasa_sector_exposures (patch_id, channel_id);
 

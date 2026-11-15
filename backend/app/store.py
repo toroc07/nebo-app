@@ -793,14 +793,14 @@ class PostgresStore:
                 wavelength_um, bandwidth_um, channel_id, zodi_median_mjy_sr,
                 target_flux_mjy_sr, target_variance_mjy_sr2,
                 aperture_flux_ujy, aperture_sigma_stat_ujy, aperture_sigma_reported_ujy,
-                flags_bitmask_center, science_bad_fraction, clean_pixel_fraction,
-                cutout_url, sha256_hex, local_cache_path, gcs_uri
+                flags_bitmask_center, saturated_near_target, science_bad_fraction,
+                clean_pixel_fraction, cutout_url, sha256_hex, local_cache_path, gcs_uri
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (patch_id, detector, uri) DO UPDATE SET
                 timeline_id = EXCLUDED.timeline_id,
@@ -825,6 +825,7 @@ class PostgresStore:
                 aperture_sigma_stat_ujy = EXCLUDED.aperture_sigma_stat_ujy,
                 aperture_sigma_reported_ujy = EXCLUDED.aperture_sigma_reported_ujy,
                 flags_bitmask_center = EXCLUDED.flags_bitmask_center,
+                saturated_near_target = EXCLUDED.saturated_near_target,
                 science_bad_fraction = EXCLUDED.science_bad_fraction,
                 clean_pixel_fraction = EXCLUDED.clean_pixel_fraction,
                 cutout_url = COALESCE(EXCLUDED.cutout_url, nasa_sector_exposures.cutout_url),
@@ -866,6 +867,7 @@ class PostgresStore:
                 _clean_float(e.get("aperture_sigma_stat_ujy")),
                 _clean_float(e.get("aperture_sigma_reported_ujy")),
                 e.get("flags_bitmask_center"),
+                e.get("saturated_near_target"),
                 _clean_float(e.get("science_bad_fraction")),
                 _clean_float(e.get("clean_pixel_fraction")),
                 e.get("cutout_url"),

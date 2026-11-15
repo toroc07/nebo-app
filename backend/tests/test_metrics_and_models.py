@@ -7,7 +7,7 @@ import math
 import numpy as np
 from fastapi.testclient import TestClient
 
-from app import main, metrics, models, science_catalogs
+from app import imaging, main, metrics, models, science_catalogs
 from tests.memory_store import MemoryStore
 
 
@@ -47,6 +47,56 @@ def test_psf_photometry_is_stable_for_a_moving_star():
         var = 1.0 + img  # Poisson-like: the star dominates its own variance
         fluxes.append(metrics.extract_optimal_psf_photometry(img, var, center_xy=(cx, cy))["flux_hat"])
     assert max(fluxes) / min(fluxes) < 1.2, fluxes
+
+
+def test_psf_snr_is_measured_and_grows_with_exposures():
+    rng = np.random.default_rng(0)
+    star, _ = _make_gaussian_cutout(peak=500.0)
+    frame_var = np.full_like(star, 25.0)
+
+    def snr(n: int) -> float:
+        frames = [star + rng.normal(0.0, 5.0, star.shape) for _ in range(n)]
+        image, variance = imaging.coadd(frames, [frame_var] * n)
+        return metrics.extract_optimal_psf_photometry(image, variance, center_xy=(10, 10))["snr"]
+
+    one, eight = snr(1), snr(8)
+    assert eight > 2.0 * one  # ~sqrt(8) with real noise
+    assert abs(one - 1 / 0.03) > 1.0 and abs(eight - 1 / 0.03) > 1.0  # not the 3% floor cap
+
+
+def test_psf_photometry_without_variance_is_not_a_number():
+    img, _ = _make_gaussian_cutout()
+    phot = metrics.extract_optimal_psf_photometry(img, np.full_like(img, np.nan), center_xy=(10, 10))
+    assert phot["snr"] is None and phot["sigma_stat"] is None and phot["flux_hat"] is None
+
+
+def test_epoch_saturation_counts_frames_inside_the_epoch():
+    from types import SimpleNamespace
+
+    from app.service import mjd_to_datetime
+
+    image = SimpleNamespace(start_utc=mjd_to_datetime(61000.0), end_utc=mjd_to_datetime(61010.0))
+    exposures = [
+        {"mjd_start": 61000.0, "saturated_near_target": True},
+        {"mjd_start": 61005.0, "saturated_near_target": False},
+        {"mjd_start": 61010.0, "saturated_near_target": True},
+        {"mjd_start": 61007.0, "saturated_near_target": None},  # unknown: not counted
+        {"mjd_start": 61200.0, "saturated_near_target": True},  # another epoch
+    ]
+    assert main._epoch_saturation(exposures, image) == {
+        "saturated": True,
+        "saturated_frames": 2,
+        "checked_frames": 3,
+        "total_frames": 4,
+        "saturated_frac": 0.667,
+    }
+    clean = [{"mjd_start": 61001.0, "saturated_near_target": False}]
+    assert main._epoch_saturation(clean, image)["saturated"] is False
+    # One unchecked frame: not known to be clean.
+    partial = clean + [{"mjd_start": 61002.0, "saturated_near_target": None}]
+    assert main._epoch_saturation(partial, image)["saturated"] is None
+    assert main._epoch_saturation([], image)["saturated"] is None
+    assert main._epoch_saturation([], image)["saturated_frac"] is None
 
 
 def test_difference_snr_and_mahalanobis_displacement():

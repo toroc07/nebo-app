@@ -275,6 +275,11 @@ def _build_exposure_row(
         "aperture_sigma_stat_ujy": aperture_sigma_stat_ujy,
         "aperture_sigma_reported_ujy": aperture_sigma_reported_ujy,
         "flags_bitmask_center": cutout.flags_center,
+        "saturated_near_target": (
+            imaging.saturated_near(cutout.saturated, pix_x, pix_y)
+            if cutout.saturated is not None
+            else None
+        ),
         "science_bad_fraction": cutout.science_bad_fraction,
         "clean_pixel_fraction": cutout.clean_pixel_fraction,
         "cutout_url": url,

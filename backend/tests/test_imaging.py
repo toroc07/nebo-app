@@ -175,3 +175,14 @@ def test_to_rgb_png_combines_three_channels_and_masks_nans():
     assert rgba[1, 0, 0] > 200 and rgba[1, 0, 1] < 50 and rgba[1, 0, 3] == 255
     # (0,1) in FITS -> (1,1) in PNG: green is bright.
     assert rgba[1, 1, 1] > 200 and rgba[1, 1, 0] < 50 and rgba[1, 1, 3] == 255
+
+
+def test_saturation_counts_only_near_the_object():
+    saturated = np.zeros((21, 21), dtype=bool)
+    saturated[3, 3] = True  # an OVERFLOW pixel far from the star
+    assert imaging.saturated_near(saturated, 10.0, 10.0) is False
+    saturated[11, 12] = True  # inside the 5x5 photometry box
+    assert imaging.saturated_near(saturated, 10.4, 9.6) is True
+    assert imaging.saturated_near(saturated, float("nan"), 10.0) is None
+    assert imaging.saturated_near(saturated, None, 10.0) is None
+    assert imaging.saturated_near(saturated, 40.0, 10.0) is None

@@ -64,13 +64,20 @@ export type PatchSpectrumResponse = {
 export type ImagePhotometryPoint = {
   epoch_index: number;
   mid_mjd: number;
-  flux_hat: number;
-  sigma_stat: number;
-  sigma_reported: number;
-  snr: number;
+  // null when the epoch has no usable pixels or variance.
+  flux_hat: number | null;
+  sigma_stat: number | null;
+  sigma_reported: number | null;
+  snr: number | null;
   q_fit_epsf: number;
   chi2_psf: number;
   p_clean_flags: number;
+  // Frames of the epoch with OVERFLOW/SUR_ERROR near the object; snr and sigma are null when > 0.
+  saturated: boolean | null; // null: some frames unchecked, never "clean"
+  saturated_frames: number;
+  checked_frames: number;
+  total_frames: number;
+  saturated_frac: number | null;
   f_artifact_flags: number;
 };
 
