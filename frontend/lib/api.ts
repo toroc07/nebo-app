@@ -45,11 +45,11 @@ export type SpectralChannelPoint = {
 
 export type SpectralIndexValue = {
   index_code: string;
-  target_physics?: string;
   value: number | null;
-  sigma: number | null;
+  uncertainty: number | null;
   snr?: number | null;
-  is_significant?: boolean;
+  is_significant_3s?: boolean;
+  is_valid?: boolean;
 };
 
 export type PatchSpectrumResponse = {
@@ -78,17 +78,22 @@ export type PatchMetricsResponse = {
   patch: { id: number; ra: number; dec: number; target?: string | null };
   simulated?: boolean;
   data_note?: string;
+  // Names as the backend sends them (metrics.compute_global_confidence_score and friends).
   confidence: {
-    score: number;
-    grade?: string;
-    components?: Record<string, number>;
+    c_global: number;
+    s_snr?: number;
+    s_dipole?: number;
+    s_flags?: number;
+    s_psf?: number;
   };
   variability: {
-    chi2_var?: number;
-    chi2_red?: number;
+    n_epochs?: number;
+    weighted_mean_mjy?: number;
+    chi2_var_reduced?: number;
     stetson_j?: number;
-    eta?: number;
-    lomb_scargle_fap?: number;
+    von_neumann_eta?: number;
+    lomb_scargle_power?: number;
+    lomb_scargle_period_days?: number | null;
     is_variable?: boolean;
   };
   spectral_indices: SpectralIndexValue[];
@@ -104,9 +109,7 @@ export type Model1EventResponse = {
     per_feature?: Record<string, number>;
     top_drivers?: Array<{
       feature: string;
-      shap_value?: number;
-      contribution?: number;
-      direction?: string;
+      phi: number;
     }>;
   };
   citizen_level1?: {
@@ -198,6 +201,8 @@ export type Building = {
   status: "building";
   progress: { stage: string; done: number; total: number };
   retry_after_s: number;
+  // Progressive builds already carry the epochs rendered so far (fewer frames per epoch).
+  epochs?: Epoch[];
 };
 export const origin = (
   process.env.NEXT_PUBLIC_API_ORIGIN || "http://127.0.0.1:8000"
@@ -214,7 +219,9 @@ export class ApiError extends Error {
           ? "The database is not configured yet. Connect PostgreSQL to query the images."
           : "The service is unavailable. Try again in a few moments."
         : status === 502
-          ? "We could not prepare this field. Try another detector or try again in a minute."
+          ? code === "archive_unavailable"
+            ? "NASA's IRSA archive is not responding right now. This is on their side, not your field: try again in a few minutes."
+            : "We could not prepare this field. Try another detector or try again in a minute."
           : status === 404
             ? "We could not find this object. Go back to the catalog."
             : status === 422

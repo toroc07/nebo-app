@@ -460,10 +460,10 @@ export default function Nebo() {
                 setSkyCoordinates(p);
               }}
               onZoom={(action) => setSkyCommand({ id: Date.now(), action })}
-              onView={() => {
+              onView={(p) => {
                 if (selected) open(selected);
-                else if (skyCoordinates) {
-                  setQuery(skyCoordinates);
+                else {
+                  setQuery({ ra: p.ra, dec: p.dec });
                   go("Field");
                 }
               }}

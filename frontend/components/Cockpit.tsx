@@ -34,7 +34,7 @@ export default function Cockpit({
   onSelect: (t: Target | null) => void;
   onCoordinates: (p: Position) => void;
   onZoom: (action: "in" | "out" | "all") => void;
-  onView: () => void;
+  onView: (p: Position) => void;
   onRetry: () => void;
   skyView: SkyView | null;
   layers: SkyLayers;
@@ -52,9 +52,12 @@ export default function Cockpit({
   const [tab, setTab] = useState<Tab>("sky");
   const now = useNow();
   const switchButton = useRef<HTMLButtonElement>(null);
-  const position: Position | null = selected
+  // The chosen destination (object or typed coordinates); without one, View images uses the map centre.
+  const destination: Position | null = selected
     ? { ra: selected.ra, dec: selected.dec }
     : coordinates;
+  const position: Position | null =
+    destination ?? (skyView ? { ra: skyView.ra, dec: skyView.dec } : null);
 
   function closePanel() {
     // Return focus to the control that opened the dialog, as a keyboard user expects.
@@ -80,7 +83,7 @@ export default function Cockpit({
           </div>
           <CoordinatePanel
             closing={panel === "closing"}
-            initial={position}
+            initial={destination}
             onClose={closePanel}
             onApply={(p) => {
               onCoordinates(p);
@@ -130,7 +133,7 @@ export default function Cockpit({
         </div>
         <CockpitScreens
           view={skyView}
-          position={position}
+          position={destination}
           selected={selected}
           targets={targets}
           layers={layers}
@@ -144,6 +147,7 @@ export default function Cockpit({
               ? onCommand({ action: "center", ra: t.ra, dec: t.dec })
               : onSelect(t)
           }
+          onClear={() => onSelect(null)}
           onGoto={(p) => onCommand({ action: "goto", ...p })}
           onFov={(fov) => onCommand({ action: "fov", fov })}
         />
@@ -201,7 +205,7 @@ export default function Cockpit({
           className={`${s.control} ${s.view}`}
           style={place(1657, 709, 1800, 760)}
           disabled={!position}
-          onClick={onView}
+          onClick={() => position && onView(position)}
         >
           <span className={s.paintedText}>View images</span>
           <ArrowRight aria-hidden="true" />

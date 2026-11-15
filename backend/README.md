@@ -194,6 +194,9 @@ Give either `target` or both `ra` and `dec`.
 `epochs[]` of a `202` already lists the epochs rendered so far (it grows during the build).
 `Retry-After` is 2 s in the early stages (up to `first_light`) and 5 s afterwards; use it
 instead of a fixed interval.
+When IRSA itself is down, the build goes `querying` → `waiting_for_archive` (`progress.done` =
+attempt) → `querying` and retries with a 15 → 30 → 60 s backoff for up to `NEBO_ARCHIVE_WAIT_S`
+(default 300 s). Only then does it fail with `502` `code: "archive_unavailable"`.
 
 **Early preview (`wait_for`)**: `GET /timeline?...&wait_for=first_light` (or `preview`) does not
 wait; it answers `200` with `"is_partial": true, "refining": true` as soon as a preview image
@@ -202,7 +205,8 @@ after `Retry-After`: the images are replaced at each step and **their ids change
 `image_url` every time. The final answer is a normal `200` without `is_partial`. Coordinate
 searches only; label partial images as preliminary.
 
-**`502` — failed**: `{"status": "failed", ..., "error": "No SPHEREx images cover this position with this detector yet."}`.
+**`502` — failed**: `{"status": "failed", ..., "code": "build_failed", "error": "No SPHEREx images cover this position with this detector yet."}`.
+`code: "archive_unavailable"` when IRSA itself did not answer (TAP and SIA both failed): retry later.
 The same request is retried automatically after one minute.
 
 Other answers: `404` for an unknown target, `422` for invalid parameters, `503` when the
@@ -274,6 +278,19 @@ returning `stars_used`, `median_dx_px`, `median_dy_px`, `rms_arcsec`, and `statu
 Returns nearby (`parallax > 50 mas`) or fast-moving (`pm > 500 mas/yr`) Gaia DR3 stars propagated
 to epoch 2026.2 for the sky explorer, cached in `api_query_cache` with a curated fallback if ESA
 Gaia TAP is unavailable.
+
+### `GET /patches/{id}/spectrum?epoch_index=-1` and `GET /patches/{id}/metrics?detector=3`
+
+Simulated science profiles (`simulated: true`). Fields the web client reads (keep them stable;
+`frontend/tests/fixtures/science-responses.json` holds a real answer):
+- `/spectrum`: `channels[]` of `{channel_id, band, lambda_c_um, flux_mjy, sigma_mjy, is_blankch}`
+  (102 entries, derived from the stored columnar arrays; BLANKCH 51-52 and invalid channels have
+  `flux_mjy: null`, never 0), plus `indices[]` (`index_code, value, uncertainty, snr,
+  is_significant_3s`).
+- `/metrics`: `confidence.c_global` (0-100) with `s_snr, s_dipole, s_flags, s_psf`; `variability`
+  (`chi2_var_reduced, stetson_j, von_neumann_eta, lomb_scargle_power, is_variable`);
+  `image_photometry[]` measured on the patch's float32 arrays.
+- `/models/event`: `treeshap_values.top_drivers[]` of `{feature, phi}`.
 
 ### Database catalog hydration (`python -m app.db sync-catalogs`)
 

@@ -4,10 +4,12 @@ import time
 
 import numpy as np
 import pytest
+import requests
 from PIL import Image
 
 from app import config, imaging
 from app.service import (
+    ARCHIVE_UNAVAILABLE,
     ServiceBusy,
     TargetNotFound,
     TimelineService,
@@ -162,6 +164,47 @@ def test_no_frames_fails_then_can_be_retried_after_the_cooldown():
 
     store.age_timeline(view.timeline.id, config.FAILED_RETRY_S + 1)
     assert service.timeline(patch, 3, "medium").status == "building"
+
+
+def flaky_irsa(service, store, failures: int):
+    """IRSA answers 502 `failures` times, then the real records; returns the stages seen."""
+    records, calls, stages, sleeps = make_records([60914.0]), [0], [], []
+
+    def query(ra, dec, detector):
+        calls[0] += 1
+        if calls[0] <= failures:
+            raise requests.HTTPError("502 Server Error: Proxy Error")
+        return records
+
+    real_update = store.update_progress
+
+    def update(timeline_id, stage, done, total):
+        stages.append((stage, done))
+        return real_update(timeline_id, stage, done, total)
+
+    service._query_frames = query
+    service._sleep = sleeps.append
+    store.update_progress = update
+    return stages, sleeps
+
+
+def test_short_irsa_outage_is_waited_out_without_failing():
+    service, store = make_service([])
+    stages, sleeps = flaky_irsa(service, store, failures=2)
+    patch = service.resolve_patch(ra=RA, dec=DEC)
+    assert wait_until_settled(service, patch).status == "ready"
+    assert ("waiting_for_archive", 1) in stages and ("waiting_for_archive", 2) in stages
+    assert sleeps == [15.0, 30.0]
+
+
+def test_long_irsa_outage_is_reported_as_archive_unavailable(monkeypatch):
+    monkeypatch.setattr(config, "ARCHIVE_WAIT_S", 100)
+    service, store = make_service([])
+    _, sleeps = flaky_irsa(service, store, failures=10**6)
+    patch = service.resolve_patch(ra=RA, dec=DEC)
+    view = wait_until_settled(service, patch)
+    assert view.status == "failed" and view.timeline.error == ARCHIVE_UNAVAILABLE
+    assert sleeps == [15.0, 30.0]  # A third wait (60 s) would pass the 100 s budget.
 
 
 def test_stale_build_is_taken_over():

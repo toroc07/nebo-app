@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type PointerEvent, type Ref } from "react";
+import { Component, useEffect, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -12,6 +12,9 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Square,
+  X,
+  Microscope,
 } from "lucide-react";
 import {
   timeline,
@@ -41,6 +44,10 @@ const StarHologram = dynamic(() => import("./StarHologram"), { ssr: false });
 
 const stages: Record<string, string> = {
   queued: "Waiting for a turn",
+  first_light: "First images ready",
+  preview_ready: "Preview ready",
+  refining: "Adding more frames",
+  waiting_for_archive: "NASA's archive is busy, retrying automatically",
   querying: "Searching for observations",
   downloading: "Downloading images",
   rendering: "Preparing images",
@@ -96,28 +103,50 @@ export default function Field({
     [error, setError] = useState(""),
     [retryAt, setRetryAt] = useState(0),
     [now, setNow] = useState(Date.now()),
+    [autoRetry, setAutoRetry] = useState(false),
+    // The visitor stopped waiting for this field (the server keeps building it).
+    [stopped, setStopped] = useState(false),
     [reload, setReload] = useState(0),
     [epoch, setEpoch] = useState(0),
     [playing, setPlaying] = useState(false),
     [interval, setIntervalMs] = useState(speed),
     [imageError, setImageError] = useState(false),
     [imageLoading, setImageLoading] = useState(true),
-    [scienceTab, setScienceTab] = useState<"none" | "diff" | "rgb" | "spectrum" | "models">("none");
+    [scienceTab, setScienceTab] = useState<"diff" | "rgb" | "spectrum" | "models">("diff"),
+    // Science side panel; "closing" keeps it mounted while it slides out.
+    [analysis, setAnalysis] = useState<"closed" | "open" | "closing">("closed");
+  const analysisButton = useRef<HTMLButtonElement>(null),
+    analysisHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     setDetector(recommended);
   }, [recommended]);
   useEffect(() => {
     setIntervalMs(speed);
   }, [speed]);
+  const polling = useRef<AbortController | null>(null);
   useEffect(() => {
     const abort = new AbortController();
+    polling.current = abort;
+    setStopped(false);
+    setAnalysis("closed");
     setData(null);
     setProgress(null);
     setError("");
     setPlaying(false);
     setEpoch(0);
     setRetryAt(0);
-    timeline(query, size, detector, abort.signal, setProgress)
+    setAutoRetry(false);
+    buildStart.current = 0;
+    timeline(query, size, detector, abort.signal, (b) => {
+      setProgress(b);
+      // Show the partial epochs as soon as they exist; only swap when the images changed.
+      if (b.epochs?.length)
+        setData((prev) =>
+          prev && prev.epochs.map((e) => e.image_url).join() === b.epochs!.map((e) => e.image_url).join()
+            ? prev
+            : ({ ...b, status: "ready" } as unknown as Timeline),
+        );
+    })
       .then((d) => {
         if (!abort.signal.aborted) {
           setData(d);
@@ -131,6 +160,8 @@ export default function Field({
               ? e.message
               : "The service response could not be read.",
           );
+          // An IRSA outage is retried for the visitor; other failures wait for a click.
+          setAutoRetry(e instanceof ApiError && e.code === "archive_unavailable");
           if (e instanceof ApiError)
             setRetryAt(
               Date.now() +
@@ -140,6 +171,14 @@ export default function Field({
       });
     return () => abort.abort();
   }, [query, size, detector, reload]);
+  // Clock for the "Elapsed" readout while a new field is being built.
+  const buildStart = useRef(0);
+  useEffect(() => {
+    if (!progress) return;
+    if (!buildStart.current) buildStart.current = Date.now();
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [!!progress]);
   useEffect(() => {
     if (!error) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -214,8 +253,48 @@ export default function Field({
     return () => clearTimeout(id);
   }, [powered, reduced]);
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  function closeAnalysis() {
+    analysisButton.current?.focus();
+    setAnalysis(reduced ? "closed" : "closing");
+  }
+  // Esc closes the panel wherever the focus is (it is not modal: the image stays usable).
+  useEffect(() => {
+    if (analysis !== "open") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeAnalysis();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [analysis]);
+  useEffect(() => {
+    if (analysis === "open") analysisHeading.current?.focus();
+    if (analysis !== "closing") return;
+    // Matches the 280 ms slide-out in science.module.css.
+    const id = setTimeout(() => setAnalysis("closed"), 280);
+    return () => clearTimeout(id);
+  }, [analysis]);
+  /** Stop waiting: polling ends here; the backend build is not cancelled and is cached. */
+  function stopWaiting() {
+    polling.current?.abort();
+    setProgress(null);
+    setData(null);
+    setPlaying(false);
+    setError("");
+    setAutoRetry(false);
+    setStopped(true);
+  }
+  useEffect(() => {
+    if (error && autoRetry && retryAt && now >= retryAt) setReload((n) => n + 1);
+  }, [error, autoRetry, retryAt, now]);
   const count = data?.epochs.length ?? 0;
-  const canCompare = count > 1 && !imageError;
+  // A refined timeline can have a different number of epochs than its preview.
+  useEffect(() => {
+    if (count && epoch >= count) setEpoch(count - 1);
+  }, [count, epoch]);
+  // Epochs are compared only once every image is downloaded; partial ones are a preview.
+  const building = !!progress;
+  const canCompare = count > 1 && !imageError && !building;
+  const elapsed = buildStart.current ? Math.max(0, Math.floor((now - buildStart.current) / 1000)) : 0;
 
   function stepEpoch(direction: 1 | -1) {
     setPlaying(false);
@@ -322,7 +401,18 @@ export default function Field({
                 }}
               >
                 <span className={s.brackets} aria-hidden="true" />
-                {error ? (
+                {stopped ? (
+                  <div className={s.message} role="status">
+                    <strong>Stopped</strong>
+                    <p>
+                      Nebo stopped waiting for this field. Its server keeps preparing the images in the
+                      background, so opening it again later can be much faster.
+                    </p>
+                    <button type="button" className={s.retry} onClick={() => setReload((x) => x + 1)}>
+                      <RotateCcw aria-hidden="true" /> Try again
+                    </button>
+                  </div>
+                ) : error ? (
                   <div className={s.message} role="alert">
                     <strong>We could not open this field</strong>
                     <p>{error}</p>
@@ -333,30 +423,40 @@ export default function Field({
                       onClick={() => setReload((x) => x + 1)}
                     >
                       <RotateCcw aria-hidden="true" />
-                      {remaining > 0 ? `Retry in ${remaining} s` : "Retry"}
+                      {remaining > 0
+                        ? autoRetry
+                          ? `Retrying automatically in ${remaining} s`
+                          : `Retry in ${remaining} s`
+                        : "Retry"}
                     </button>
+                    {autoRetry && remaining > 0 && (
+                      <button type="button" className={s.stop} onClick={stopWaiting}>
+                        <Square aria-hidden="true" /> Stop retrying
+                      </button>
+                    )}
                   </div>
                 ) : !data ? (
                   <div className={s.message} role="status">
-                    <strong>
-                      {progress
-                        ? stages[progress.progress.stage] || "Preparing the field"
-                        : "Checking images"}
-                    </strong>
-                    <p>A new field can take a few minutes. You can go back to the menu.</p>
+                    <strong>Fetching real SPHEREx images</strong>
+                    <p>
+                      Nebo asks NASA/IPAC IRSA for every SPHEREx exposure of this point, downloads them and
+                      stacks them into one image per epoch. A new field usually takes 1–3 minutes; after that
+                      it opens instantly. You can go back to the menu meanwhile.
+                    </p>
+                    <BuildSteps progress={progress} />
+                    {progress?.progress.stage === "waiting_for_archive" && (
+                      <p className={s.reassure}>
+                        This is normal: NASA&apos;s archive is very busy at times and can need 2, 3 or even 4
+                        attempts. Nebo keeps trying on its own for up to 5 minutes; you don&apos;t need to do
+                        anything.
+                      </p>
+                    )}
+                    <BuildBar progress={progress} />
+                    {progress && <p className={s.elapsed}>Elapsed {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}</p>}
                     {progress && (
-                      <>
-                        <progress
-                          max={progress.progress.total || 1}
-                          value={progress.progress.total ? progress.progress.done : undefined}
-                          aria-label="Field preparation"
-                        />
-                        <p>
-                          {progress.progress.total > 0
-                            ? `${progress.progress.done} of ${progress.progress.total}`
-                            : "Looking for available data…"}
-                        </p>
-                      </>
+                      <button type="button" className={s.stop} onClick={stopWaiting}>
+                        <Square aria-hidden="true" /> Stop
+                      </button>
                     )}
                   </div>
                 ) : !current ? (
@@ -402,13 +502,27 @@ export default function Field({
                         Loading epoch…
                       </span>
                     )}
+                    {building && <span className={s.previewTag}>Preview</span>}
+                    {!building && data?.patch.id && (
+                      <button
+                        ref={analysisButton}
+                        type="button"
+                        className={`${s.diffToggle} ${s.analysisToggle}`}
+                        aria-expanded={analysis === "open"}
+                        aria-controls="science-panel"
+                        title="Open the scientific analysis panel"
+                        onClick={() => (analysis === "open" ? closeAnalysis() : setAnalysis("open"))}
+                      >
+                        <Microscope aria-hidden="true" /> Analysis
+                      </button>
+                    )}
                     {/* The patch centre is the central pixel, which is where the target sits. */}
                     <span className={s.reticle} aria-hidden="true" />
                     <button
                       type="button"
                       className={s.diffToggle}
                       aria-pressed={difference}
-                      disabled={count < 2}
+                      disabled={!canCompare}
                       title="Show what changed since the first epoch"
                       onClick={() => setDifference((d) => !d)}
                     >
@@ -499,12 +613,29 @@ export default function Field({
                 {current
                   ? `Observed: ${epochDateRange(current.start_utc, current.end_utc)} UTC`
                   : "Observed: —"}
-                {count === 1 && " · Only one epoch is available; comparing needs at least two."}
+                {count === 1 && !building && (
+                  <span className={s.oneEpoch}>Only one epoch is available; comparing needs at least two.</span>
+                )}
               </p>
-              <p className={s.honest}>
-                <strong>Observed change.</strong> A change between images does not confirm a new
-                object. Transparent areas have no data.
-              </p>
+              {building && data ? (
+                <div className={`${s.honest} ${s.buildStatus}`} role="status">
+                  <p>
+                    <strong>Still downloading images</strong>
+                    {progress!.progress.total > 0 &&
+                      ` · ${progress!.progress.done} of ${progress!.progress.total} exposures`}
+                    . You can look at the preview; comparing epochs unlocks when every image is ready.
+                  </p>
+                  <BuildBar progress={progress} />
+                  <button type="button" className={s.stop} onClick={stopWaiting}>
+                    <Square aria-hidden="true" /> Stop loading
+                  </button>
+                </div>
+              ) : (
+                <p className={s.honest}>
+                  <strong>Observed change.</strong> A change between images does not confirm a new
+                  object. Transparent areas have no data.
+                </p>
+              )}
               <button
                 type="button"
                 className={s.compare}
@@ -514,7 +645,9 @@ export default function Field({
                 {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
                 {playing
                   ? "Pause"
-                  : !data || allPreloaded
+                  : building && data
+                    ? "Downloading…"
+                    : !data || allPreloaded
                     ? "Compare epochs"
                     : `Loading epochs ${preloaded}/${count}`}
               </button>
@@ -537,6 +670,7 @@ export default function Field({
                     epochs={data!.epochs}
                     current={epoch}
                     onPick={(i) => {
+                      if (building) return;
                       setPlaying(false);
                       setEpoch(i);
                     }}
@@ -553,12 +687,27 @@ export default function Field({
               </div>
             </div>
 
-            {data?.patch.id && (
-              <div className={sci.scienceSection}>
+          </div>
+            {data?.patch.id && !building && analysis !== "closed" && (
+              <aside
+                id="science-panel"
+                className={sci.drawer}
+                data-state={analysis}
+                role="dialog"
+                aria-labelledby="science-panel-title"
+              >
+                <header className={sci.drawerHeader}>
+                  <h2 id="science-panel-title" ref={analysisHeading} tabIndex={-1}>
+                    <Microscope aria-hidden="true" /> Scientific analysis
+                  </h2>
+                  <button type="button" className={sci.drawerClose} aria-label="Close scientific analysis" onClick={closeAnalysis}>
+                    <X aria-hidden="true" />
+                  </button>
+                </header>
+                <div className={sci.drawerBody}>
                 <div className={sci.tabs} role="tablist" aria-label="Scientific analysis filters">
                   {(
                     [
-                      ["none", "Hide analysis"],
                       ["diff", "Compare (3-Panel)"],
                       ["rgb", "RGB Composite"],
                       ["spectrum", "Spectrum (102 ch)"],
@@ -578,6 +727,8 @@ export default function Field({
                   ))}
                 </div>
 
+                {/* Keyed by tab: a crash in one analysis resets when another tab is chosen. */}
+                <AnalysisBoundary key={scienceTab}>
                 {scienceTab === "diff" && (
                   <EpochDiffTriplet
                     patchId={data.patch.id}
@@ -607,12 +758,74 @@ export default function Field({
                     epochIndex={epoch}
                   />
                 )}
-              </div>
+                </AnalysisBoundary>
+                </div>
+              </aside>
             )}
-          </div>
         </div>
       </div>
     </section>
+  );
+}
+
+/** One analysis that fails to render shows a note instead of taking the whole page down. */
+class AnalysisBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error("Scientific analysis failed to render", error);
+  }
+  render() {
+    return this.state.failed ? (
+      <p className={s.message} role="alert">
+        This analysis could not be shown for this field. The other tabs still work.
+      </p>
+    ) : (
+      this.props.children
+    );
+  }
+}
+
+// The backend build stages, grouped into the steps a visitor can follow.
+const buildSteps: { label: string; stages: string[] }[] = [
+  { label: "Search the SPHEREx archive (IRSA)", stages: ["queued", "querying", "waiting_for_archive"] },
+  { label: "Download the exposures", stages: ["downloading"] },
+  { label: "First image", stages: ["first_light"] },
+  { label: "One image per epoch", stages: ["preview_ready"] },
+  { label: "Add more exposures for a sharper image", stages: ["refining", "rendering"] },
+];
+
+function BuildSteps({ progress }: { progress: Building | null }) {
+  const stage = progress?.progress.stage ?? "queued";
+  const current = Math.max(0, buildSteps.findIndex((step) => step.stages.includes(stage)));
+  const { done, total } = progress?.progress ?? { done: 0, total: 0 };
+  return (
+    <ol className={s.buildSteps}>
+      {buildSteps.map((step, i) => (
+        <li key={step.label} data-state={i < current ? "done" : i === current ? "current" : "pending"} aria-current={i === current ? "step" : undefined}>
+          <span aria-hidden="true">{i < current ? "✓" : i === current ? "●" : "○"}</span>
+          {step.label}
+          {i === current && i === 1 && total > 0 && ` · ${done} of ${total}`}
+          {i === current && stage === "waiting_for_archive" &&
+            ` · NASA's archive is busy, retrying automatically (attempt ${done})`}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Determinate once the number of exposures is known; a moving stripe before that. */
+function BuildBar({ progress }: { progress: Building | null }) {
+  const total = progress?.progress.total ?? 0;
+  return (
+    <progress
+      className={s.buildBar}
+      max={total || 1}
+      value={total ? progress!.progress.done : undefined}
+      aria-label="Field preparation"
+    />
   );
 }
 

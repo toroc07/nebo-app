@@ -501,6 +501,32 @@
     text-overflow: ellipsis;
   }
 
+  .titleScreen .clearDestination {
+    position: absolute;
+    top: calc(3 * var(--u));
+    right: calc(3 * var(--u));
+    display: grid;
+    place-items: center;
+    width: max(18px, calc(18 * var(--u)));
+    height: max(18px, calc(18 * var(--u)));
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--cyan) 60%, transparent);
+    border-radius: 50%;
+    background: rgb(0 0 0 / 0.4);
+    color: var(--cyan);
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  .titleScreen .clearDestination:hover,
+  .titleScreen .clearDestination:focus-visible {
+    background: var(--cyan);
+    color: #000;
+  }
+  .titleScreen .clearDestination svg {
+    width: 70%;
+    height: 70%;
+  }
+
   /* Multi-function screen driven by the menu keys. */
   .mfd {
     flex-direction: column;

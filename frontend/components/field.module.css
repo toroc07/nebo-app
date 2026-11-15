@@ -366,6 +366,14 @@
   border: 1px solid rgb(63 210 255 / 0.4);
   border-radius: 999px;
 }
+.analysisToggle {
+  right: auto;
+  left: 8px;
+}
+.analysisToggle[aria-expanded="true"] {
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan-soft);
+}
 .diffToggle svg {
   width: 1.05em;
   height: 1.05em;
@@ -413,6 +421,141 @@
   bottom: 8px;
   font-size: 0.75em;
   color: var(--muted);
+}
+.previewTag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--cyan-soft);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.6);
+  font-size: 0.7em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  pointer-events: none;
+}
+.elapsed {
+  font-variant-numeric: tabular-nums;
+}
+.buildSteps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+.buildSteps li {
+  display: flex;
+  gap: 8px;
+}
+.buildSteps span {
+  width: 1em;
+  text-align: center;
+}
+.buildSteps [data-state="done"] {
+  color: var(--muted);
+}
+.buildSteps [data-state="current"] {
+  color: var(--cyan);
+  font-weight: 600;
+}
+.buildSteps [data-state="pending"] {
+  opacity: 0.55;
+}
+.buildBar {
+  width: 80%;
+  height: 6px;
+  appearance: none;
+  border: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.1);
+  accent-color: var(--cyan);
+}
+.buildBar::-webkit-progress-bar {
+  background: rgb(255 255 255 / 0.1);
+}
+.buildBar::-webkit-progress-value {
+  background: var(--cyan);
+}
+.buildBar::-moz-progress-bar {
+  background: var(--cyan);
+}
+/* Indeterminate: a stripe sweeping while the number of exposures is still unknown. */
+.buildBar:indeterminate {
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent) 0 0 / 40% 100% no-repeat
+    rgb(255 255 255 / 0.1);
+  animation: build-sweep 1.4s linear infinite;
+}
+.buildBar:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+.buildBar:indeterminate::-moz-progress-bar {
+  background: transparent;
+}
+@keyframes build-sweep {
+  from { background-position: -40% 0; }
+  to { background-position: 140% 0; }
+}
+:global([data-reduced="true"]) .buildBar:indeterminate {
+  animation: none;
+  background-position: 50% 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .buildBar:indeterminate {
+    animation: none;
+    background-position: 50% 0;
+  }
+}
+.reassure {
+  max-width: 34em;
+  color: var(--ink);
+  font-size: 0.95em;
+}
+.stop {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--cyan-soft);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.stop:hover,
+.stop:focus-visible {
+  border-color: var(--cyan);
+  color: var(--ink);
+}
+.stop svg {
+  width: 0.9em;
+  height: 0.9em;
+}
+/* Own line, and allowed to wrap: on wide screens the date line above does not wrap. */
+.oneEpoch {
+  display: block;
+  white-space: normal;
+  font-style: normal;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.buildStatus {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+}
+.buildStatus p {
+  margin: 0;
+}
+.buildStatus .buildBar {
+  width: 100%;
 }
 .message {
   display: flex;
