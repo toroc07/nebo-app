@@ -1,7 +1,6 @@
 "use client";
 // Observation viewer: a full-screen, interactive view of the SPHEREx epochs. The image is the
-// interface (zoom, pan, click for coordinates, drag a pin); the controls are compact overlays.
-// Deliberately unstyled beyond the basics: the final look is decided by the menu.
+// interface (zoom, pan, click for coordinates, drag a pin); the controls follow the sky console.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { epochDateRange } from "@/lib/api";
 import {
@@ -280,7 +279,10 @@ export default function ObservationLab() {
   }
 
   return (
-    <main className={s.lab}>
+    <main className={s.lab} data-sky-placeholder={!fresh || !data || !current}>
+      {(!fresh || !data || !current) && (
+        <span className={s.referenceNote}>Sky reference · static preview</span>
+      )}
       {fresh && data && current && grid && worldGrid && (
         <ImageViewport
           src={epochImageUrl(source, current, data.palette)}
@@ -340,19 +342,22 @@ export default function ObservationLab() {
           type="button"
           className={s.panelButton}
           aria-expanded={panelOpen}
-          aria-controls="viewer-panel"
+          aria-controls="viewer-details"
           onClick={() => setPanelOpen((o) => !o)}
         >
-          Controls
+          {panelOpen ? "Hide controls" : "More controls"}
         </button>
       </header>
 
-      {panelOpen && (
-        <aside
-          id="viewer-panel"
-          className={s.panel}
-          aria-label="Viewer controls and image details"
-        >
+      <aside
+        className={s.panel}
+        aria-label="Observation controls and image details"
+      >
+          <div className={s.consoleIdentity}>
+            <span className={s.mono}>NEBO · FLIGHT DECK / 02</span>
+            <strong>Observation lab</strong>
+            <span>● LIVE SURVEY</span>
+          </div>
           <div className={s.controls}>
             <label>
               Source
@@ -360,8 +365,8 @@ export default function ObservationLab() {
                 value={source}
                 onChange={(e) => setSource(e.target.value as Source)}
               >
-                <option value="api">Real SPHEREx data</option>
-                <option value="demo">Simulated demo (not real data)</option>
+                <option value="api">SPHEREx archive</option>
+                <option value="demo">Simulated demo</option>
               </select>
             </label>
             <label>
@@ -414,6 +419,7 @@ export default function ObservationLab() {
               Expected position
             </label>
           </div>
+          <div id="viewer-details" hidden={!panelOpen} className={s.details}>
           {data && current && (
             <dl className={s.meta}>
               <dt>Orientation</dt>
@@ -467,8 +473,8 @@ export default function ObservationLab() {
               </dd>
             </dl>
           )}
-        </aside>
-      )}
+          </div>
+      </aside>
 
       {(status || error) && (
         <div className={s.message}>

@@ -348,3 +348,208 @@
     max-width: calc(100% - 24px);
   }
 }
+
+/* The observation screen uses the same sky-first flight deck as Explore. */
+.lab {
+  --console-face: #304044;
+  --console-screen: #172424;
+  --console-ink: #e5eee6;
+  --console-muted: #bfcdc4;
+  --console-line: #9aa8a3;
+  --console-phosphor: #afe99b;
+  --console-space: 8px;
+  --console-key: 44px;
+  --console-small: 0.75rem;
+  --console-tiny: 0.75rem;
+  --console-speed: 150ms;
+  color-scheme: dark;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: 110px;
+  font-family: Plex, Arial, sans-serif;
+  color: var(--console-ink);
+  background: #09111c;
+}
+.lab[data-sky-placeholder="true"] {
+  background: #09111c url("/panels/sky-reference.png") center top / auto max(1000px, 140dvh) no-repeat;
+}
+.referenceNote {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  top: 70px;
+  padding: 5px 8px;
+  background: #132537;
+  color: #e5eee6;
+  font: .75rem PlexMono, monospace;
+}
+.lab *, .lab *::before, .lab *::after { box-sizing: border-box; }
+.lab button, .lab select, .lab input { font: inherit; }
+.lab button { cursor: pointer; }
+.lab button:focus-visible, .lab select:focus-visible, .lab input:focus-visible, .lab a:focus-visible {
+  outline: 3px solid var(--console-phosphor);
+  outline-offset: 2px;
+}
+.top {
+  z-index: 5;
+  justify-content: flex-start;
+  padding: 12px;
+  background: none;
+}
+.back, .panelButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--console-key);
+  padding: 7px 12px;
+  border: 1px solid var(--console-line);
+  background: #172424;
+  color: var(--console-ink);
+  text-decoration: none;
+  font-size: var(--console-small);
+}
+.title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.simulated { background: #392817; color: #ffe3ac; border-color: #e7b96f; }
+.segment {
+  margin-left: auto;
+  border: 2px solid var(--console-line);
+  border-radius: 1px;
+  background: var(--console-screen);
+}
+.segment button { min-height: 44px; border-radius: 0; background: transparent; font-size: var(--console-small); }
+.segment button[aria-pressed="true"] { background: var(--console-phosphor); color: #172424; }
+.panelButton { margin-left: 0; }
+.panel, .dock {
+  position: relative;
+  z-index: 4;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  top: auto;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  text-align: left;
+  pointer-events: auto;
+}
+.panel {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+  overflow: visible;
+  padding: 12px 16px 8px;
+  border-top: 5px solid #a2aeaa;
+  background: repeating-linear-gradient(90deg, transparent 0 120px, rgb(14 25 29 / .16) 120px 122px), linear-gradient(#7d888b, #536368 8%, #344347 55%, #253437);
+  box-shadow: inset 0 2px #d2dad4, 0 -8px 26px #061015;
+}
+.consoleIdentity, .controls > label, .readout {
+  min-width: 0;
+  background: var(--console-screen);
+  border: 2px solid var(--console-line);
+  box-shadow: inset 0 0 0 2px #253634;
+}
+.consoleIdentity {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 6px 9px;
+  line-height: 1.2;
+}
+.consoleIdentity .mono { color: var(--console-muted); font-size: var(--console-tiny); letter-spacing: .06em; }
+.consoleIdentity strong { color: #edf4ea; font: 700 1.1rem Barlow, sans-serif; }
+.consoleIdentity > span:last-child { color: var(--console-phosphor); font: var(--console-tiny) PlexMono, monospace; }
+.controls { display: grid; grid-template-columns: minmax(130px, 1.4fr) minmax(160px, 2fr) minmax(90px, .7fr) minmax(120px, 1fr) minmax(126px, 1fr); gap: 10px; min-width: 0; }
+.controls > label { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 5px 7px; color: var(--console-muted); font: var(--console-tiny) PlexMono, monospace; text-transform: uppercase; letter-spacing: .04em; }
+.controls select { width: 100%; min-width: 0; min-height: 44px; padding: 4px 5px; background: #172424; border: 1px solid #7d9189; border-radius: 1px; color: #dcf6c8; font: var(--console-small) PlexMono, monospace; text-transform: none; letter-spacing: normal; white-space: nowrap; text-overflow: ellipsis; }
+.controls .check { flex-direction: row; align-items: center; gap: 8px; text-transform: none; font-family: Plex, sans-serif; font-size: var(--console-small); }
+.controls .check input { width: 24px; height: 24px; accent-color: var(--console-phosphor); }
+.meta {
+  position: absolute;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(42dvh, 300px);
+  overflow: auto;
+  padding: 16px;
+  border: 2px solid var(--console-line);
+  background: #172424;
+  color: var(--console-ink);
+  box-shadow: 0 10px 32px #050c10bb;
+}
+.details[hidden] { display: none; }
+.mono { font-family: PlexMono, monospace; }
+.dock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 1.4fr);
+  align-items: center;
+  gap: 8px 16px;
+  padding: 0 16px 12px;
+  background: repeating-linear-gradient(90deg, transparent 0 120px, rgb(14 25 29 / .16) 120px 122px), #2b3b3e;
+}
+.note { grid-column: 1 / -1; max-width: none; border-radius: 0; padding: 0; background: transparent; font-size: var(--console-small); color: var(--console-muted); }
+.readout { max-width: none; min-height: 55px; padding: 7px 10px; border-radius: 0; color: var(--console-phosphor); font: var(--console-small) PlexMono, monospace; }
+.readout p, .pinInfo p { margin: 0 0 4px; }
+.bottom { width: auto; display: flex; align-items: end; gap: 8px; min-width: 0; }
+.bottom label { color: var(--console-muted); font: var(--console-small) PlexMono, monospace; }
+.bottom .epoch { flex: 1 1 220px; min-width: 0; }
+.bottom input[type="range"] { display: block; width: 100%; accent-color: var(--console-phosphor); }
+.bottom button, .bottom select, .row button { min-height: var(--console-key); padding: 7px 10px; border: 2px solid var(--console-line); border-right-color: #172629; border-bottom-color: #172629; border-radius: 1px; background: linear-gradient(#67767a, #34474c); color: #f1f5eb; white-space: nowrap; }
+.bottom button:hover, .row button:hover { background: #53676b; }
+.bottom button:disabled { opacity: .5; cursor: not-allowed; }
+.bottom select { min-width: 80px; }
+.pinInfo { margin-top: 4px; padding-top: 4px; }
+.row { gap: 6px; }
+.row button { min-height: 32px; }
+.zoomControls { z-index: 3; top: 74px; left: auto; right: 12px; gap: 0; padding: 0; border: 1px solid var(--console-line); background: #172424; }
+.zoomControls button { min-width: 44px; min-height: 44px; border: 0; border-bottom: 1px solid #789088; border-radius: 0; background: transparent; color: var(--console-ink); }
+.zoomControls span { max-width: 100px; padding: 3px 6px; font-size: var(--console-tiny); color: var(--console-muted); text-align: center; }
+.message { z-index: 3; border: 1px solid var(--console-line); border-radius: 1px; background: #172424; }
+@media (max-width: 900px) {
+  .panel { grid-template-columns: 1fr; }
+  .consoleIdentity { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+  .controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .controls > label:nth-child(2) { grid-column: span 2; }
+  .dock { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .referenceNote { top: 106px; }
+  .top { gap: 4px; padding: 6px; }
+  .backText { display: inline; }
+  .back, .panelButton { padding: 5px 8px; font-size: .75rem; }
+  .segment { order: 3; margin: 0; }
+  .segment button { min-width: 44px; padding: 5px 8px; }
+  .panel { padding: 8px; gap: 5px; }
+  .consoleIdentity { padding: 3px 7px; }
+  .controls { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .controls > label:nth-child(2) { grid-column: auto; }
+  .controls > label { padding: 4px; }
+  .controls > label:nth-child(4), .controls > label:nth-child(5) { display: none; }
+  .lab:has(.panelButton[aria-expanded="true"]) .controls > label:nth-child(4),
+  .lab:has(.panelButton[aria-expanded="true"]) .controls > label:nth-child(5) { display: flex; grid-column: span 3; }
+  .dock { padding: 0 8px 8px; gap: 4px; }
+  .note { font-size: .75rem; }
+  .readout { min-height: 0; padding: 4px 7px; font-size: .75rem; }
+  .bottom { flex-wrap: wrap; }
+  .bottom .epoch { flex-basis: 100%; }
+  .bottom button, .bottom select { min-height: 44px; }
+  .zoomControls { top: 100px; right: 6px; flex-direction: column; max-width: 85px; }
+  .zoomControls button { min-height: 44px; }
+  .zoomControls span { display: none; }
+}
+@media (max-height: 450px) {
+  .panel { padding-block: 5px; }
+  .consoleIdentity { display: none; }
+  .controls > label { padding-block: 2px; }
+  .dock { padding-bottom: 4px; }
+  .note { display: none; }
+  .readout { display: none; }
+  .zoomControls { top: 70px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lab button { transition: none; }
+}
