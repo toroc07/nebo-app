@@ -70,6 +70,27 @@ def test_psf_photometry_without_variance_is_not_a_number():
     assert phot["snr"] is None and phot["sigma_stat"] is None and phot["flux_hat"] is None
 
 
+def test_epoch_saturation_counts_frames_inside_the_epoch():
+    from types import SimpleNamespace
+
+    from app.service import mjd_to_datetime
+
+    image = SimpleNamespace(start_utc=mjd_to_datetime(61000.0), end_utc=mjd_to_datetime(61010.0))
+    exposures = [
+        {"mjd_start": 61000.0, "saturated_near_target": True},
+        {"mjd_start": 61005.0, "saturated_near_target": False},
+        {"mjd_start": 61010.0, "saturated_near_target": True},
+        {"mjd_start": 61007.0, "saturated_near_target": None},  # unknown: not counted
+        {"mjd_start": 61200.0, "saturated_near_target": True},  # another epoch
+    ]
+    assert main._epoch_saturation(exposures, image) == {
+        "saturated_frames": 2,
+        "checked_frames": 3,
+        "saturated_frac": 0.667,
+    }
+    assert main._epoch_saturation([], image)["saturated_frac"] is None
+
+
 def test_difference_snr_and_mahalanobis_displacement():
     img1, var1 = _make_gaussian_cutout(cx=10.0, cy=10.0, peak=120.0, noise_sigma=0.5)
     img2, var2 = _make_gaussian_cutout(cx=12.0, cy=10.0, peak=120.0, noise_sigma=0.5)

@@ -13,6 +13,9 @@ import {
 } from "@/lib/api";
 import s from "./science.module.css";
 
+const LOWER_LIMIT_NOTE =
+  "Approximate lower limit: saturated pixels near the object are clipped or missing, so the real flux is higher.";
+
 const VOTE_CHOICES = [
   { id: "real_change", label: "Real change" },
   { id: "moving_object", label: "Moving object" },
@@ -196,14 +199,25 @@ export default function ModelsAndMetricsPanel({
                 {metricsData.image_photometry.map((row) => (
                   <tr key={row.epoch_index}>
                     <td>E{row.epoch_index + 1}</td>
-                    <td>{row.flux_hat?.toFixed(3) ?? "n/a"}</td>
+                    <td title={row.saturated_frames > 0 ? LOWER_LIMIT_NOTE : undefined}>
+                      {row.flux_hat === null
+                        ? "n/a"
+                        : `${row.saturated_frames > 0 ? "≥" : ""}${row.flux_hat.toFixed(3)}`}
+                    </td>
                     <td>{row.sigma_stat?.toFixed(3) ?? "n/a"}</td>
-                    <td>{row.snr?.toFixed(1) ?? "n/a"}</td>
+                    <td>
+                      {row.saturated_frames > 0
+                        ? `${row.saturated_frames}/${row.checked_frames} frames saturated`
+                        : row.snr?.toFixed(1) ?? "n/a"}
+                    </td>
                     <td>{Math.round(row.p_clean_flags * 100)}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+          {metricsData.image_photometry.some((row) => row.saturated_frames > 0) && (
+            <p className={s.note}>≥ {LOWER_LIMIT_NOTE}</p>
           )}
         </div>
 

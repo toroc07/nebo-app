@@ -72,6 +72,10 @@ export type ImagePhotometryPoint = {
   q_fit_epsf: number;
   chi2_psf: number;
   p_clean_flags: number;
+  // Frames of the epoch with OVERFLOW/SUR_ERROR near the object; snr and sigma are null when > 0.
+  saturated_frames: number;
+  checked_frames: number;
+  saturated_frac: number | null;
   f_artifact_flags: number;
 };
 

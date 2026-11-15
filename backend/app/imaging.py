@@ -41,7 +41,10 @@ SCIENCE_EXCLUDED_FLAG_NAMES = (
 # (OVERFLOW, SUR_ERROR, BLOOM) but still carry finite values; hiding them would punch holes
 # exactly where the interesting objects are.
 DISPLAY_EXCLUDED_FLAG_NAMES = ("NONFUNC", "MISSING_DATA")
+# Saturation: the ramp overflowed or could not be fit. The core of a bright star is NaN or clipped.
+SATURATION_FLAG_NAMES = ("OVERFLOW", "SUR_ERROR")
 DEFAULT_FLAG_BITS = {
+    "OVERFLOW": 1,
     "SUR_ERROR": 2,
     "NONFUNC": 6,
     "DICHROIC": 7,
@@ -73,6 +76,23 @@ class Cutout:
     clean_pixel_fraction: float = float("nan")
     corners_icrs: list[list[float]] = field(default_factory=list)
     wcs_header_dict: dict[str, Any] = field(default_factory=dict)
+    saturated: np.ndarray | None = None  # True where OVERFLOW or SUR_ERROR is set.
+
+
+def saturated_near(
+    saturated: np.ndarray, x: float | None, y: float | None, radius: int = 2
+) -> bool | None:
+    """Any saturated pixel in the (2r+1)^2 box around (x, y), the ePSF photometry aperture.
+
+    None when the position is not finite or falls outside the cutout.
+    """
+    if x is None or y is None or not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    ix, iy = round(x), round(y)
+    ny, nx = saturated.shape
+    if not (0 <= ix < nx and 0 <= iy < ny):
+        return None
+    return bool(saturated[max(0, iy - radius) : iy + radius + 1, max(0, ix - radius) : ix + radius + 1].any())
 
 
 _WCS_HEADER_KEYS = (
@@ -144,6 +164,7 @@ def read_cutout(data: bytes, ra: float, dec: float) -> Cutout:
         variance[hidden] = np.nan
 
         science_bad = hidden | ((flags & flag_mask(flags_header, SCIENCE_EXCLUDED_FLAG_NAMES)) != 0)
+        saturated = (flags & flag_mask(flags_header, SATURATION_FLAG_NAMES)) != 0
         science_bad_fraction = float(np.mean(science_bad)) if science_bad.size else float("nan")
         clean_pixel_fraction = (
             float(1.0 - science_bad_fraction) if math.isfinite(science_bad_fraction) else float("nan")
@@ -188,6 +209,7 @@ def read_cutout(data: bytes, ra: float, dec: float) -> Cutout:
         clean_pixel_fraction=clean_pixel_fraction,
         corners_icrs=corners_icrs,
         wcs_header_dict=wcs_header_dict,
+        saturated=saturated,
     )
 
 

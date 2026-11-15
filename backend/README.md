@@ -76,6 +76,10 @@ python -m app.etl run --file fields.csv                         # one "ra,dec" p
 
 `python -m app.preload` is an alias of `etl run`.
 
+Timelines built before saturation tracking have `saturated_near_target` NULL. Fill them without
+a rebuild: `python -m app.backfill_saturation` (cached cutouts only) or add `--download` to fetch
+the missing ones (set `NEBO_DISK_CACHE=0` to not keep them).
+
 **Worker mode.** By default (`NEBO_BUILD_MODE=inline`) the API builds a missing field in its own
 threads. On platforms that throttle CPU between requests (Cloud Run) set
 `NEBO_BUILD_MODE=queue` on the API: it then only queues the field and answers `202`, and a
@@ -292,6 +296,9 @@ Simulated science profiles (`simulated: true`). Fields the web client reads (kee
   `image_photometry[]` measured on the patch's float32 arrays (moving targets at their
   proper-motion position for each epoch). `snr` uses the measured `sigma_stat`;
   `sigma_reported` adds the 3% floor. Fields are `null` when the epoch has no usable variance.
+  `saturated_frames`/`checked_frames`/`saturated_frac` count the epoch's frames with OVERFLOW or
+  SUR_ERROR in the 5×5 box around the object; when any is saturated `snr` and the sigmas are
+  `null` and `flux_hat` is only an approximate lower limit.
 - `/models/event`: `treeshap_values.top_drivers[]` of `{feature, phi}`.
 
 ### Database catalog hydration (`python -m app.db sync-catalogs`)
