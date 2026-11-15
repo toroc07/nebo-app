@@ -13,6 +13,8 @@ import {
   Play,
   RotateCcw,
   Square,
+  X,
+  Microscope,
 } from "lucide-react";
 import {
   timeline,
@@ -110,7 +112,11 @@ export default function Field({
     [interval, setIntervalMs] = useState(speed),
     [imageError, setImageError] = useState(false),
     [imageLoading, setImageLoading] = useState(true),
-    [scienceTab, setScienceTab] = useState<"none" | "diff" | "rgb" | "spectrum" | "models">("none");
+    [scienceTab, setScienceTab] = useState<"diff" | "rgb" | "spectrum" | "models">("diff"),
+    // Science side panel; "closing" keeps it mounted while it slides out.
+    [analysis, setAnalysis] = useState<"closed" | "open" | "closing">("closed");
+  const analysisButton = useRef<HTMLButtonElement>(null),
+    analysisHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     setDetector(recommended);
   }, [recommended]);
@@ -122,6 +128,7 @@ export default function Field({
     const abort = new AbortController();
     polling.current = abort;
     setStopped(false);
+    setAnalysis("closed");
     setData(null);
     setProgress(null);
     setError("");
@@ -246,6 +253,26 @@ export default function Field({
     return () => clearTimeout(id);
   }, [powered, reduced]);
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  function closeAnalysis() {
+    analysisButton.current?.focus();
+    setAnalysis(reduced ? "closed" : "closing");
+  }
+  // Esc closes the panel wherever the focus is (it is not modal: the image stays usable).
+  useEffect(() => {
+    if (analysis !== "open") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeAnalysis();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [analysis]);
+  useEffect(() => {
+    if (analysis === "open") analysisHeading.current?.focus();
+    if (analysis !== "closing") return;
+    // Matches the 280 ms slide-out in science.module.css.
+    const id = setTimeout(() => setAnalysis("closed"), 280);
+    return () => clearTimeout(id);
+  }, [analysis]);
   /** Stop waiting: polling ends here; the backend build is not cancelled and is cached. */
   function stopWaiting() {
     polling.current?.abort();
@@ -476,6 +503,19 @@ export default function Field({
                       </span>
                     )}
                     {building && <span className={s.previewTag}>Preview</span>}
+                    {!building && data?.patch.id && (
+                      <button
+                        ref={analysisButton}
+                        type="button"
+                        className={`${s.diffToggle} ${s.analysisToggle}`}
+                        aria-expanded={analysis === "open"}
+                        aria-controls="science-panel"
+                        title="Open the scientific analysis panel"
+                        onClick={() => (analysis === "open" ? closeAnalysis() : setAnalysis("open"))}
+                      >
+                        <Microscope aria-hidden="true" /> Analysis
+                      </button>
+                    )}
                     {/* The patch centre is the central pixel, which is where the target sits. */}
                     <span className={s.reticle} aria-hidden="true" />
                     <button
@@ -647,12 +687,27 @@ export default function Field({
               </div>
             </div>
 
-            {data?.patch.id && !building && (
-              <div className={sci.scienceSection}>
+          </div>
+            {data?.patch.id && !building && analysis !== "closed" && (
+              <aside
+                id="science-panel"
+                className={sci.drawer}
+                data-state={analysis}
+                role="dialog"
+                aria-labelledby="science-panel-title"
+              >
+                <header className={sci.drawerHeader}>
+                  <h2 id="science-panel-title" ref={analysisHeading} tabIndex={-1}>
+                    <Microscope aria-hidden="true" /> Scientific analysis
+                  </h2>
+                  <button type="button" className={sci.drawerClose} aria-label="Close scientific analysis" onClick={closeAnalysis}>
+                    <X aria-hidden="true" />
+                  </button>
+                </header>
+                <div className={sci.drawerBody}>
                 <div className={sci.tabs} role="tablist" aria-label="Scientific analysis filters">
                   {(
                     [
-                      ["none", "Hide analysis"],
                       ["diff", "Compare (3-Panel)"],
                       ["rgb", "RGB Composite"],
                       ["spectrum", "Spectrum (102 ch)"],
@@ -701,9 +756,9 @@ export default function Field({
                     epochIndex={epoch}
                   />
                 )}
-              </div>
+                </div>
+              </aside>
             )}
-          </div>
         </div>
       </div>
     </section>

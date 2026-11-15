@@ -366,6 +366,14 @@
   border: 1px solid rgb(63 210 255 / 0.4);
   border-radius: 999px;
 }
+.analysisToggle {
+  right: auto;
+  left: 8px;
+}
+.analysisToggle[aria-expanded="true"] {
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan-soft);
+}
 .diffToggle svg {
   width: 1.05em;
   height: 1.05em;
