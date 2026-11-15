@@ -68,6 +68,16 @@ fetched the first time it is switched on (right column, above the cards):
 - **Alignment** (top-right of the image, `/patches/{id}/alignment`): per-epoch offset against slow
   Gaia stars. "Simulate an offset" shifts the last epoch by 2 px to show the warning; the banner
   always says "Simulation".
+- **Mask** (each epoch's `mask_url`, `/images/{id}/mask.png`): amber over the pixels with no valid
+  data (NaN in the float co-add). All epochs' masks are fetched when switched on
+  (`loadMaskFractions` reads `X-Masked-Fraction`), so the blink never waits; the status line gives
+  the share for the epoch on screen or says every pixel has valid data. Disabled while building or
+  when the epoch has no float data.
+
+The Object card's "This epoch" block shows the span and λ range (`coverageLabel`), "Images" with
+frames used of available and the clean-pixel share (`qualityLabel`), and "Notes": amber chips from
+the epoch's `warnings` (`epochWarnings`; falls back to `coverage.mixed_bursts` on an older API).
+Coordinates add the galactic and ecliptic latitude (`latitudeLabel`). No animation is involved.
 
 A status line under the switches says what each active layer holds, or why it is empty
 ("the archive did not answer", "no sources returned", "not available for this field yet"); a

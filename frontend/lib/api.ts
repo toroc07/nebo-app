@@ -29,6 +29,27 @@ export type Epoch = {
   releases?: string[];
   /** How long the epoch lasts and which wavelengths its exposures cover (LVF filter). */
   coverage?: EpochCoverage;
+  frames_available?: number;
+  /** Frames and flags of the epoch (P1-3); missing from older API builds. */
+  quality?: EpochQuality;
+  /** Calm notes about what may make this epoch less reliable (P1-3). */
+  warnings?: EpochWarning[];
+  /** Amber-on-transparent PNG of the pixels with no valid data, same grid as `image_url`. */
+  mask_url?: string;
+};
+export type EpochQuality = {
+  frames_used: number;
+  frames_available: number;
+  /** Mean share of pixels free of science-excluding flags in the frames used (0-1). */
+  clean_fraction: number | null;
+  flagged_fraction: number | null;
+  /** Frames with OVERFLOW/SUR_ERROR at the centre mark, out of the frames checked. */
+  saturated_frames: number;
+  saturation_checked_frames?: number;
+};
+export type EpochWarning = {
+  code: "few_frames" | "dense_field" | "saturation" | "mixed_bursts" | (string & {});
+  text: string;
 };
 export type EpochCoverage = {
   /** First to last exposure of the epoch, counting every frame IRSA has (used or not). */
@@ -48,6 +69,9 @@ export type Timeline = {
   detector: { id: number; bandpass?: string; wavelength_range_um: number[] };
   size: { name?: string; side_arcmin: number; width_px?: number; height_px?: number; pixel_scale_arcsec: number };
   epochs: Epoch[];
+  /** Galactic and ecliptic latitude of the patch centre, degrees (P1-3). */
+  galactic_b?: number;
+  ecliptic_beta?: number;
 };
 
 export type SpectralChannelPoint = {
@@ -403,6 +427,52 @@ export function coverageLabel(coverage?: EpochCoverage | null) {
   const lambda = coverage.wavelength_um;
   if (lambda) parts.push(`λ ${lambda.min.toFixed(2)}–${lambda.max.toFixed(2)} µm`);
   return parts.join(" · ");
+}
+// "16 of 17 used · 98% clean pixels" (images of the epoch); the share is never rounded up to 100%.
+export function qualityLabel(epoch?: Epoch | null) {
+  if (!epoch) return null;
+  const used = epoch.quality?.frames_used ?? epoch.frames_used;
+  const available = epoch.quality?.frames_available ?? epoch.frames_available;
+  const images = available ? `${used} of ${available} used` : `${used} used`;
+  const clean = epoch.quality?.clean_fraction;
+  if (clean == null || !Number.isFinite(clean)) return images;
+  const pct = clean >= 1 ? 100 : Math.min(99, Math.round(clean * 100));
+  return `${images} · ${pct}% clean pixels`;
+}
+const WARNING_LABELS: Record<string, string> = {
+  few_frames: "Few images",
+  dense_field: "Crowded field",
+  saturation: "Saturation",
+  mixed_bursts: "Mixed bursts",
+};
+/** Short chip label of a warning code; unknown codes from a newer API still show. */
+export function warningLabel(code: string) {
+  return WARNING_LABELS[code] ?? "Note";
+}
+/**
+ * The epoch's warnings as the API sends them. An API without `warnings` still flags an epoch
+ * that mixes observing bursts, from its coverage.
+ */
+export function epochWarnings(epoch?: Epoch | null): EpochWarning[] {
+  if (!epoch) return [];
+  if (Array.isArray(epoch.warnings)) return epoch.warnings;
+  const coverage = epoch.coverage;
+  return coverage?.mixed_bursts
+    ? [
+        {
+          code: "mixed_bursts",
+          text: `Mixes separate observing bursts (frames used up to ${Math.round(coverage.max_gap_days)} days apart): the date of this image is approximate.`,
+        },
+      ]
+    : [];
+}
+// "b +14.1° · β +28.2°" (galactic, ecliptic latitude); null when the API did not send them.
+export function latitudeLabel(tl?: Pick<Timeline, "galactic_b" | "ecliptic_beta"> | null) {
+  const fmt = (v: number) => `${v < 0 ? "−" : "+"}${Math.abs(v).toFixed(1)}°`;
+  const parts = [];
+  if (tl?.galactic_b != null && Number.isFinite(tl.galactic_b)) parts.push(`b ${fmt(tl.galactic_b)}`);
+  if (tl?.ecliptic_beta != null && Number.isFinite(tl.ecliptic_beta)) parts.push(`β ${fmt(tl.ecliptic_beta)}`);
+  return parts.length ? parts.join(" · ") : null;
 }
 export function nextEpoch(index: number, count: number) {
   return count > 1 ? (index + 1) % count : 0;

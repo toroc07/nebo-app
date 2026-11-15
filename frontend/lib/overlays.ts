@@ -2,7 +2,7 @@
 // and suggested destinations (contracts: `/patches/{id}/wise`, `/patches/{id}/alignment` and
 // `/explore/suggested` in backend/README.md). Gaia stars come from lib/lab/gaia.ts.
 // Relative imports so the node test runner can load this file directly.
-import { read, type CandidateDetection } from "./api";
+import { ApiError, imageUrl, read, type CandidateDetection, type Epoch } from "./api";
 import {
   FAST_MOVER_MAS_YR,
   type GaiaPosition,
@@ -272,6 +272,42 @@ export function layerLine(name: string, state: LayerState, noun: string, total?:
   if (total === 0) return `${name}: no ${noun} returned for this field`;
   if (inImage === 0) return `${name}: ${total} ${noun}, none inside this image`;
   return `${name}: ${inImage ?? total} ${noun} on this image`;
+}
+
+/**
+ * Share of pixels without valid data in each epoch, from the `X-Masked-Fraction` header of its
+ * mask PNG (`/images/{id}/mask.png`). The masks are immutable, so the <img> layer reuses this
+ * download from the HTTP cache. null for an epoch without a mask URL or header.
+ */
+export async function loadMaskFractions(epochs: Epoch[], signal?: AbortSignal): Promise<(number | null)[]> {
+  return Promise.all(
+    epochs.map(async (e) => {
+      if (!e.mask_url) return null;
+      let r: Response;
+      try {
+        r = await fetch(imageUrl(e.mask_url), { signal });
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        throw new ApiError(0);
+      }
+      if (!r.ok) throw new ApiError(r.status);
+      await r.blob(); // Read the body so the response is cached whole.
+      const header = r.headers.get("X-Masked-Fraction");
+      const fraction = header === null ? NaN : Number(header);
+      return Number.isFinite(fraction) ? fraction : null;
+    }),
+  );
+}
+
+/** Status line of the mask layer for the epoch on screen; an empty mask says so. */
+export function maskLine(state: LayerState, fraction: number | null | undefined): string {
+  if (state?.error) return `Mask: ${state.error}`;
+  if (!state?.value) return "Mask: loading…";
+  if (fraction == null) return "Mask: amber = no valid data in this epoch";
+  if (fraction === 0) return "Mask: every pixel of this epoch has valid data";
+  const pct = fraction * 100;
+  const shown = pct < 0.1 ? "<0.1" : pct < 10 ? pct.toFixed(1) : String(Math.round(pct));
+  return `Mask: amber = no valid data (${shown}% of this epoch: not covered, or unusable in every image)`;
 }
 
 /** Whether a destination opens instantly: a preloaded patch within 30″ (the backend's reuse rule). */

@@ -14,6 +14,7 @@ import {
   Play,
   RotateCcw,
   Square,
+  SquareDashed,
   X,
   Microscope,
   ScanLine,
@@ -29,6 +30,10 @@ import {
   epochDateRange,
   releaseLabel,
   coverageLabel,
+  epochWarnings,
+  latitudeLabel,
+  qualityLabel,
+  warningLabel,
   ApiError,
   fetchPatchCandidates,
   read,
@@ -48,6 +53,8 @@ import {
   isPreloaded,
   layerLine,
   loadAlignment,
+  loadMaskFractions,
+  maskLine,
   MAX_CHANGE_LABELS,
   loadSuggestions,
   loadWise,
@@ -378,7 +385,7 @@ export default function Field({
   const elapsed = buildStart.current ? Math.max(0, Math.floor((now - buildStart.current) / 1000)) : 0;
 
   // Catalog layers: off by default, each fetched the first time it is switched on for a field.
-  const [layers, setLayers] = useState({ gaia: false, wise: false, changes: false, alignment: false });
+  const [layers, setLayers] = useState({ gaia: false, wise: false, changes: false, alignment: false, mask: false });
   const [simulateOffset, setSimulateOffset] = useState(false);
   const [selected, setSelected] = useState<Selection | null>(null);
   const toggle = (layer: keyof typeof layers) => setLayers((l) => ({ ...l, [layer]: !l[layer] }));
@@ -392,6 +399,10 @@ export default function Field({
   // Badges compare the first and last epochs, so they stay put while blinking.
   const changesLayer = useLayer(layers.changes && count > 1, fieldKey, (signal) =>
     fetchPatchCandidates(patchId, { detector, size, epoch_a: 0, epoch_b: count - 1 }, signal),
+  );
+  // Mask layer: one immutable PNG per epoch, all fetched up front so blinking never waits.
+  const maskLayer = useLayer(layers.mask && !!data?.epochs.some((e) => e.mask_url), fieldKey, (signal) =>
+    loadMaskFractions(data!.epochs, signal),
   );
   const alignmentLayer = useLayer(layers.alignment, fieldKey, (signal) =>
     loadAlignment(patchId, detector, size, signal),
@@ -418,12 +429,20 @@ export default function Field({
   // The simulated offset moves the last epoch only, so blinking shows the jump against the others.
   const simulated = layers.alignment && simulateOffset && count > 1 && epoch === count - 1;
   const alignmentRow = layers.alignment ? alignmentFor(alignmentLayer?.value ?? null, epoch, simulated) : null;
+  const shifted =
+    simulated && pixels
+      ? {
+          translate: `${(SIMULATED_OFFSET_PX.dx / pixels.w) * 100}% ${(SIMULATED_OFFSET_PX.dy / pixels.h) * 100}%`,
+        }
+      : undefined;
+  const warnings = epochWarnings(current);
   const detail = selected && detailFor(selected);
   const imageSize = pixels ? { width: pixels.w, height: pixels.h } : null;
   const layerButtons = [
     ["gaia", "Gaia DR3", Star, gaiaLayer, !ready],
     ["wise", "CatWISE", Radar, wiseLayer, !ready],
     ["changes", "Changes", Sparkles, changesLayer, !ready || count < 2],
+    ["mask", "Mask", SquareDashed, maskLayer, !ready || !current?.mask_url],
   ] as const;
   const layerLines = [
     layers.gaia &&
@@ -447,6 +466,7 @@ export default function Field({
         ((changesLayer?.value?.candidates.length ?? 0) > MAX_CHANGE_LABELS
           ? ` · labels on cold candidates and the strongest; dots for the rest`
           : ""),
+    layers.mask && maskLine(maskLayer, maskLayer?.value?.[epoch]),
   ].filter((line): line is string => !!line);
 
   function stepEpoch(direction: 1 | -1) {
@@ -690,13 +710,7 @@ export default function Field({
                       alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}${showDifference ? ", shown as the difference from the first epoch" : ""}`}
                       width={420}
                       height={420}
-                      style={
-                        simulated && pixels
-                          ? {
-                              translate: `${(SIMULATED_OFFSET_PX.dx / pixels.w) * 100}% ${(SIMULATED_OFFSET_PX.dy / pixels.h) * 100}%`,
-                            }
-                          : undefined
-                      }
+                      style={shifted}
                       onLoad={(e) => {
                         setImageLoading(false);
                         setPixels({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
@@ -726,6 +740,26 @@ export default function Field({
                         <Microscope aria-hidden="true" /> Analysis
                       </button>
                     )}
+                    {/*
+                      * Mask layer: amber where the epoch has no valid data. Every epoch's mask is
+                      * mounted and only the one on screen is shown, so blinking stays instant.
+                      */}
+                    {layers.mask &&
+                      maskLayer?.value &&
+                      !building &&
+                      data?.epochs.map((e, i) =>
+                        e.mask_url ? (
+                          <img
+                            key={e.mask_url}
+                            className={s.maskLayer}
+                            src={imageUrl(e.mask_url)}
+                            alt=""
+                            aria-hidden="true"
+                            hidden={i !== epoch}
+                            style={i === epoch ? shifted : undefined}
+                          />
+                        ) : null,
+                      )}
                     {/* The patch centre is the central pixel, which is where the target sits. */}
                     <span className={s.reticle} aria-hidden="true" />
                     {pixels && !building && (
@@ -815,7 +849,8 @@ export default function Field({
                   </p>
                 )}
               </div>
-              {(selected || Object.values(layers).some(Boolean)) && (
+              {/* The mask has no markers to select. */}
+              {(selected || layers.gaia || layers.wise || layers.changes || layers.alignment) && (
                 <section className={s.card} aria-labelledby="field-selected" aria-live="polite">
                   <h2 id="field-selected">
                     <Crosshair aria-hidden="true" /> {detail ? detail.title : "Selected source"}
@@ -868,6 +903,12 @@ export default function Field({
                       )}
                     </dd>
                   </div>
+                  {latitudeLabel(data) && (
+                    <div>
+                      <dt title="Galactic latitude b and ecliptic latitude β">Latitude</dt>
+                      <dd className={s.sexagesimal}>{latitudeLabel(data)}</dd>
+                    </div>
+                  )}
                 </dl>
               </section>
               <section className={s.card} aria-labelledby="field-object">
@@ -904,15 +945,27 @@ export default function Field({
                   {coverageLabel(current?.coverage) && (
                     <div>
                       <dt>This epoch</dt>
+                      <dd>{coverageLabel(current?.coverage)}</dd>
+                    </div>
+                  )}
+                  {current && (
+                    <div>
+                      <dt>Images</dt>
+                      <dd>{qualityLabel(current)}</dd>
+                    </div>
+                  )}
+                  {warnings.length > 0 && (
+                    <div>
+                      <dt>Notes</dt>
                       <dd>
-                        {coverageLabel(current?.coverage)}
-                        {current?.coverage?.mixed_bursts && (
-                          <span role="note" className={s.epochWarning}>
-                            {" "}· Mixes separate observing bursts (consecutive frames used up to{" "}
-                            {Math.round(current.coverage.max_gap_days)} days apart): this image
-                            averages frames taken weeks apart, so its date is less precise.
-                          </span>
-                        )}
+                        {/* Amber chips: what may make this epoch less reliable, from the API. */}
+                        <ul className={s.epochNotes} aria-label="Data quality notes for this epoch">
+                          {warnings.map((w) => (
+                            <li key={w.code}>
+                              <b>{warningLabel(w.code)}</b> {w.text}
+                            </li>
+                          ))}
+                        </ul>
                       </dd>
                     </div>
                   )}

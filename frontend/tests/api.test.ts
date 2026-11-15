@@ -9,6 +9,11 @@ import {
   ApiError,
   diffImageUrl,
   rgbImageUrl,
+  qualityLabel,
+  epochWarnings,
+  warningLabel,
+  latitudeLabel,
+  type Epoch,
 } from "../lib/api";
 test("epoch dates show the whole span of the epoch, in UTC", () => {
   assert.equal(
@@ -213,4 +218,66 @@ test("science responses carry the fields the panels read", async () => {
   assert.deepEqual(spectrum.channels.filter((c) => c.is_blankch).map((c) => c.flux_mjy), [null, null]);
   assert.equal(typeof metrics.confidence.c_global, "number");
   assert.ok(model1.treeshap_values!.top_drivers!.every((d) => typeof d.phi === "number"));
+});
+
+const epochFixture = (extra: Partial<Epoch> = {}): Epoch => ({
+  index: 0,
+  start_utc: "2026-08-16T15:08:22+00:00",
+  end_utc: "2026-08-20T21:44:53+00:00",
+  image_url: "/api/v1/images/1.png",
+  frames_used: 16,
+  ...extra,
+});
+
+test("the epoch quality line shows images used of available and the clean share", () => {
+  const quality = {
+    frames_used: 16,
+    frames_available: 17,
+    clean_fraction: 0.9792,
+    flagged_fraction: 0.0208,
+    saturated_frames: 0,
+  };
+  assert.equal(qualityLabel(epochFixture({ quality })), "16 of 17 used · 98% clean pixels");
+  // Never rounded up to a perfect 100%.
+  assert.equal(
+    qualityLabel(epochFixture({ quality: { ...quality, clean_fraction: 0.997 } })),
+    "16 of 17 used · 99% clean pixels",
+  );
+  assert.equal(
+    qualityLabel(epochFixture({ quality: { ...quality, clean_fraction: 1 } })),
+    "16 of 17 used · 100% clean pixels",
+  );
+  // Unknown clean share, or an older API without `quality`.
+  assert.equal(
+    qualityLabel(epochFixture({ quality: { ...quality, clean_fraction: null } })),
+    "16 of 17 used",
+  );
+  assert.equal(qualityLabel(epochFixture({ frames_available: 24 })), "16 of 24 used");
+  assert.equal(qualityLabel(epochFixture()), "16 used");
+  assert.equal(qualityLabel(undefined), null);
+});
+
+test("epoch warnings come from the API, with a mixed-burst fallback for older APIs", () => {
+  const fromApi = [{ code: "saturation", text: "Saturated pixels at the centre mark." }];
+  assert.deepEqual(epochWarnings(epochFixture({ warnings: fromApi })), fromApi);
+  // An empty list from the API means "nothing to note", even if coverage would say otherwise.
+  const coverage = { span_days: 46.77, max_gap_days: 39.24, mixed_bursts: true, wavelength_um: null };
+  assert.deepEqual(epochWarnings(epochFixture({ warnings: [], coverage })), []);
+  const fallback = epochWarnings(epochFixture({ coverage }));
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].code, "mixed_bursts");
+  assert.match(fallback[0].text, /up to 39 days apart/);
+  assert.deepEqual(epochWarnings(epochFixture({ coverage: { ...coverage, mixed_bursts: false } })), []);
+  assert.deepEqual(epochWarnings(null), []);
+  assert.equal(warningLabel("few_frames"), "Few images");
+  assert.equal(warningLabel("dense_field"), "Crowded field");
+  assert.equal(warningLabel("something_new"), "Note");
+});
+
+test("latitude label shows galactic b and ecliptic beta with a true minus sign", () => {
+  assert.equal(latitudeLabel({ galactic_b: 14.102, ecliptic_beta: 28.207 }), "b +14.1° · β +28.2°");
+  assert.equal(latitudeLabel({ galactic_b: -19.382, ecliptic_beta: -28.68 }), "b −19.4° · β −28.7°");
+  assert.equal(latitudeLabel({ galactic_b: 3 }), "b +3.0°");
+  assert.equal(latitudeLabel({}), null);
+  assert.equal(latitudeLabel(null), null);
 });
