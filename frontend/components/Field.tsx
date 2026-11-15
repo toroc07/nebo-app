@@ -44,6 +44,7 @@ const stages: Record<string, string> = {
   first_light: "First images ready",
   preview_ready: "Preview ready",
   refining: "Adding more frames",
+  waiting_for_archive: "NASA's archive is busy, retrying automatically",
   querying: "Searching for observations",
   downloading: "Downloading images",
   rendering: "Preparing images",
@@ -99,6 +100,7 @@ export default function Field({
     [error, setError] = useState(""),
     [retryAt, setRetryAt] = useState(0),
     [now, setNow] = useState(Date.now()),
+    [autoRetry, setAutoRetry] = useState(false),
     [reload, setReload] = useState(0),
     [epoch, setEpoch] = useState(0),
     [playing, setPlaying] = useState(false),
@@ -120,6 +122,7 @@ export default function Field({
     setPlaying(false);
     setEpoch(0);
     setRetryAt(0);
+    setAutoRetry(false);
     buildStart.current = 0;
     timeline(query, size, detector, abort.signal, (b) => {
       setProgress(b);
@@ -144,6 +147,8 @@ export default function Field({
               ? e.message
               : "The service response could not be read.",
           );
+          // An IRSA outage is retried for the visitor; other failures wait for a click.
+          setAutoRetry(e instanceof ApiError && e.code === "archive_unavailable");
           if (e instanceof ApiError)
             setRetryAt(
               Date.now() +
@@ -235,6 +240,9 @@ export default function Field({
     return () => clearTimeout(id);
   }, [powered, reduced]);
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  useEffect(() => {
+    if (error && autoRetry && retryAt && now >= retryAt) setReload((n) => n + 1);
+  }, [error, autoRetry, retryAt, now]);
   const count = data?.epochs.length ?? 0;
   // A refined timeline can have a different number of epochs than its preview.
   useEffect(() => {
@@ -361,7 +369,11 @@ export default function Field({
                       onClick={() => setReload((x) => x + 1)}
                     >
                       <RotateCcw aria-hidden="true" />
-                      {remaining > 0 ? `Retry in ${remaining} s` : "Retry"}
+                      {remaining > 0
+                        ? autoRetry
+                          ? `Retrying automatically in ${remaining} s`
+                          : `Retry in ${remaining} s`
+                        : "Retry"}
                     </button>
                   </div>
                 ) : !data ? (
@@ -651,7 +663,7 @@ export default function Field({
 
 // The backend build stages, grouped into the steps a visitor can follow.
 const buildSteps: { label: string; stages: string[] }[] = [
-  { label: "Search the SPHEREx archive (IRSA)", stages: ["queued", "querying"] },
+  { label: "Search the SPHEREx archive (IRSA)", stages: ["queued", "querying", "waiting_for_archive"] },
   { label: "Download the exposures", stages: ["downloading"] },
   { label: "First image", stages: ["first_light"] },
   { label: "One image per epoch", stages: ["preview_ready"] },
@@ -669,6 +681,8 @@ function BuildSteps({ progress }: { progress: Building | null }) {
           <span aria-hidden="true">{i < current ? "✓" : i === current ? "●" : "○"}</span>
           {step.label}
           {i === current && i === 1 && total > 0 && ` · ${done} of ${total}`}
+          {i === current && stage === "waiting_for_archive" &&
+            ` · NASA's archive is busy, retrying automatically (attempt ${done})`}
         </li>
       ))}
     </ol>
