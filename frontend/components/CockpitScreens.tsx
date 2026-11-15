@@ -149,7 +149,12 @@ export default function CockpitScreens({
           ? `Overhead on Earth: ${lat(zenith.lat)} ${lon(zenith.lon)}${ground ? ` · ${ground}` : ""}`
           : "Overhead on Earth: —"}
       </p>
-      <EarthGlobe countries={countries} zenith={zenith} onOpen={() => onTab("sky")} />
+      <EarthGlobe
+        countries={countries}
+        zenith={zenith}
+        follow={focus ? `${focus.ra.toFixed(4)},${focus.dec.toFixed(4)}` : ""}
+        onOpen={() => onTab("sky")}
+      />
 
       <div className={s.titleScreen} style={place(276, 699, 390, 744)}>
         <strong>{selected?.name ?? (position ? "Custom position" : "Free flight")}</strong>
@@ -306,14 +311,21 @@ function Tools({ focus }: { focus: Position | null }) {
 function EarthGlobe({
   countries,
   zenith,
+  follow,
   onOpen,
 }: {
   countries: Countries;
   zenith: { lat: number; lon: number } | null;
+  /** The sky position the zenith comes from; a new one drops any manual rotation. */
+  follow: string;
   onOpen: () => void;
 }) {
   const [offset, setOffset] = useState<{ lon: number; lat: number } | null>(null);
-  const drag = useRef<{ x: number; y: number; lon: number; lat: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; lon: number; lat: number; moved: boolean } | null>(null);
+  // Set after a real drag so the click that ends it does not also open the Sky tab.
+  const dragged = useRef(false);
+  // Keyed on the sky position, not on `zenith`: that one also moves every second with the clock.
+  useEffect(() => setOffset(null), [follow]);
   const size = 100;
   const centre = offset ?? zenith ?? { lon: 0, lat: 0 };
   const projection = geoOrthographic()
@@ -328,15 +340,22 @@ function EarthGlobe({
 
   function onDown(e: PointerEvent<SVGSVGElement>) {
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, ...centre };
+    drag.current = { x: e.clientX, y: e.clientY, ...centre, moved: false };
+    dragged.current = false;
   }
   function onMove(e: PointerEvent<SVGSVGElement>) {
     if (!drag.current) return;
+    // A click with a little jitter is still a click, not a rotation.
+    if (!drag.current.moved && Math.hypot(e.clientX - drag.current.x, e.clientY - drag.current.y) < 4) return;
+    drag.current.moved = dragged.current = true;
     const k = 180 / e.currentTarget.getBoundingClientRect().width;
     setOffset({
       lon: drag.current.lon - (e.clientX - drag.current.x) * k,
       lat: Math.max(-89, Math.min(89, drag.current.lat + (e.clientY - drag.current.y) * k)),
     });
+  }
+  function endDrag() {
+    drag.current = null;
   }
   return (
     <figure className={s.earth} style={place(20, 691, 197, 789)}>
@@ -351,7 +370,9 @@ function EarthGlobe({
         tabIndex={0}
         onPointerDown={onDown}
         onPointerMove={onMove}
-        onPointerUp={() => (drag.current = null)}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
         onDoubleClick={() => setOffset(null)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -359,7 +380,10 @@ function EarthGlobe({
             onOpen();
           }
         }}
-        onClick={onOpen}
+        onClick={() => {
+          if (dragged.current) dragged.current = false;
+          else onOpen();
+        }}
       >
         <path className={s.earthSphere} d={path({ type: "Sphere" }) ?? ""} />
         <path className={s.earthGrid} d={path(geoGraticule10()) ?? ""} />
