@@ -246,6 +246,13 @@ def _cache_path(url: str) -> Path:
     return config.CACHE_DIR / "cutouts" / digest[:2] / f"{digest}.fits"
 
 
+def _write_cache(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".part")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 MAX_BACKOFF_S = 60.0
 
@@ -259,22 +266,25 @@ def _backoff_seconds(attempt: int, response: requests.Response | None) -> float:
 
 
 def fetch_cutout(uri: str, ra: float, dec: float, size_deg: float, retries: int = 4) -> bytes:
-    """Download a cutout as multi-extension FITS bytes, using an on-disk cache.
+    """Download a cutout as multi-extension FITS bytes, using the disk and GCS caches if enabled.
 
     IRSA answers 503 when it is overloaded (common during the hackathon), so transient
     errors are retried with exponential backoff. Other HTTP errors fail at once.
     """
     url = cutout_url(uri, ra, dec, size_deg)
     path = _cache_path(url)
-    if path.exists():
+    if config.DISK_CACHE and path.exists():
         return path.read_bytes()
 
     gcs = GCSStorageClient.from_env()
     gcs_object = gcs.build_object_name("cutouts", path.parent.name, path.name) if gcs else None
     if gcs is not None and gcs_object is not None:
         try:
-            if gcs.download_file(gcs_object, path):
-                return path.read_bytes()
+            cached = gcs.download_bytes(gcs_object)
+            if cached is not None:
+                if config.DISK_CACHE:
+                    _write_cache(path, cached)
+                return cached
         except Exception:
             log.warning("GCS cutout lookup failed for %s; falling back to IRSA", url, exc_info=True)
 
@@ -293,10 +303,8 @@ def fetch_cutout(uri: str, ra: float, dec: float, size_deg: float, retries: int 
             time.sleep(wait)
             continue
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".part")
-        tmp.write_bytes(response.content)
-        tmp.replace(path)
+        if config.DISK_CACHE:
+            _write_cache(path, response.content)
         if gcs is not None and gcs_object is not None:
             try:
                 gcs.upload_bytes(gcs_object, response.content, content_type="application/fits")

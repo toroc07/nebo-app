@@ -89,6 +89,12 @@ Run one worker per instance of the same image (`python -m app.etl worker` as the
 worker that dies mid-build is recovered automatically: after `STALE_BUILD_S` (15 min) the next
 request for that field queues it again. Never commit `DATABASE_URL`: it belongs in `backend/.env`.
 
+**Cloud Run memory.** Cloud Run keeps the container disk in RAM, and the cutout cache on disk
+only grows (about 4 MB per cutout, ~2000 for the whole catalogue), so a long `etl run` ends in an
+out-of-memory kill. Set `NEBO_DISK_CACHE=0` on the API and on every ETL job there; the GCS cache
+(when its bucket is configured) still avoids downloading a cutout twice. 2 GiB of memory is enough
+for a job that builds one timeline at a time.
+
 ## API reference
 
 Base path: `/api/v1`. Interactive docs: `http://127.0.0.1:8000/docs`.

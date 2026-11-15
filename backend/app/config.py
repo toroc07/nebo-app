@@ -16,6 +16,10 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 # On-disk cache of downloaded FITS cutouts (not the processed images, those live in Postgres).
 CACHE_DIR = Path(os.environ.get("NEBO_CACHE_DIR", BACKEND_DIR / ".cache"))
+# Set NEBO_DISK_CACHE=0 on Cloud Run: its disk lives in RAM, so a cache that only grows ends in
+# an out-of-memory kill (about 4 MB per cutout, ~2000 cutouts for the catalogue). The GCS cache,
+# when configured, still avoids downloading a cutout twice.
+DISK_CACHE = os.environ.get("NEBO_DISK_CACHE", "1").strip() != "0"
 
 # Comma-separated list of allowed origins for the frontend. "*" is fine while the API is
 # public, read-only and does not use cookies.

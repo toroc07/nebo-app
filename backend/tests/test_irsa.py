@@ -48,6 +48,18 @@ def test_retries_503_then_caches(fake_http):
     assert len(calls) == 3
 
 
+def test_disk_cache_can_be_turned_off(fake_http, monkeypatch, tmp_path):
+    # Cloud Run keeps its disk in RAM: with the cache off nothing is written there.
+    monkeypatch.setattr(config, "DISK_CACHE", False)
+    queue, calls, _ = fake_http
+    queue += [FakeResponse(200), FakeResponse(200)]
+
+    assert irsa.fetch_cutout(URI, 10.0, 20.0, 0.05) == b"FITS"
+    assert irsa.fetch_cutout(URI, 10.0, 20.0, 0.05) == b"FITS"
+    assert len(calls) == 2
+    assert not any(tmp_path.rglob("*.fits"))
+
+
 def test_does_not_retry_404(fake_http):
     queue, calls, _ = fake_http
     queue.append(FakeResponse(404))
