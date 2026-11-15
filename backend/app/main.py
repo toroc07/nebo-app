@@ -1153,15 +1153,15 @@ def _epoch_saturation(exposures: list[dict[str, Any]], image: Any) -> dict[str, 
     # The epoch spans the mjd_start of its frames (render_epoch_images); 1 s of slack for rounding.
     lo = datetime_to_mjd(image.start_utc) - 1e-5
     hi = datetime_to_mjd(image.end_utc) + 1e-5
-    known = [
-        e["saturated_near_target"]
-        for e in exposures
-        if lo <= e["mjd_start"] <= hi and e.get("saturated_near_target") is not None
-    ]
+    flags = [e.get("saturated_near_target") for e in exposures if lo <= e["mjd_start"] <= hi]
+    known = [f for f in flags if f is not None]
     saturated = sum(known)
     return {
+        # Tri-state: unchecked frames (e.g. the cutout could not be fetched) never count as clean.
+        "saturated": True if saturated else (False if flags and len(known) == len(flags) else None),
         "saturated_frames": saturated,
         "checked_frames": len(known),
+        "total_frames": len(flags),
         "saturated_frac": round(saturated / len(known), 3) if known else None,
     }
 
@@ -1196,7 +1196,7 @@ def get_patch_metrics(
                     data["image"], data["variance"], center_xy=center
                 )
                 saturation = _epoch_saturation(exposures, img_info)
-                if saturation["saturated_frames"]:
+                if saturation["saturated"]:
                     # Saturated cores are NaN or clipped: the flux is only an approximate lower
                     # limit and the propagated sigma ignores the missing core.
                     phot |= {"sigma_stat": None, "sigma_reported": None, "snr": None}

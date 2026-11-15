@@ -7,6 +7,7 @@ import {
   fetchPatchMetrics,
   submitCitizenVote,
   type CitizenVote,
+  type ImagePhotometryPoint,
   type Model1EventResponse,
   type Model3ForecastResponse,
   type PatchMetricsResponse,
@@ -15,6 +16,16 @@ import s from "./science.module.css";
 
 const LOWER_LIMIT_NOTE =
   "Approximate lower limit: saturated pixels near the object are clipped or missing, so the real flux is higher.";
+
+// Never present unchecked frames as clean: null saturation reads "n/a".
+function saturationLabel(row: ImagePhotometryPoint): string {
+  if (row.saturated === null) return "n/a";
+  return `${row.saturated_frames}/${row.total_frames} frames`;
+}
+
+function saturationTitle(row: ImagePhotometryPoint): string {
+  return `${row.checked_frames} of ${row.total_frames} frames checked for OVERFLOW/SUR_ERROR near the object`;
+}
 
 const VOTE_CHOICES = [
   { id: "real_change", label: "Real change" },
@@ -192,6 +203,7 @@ export default function ModelsAndMetricsPanel({
                   <th>Flux</th>
                   <th>σ (measured)</th>
                   <th>SNR</th>
+                  <th>Saturation</th>
                   <th>Clean</th>
                 </tr>
               </thead>
@@ -199,17 +211,14 @@ export default function ModelsAndMetricsPanel({
                 {metricsData.image_photometry.map((row) => (
                   <tr key={row.epoch_index}>
                     <td>E{row.epoch_index + 1}</td>
-                    <td title={row.saturated_frames > 0 ? LOWER_LIMIT_NOTE : undefined}>
+                    <td title={row.saturated ? LOWER_LIMIT_NOTE : undefined}>
                       {row.flux_hat === null
                         ? "n/a"
-                        : `${row.saturated_frames > 0 ? "≥" : ""}${row.flux_hat.toFixed(3)}`}
+                        : `${row.saturated ? "≥" : ""}${row.flux_hat.toFixed(3)}`}
                     </td>
                     <td>{row.sigma_stat?.toFixed(3) ?? "n/a"}</td>
-                    <td>
-                      {row.saturated_frames > 0
-                        ? `${row.saturated_frames}/${row.checked_frames} frames saturated`
-                        : row.snr?.toFixed(1) ?? "n/a"}
-                    </td>
+                    <td>{row.snr?.toFixed(1) ?? "n/a"}</td>
+                    <td title={saturationTitle(row)}>{saturationLabel(row)}</td>
                     <td>{Math.round(row.p_clean_flags * 100)}%</td>
                   </tr>
                 ))}
@@ -218,6 +227,11 @@ export default function ModelsAndMetricsPanel({
           )}
           {metricsData.image_photometry.some((row) => row.saturated_frames > 0) && (
             <p className={s.note}>≥ {LOWER_LIMIT_NOTE}</p>
+          )}
+          {metricsData.image_photometry.some((row) => row.saturated === null) && (
+            <p className={s.note}>
+              Saturation n/a: some frames could not be checked, so the epoch is not known to be clean.
+            </p>
           )}
         </div>
 

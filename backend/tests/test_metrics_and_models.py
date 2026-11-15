@@ -84,10 +84,18 @@ def test_epoch_saturation_counts_frames_inside_the_epoch():
         {"mjd_start": 61200.0, "saturated_near_target": True},  # another epoch
     ]
     assert main._epoch_saturation(exposures, image) == {
+        "saturated": True,
         "saturated_frames": 2,
         "checked_frames": 3,
+        "total_frames": 4,
         "saturated_frac": 0.667,
     }
+    clean = [{"mjd_start": 61001.0, "saturated_near_target": False}]
+    assert main._epoch_saturation(clean, image)["saturated"] is False
+    # One unchecked frame: not known to be clean.
+    partial = clean + [{"mjd_start": 61002.0, "saturated_near_target": None}]
+    assert main._epoch_saturation(partial, image)["saturated"] is None
+    assert main._epoch_saturation([], image)["saturated"] is None
     assert main._epoch_saturation([], image)["saturated_frac"] is None
 
 

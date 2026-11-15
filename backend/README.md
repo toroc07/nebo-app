@@ -299,6 +299,8 @@ Simulated science profiles (`simulated: true`). Fields the web client reads (kee
   `saturated_frames`/`checked_frames`/`saturated_frac` count the epoch's frames with OVERFLOW or
   SUR_ERROR in the 5×5 box around the object; when any is saturated `snr` and the sigmas are
   `null` and `flux_hat` is only an approximate lower limit.
+  `saturated` is tri-state: `true` (some frame saturated), `false` (every frame checked, none
+  saturated) or `null` (frames left unchecked: never read as clean; the UI shows "n/a").
 - `/models/event`: `treeshap_values.top_drivers[]` of `{feature, phi}`.
 
 ### Database catalog hydration (`python -m app.db sync-catalogs`)

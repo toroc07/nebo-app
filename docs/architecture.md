@@ -549,7 +549,8 @@ Newest first. One line per change that affects this document.
 
 - **2026-11-15** — Saturation: `nasa_sector_exposures.saturated_near_target` (OVERFLOW/SUR_ERROR
   in the 5×5 photometry box at the object's propagated position). `/metrics` `image_photometry`
-  adds `saturated_frames`, `checked_frames`, `saturated_frac`; saturated epochs return `snr`/`sigma`
+  adds tri-state `saturated` plus `saturated_frames`, `checked_frames`, `total_frames`,
+  `saturated_frac`; saturated epochs return `snr`/`sigma`
   as `null` and the UI shows the flux as an approximate lower limit (≥). Older rows:
   `python -m app.backfill_saturation [--download]`.
 - **2026-11-15** — `/metrics` `image_photometry`: `snr = flux_hat / sigma_stat` (noise
