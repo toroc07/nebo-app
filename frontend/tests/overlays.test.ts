@@ -10,6 +10,7 @@ import {
   labelledChanges,
   MAX_CHANGE_LABELS,
   layerLine,
+  maskLine,
   trajectory,
   wiseMarks,
   type Alignment,
@@ -170,4 +171,16 @@ test("labelledChanges labels every cold candidate and the strongest others", () 
   assert.equal(keys.size, MAX_CHANGE_LABELS);
   assert.ok(keys.has("99,0")); // the weak cold candidate still gets its badge
   assert.ok(keys.has("19,0") && !keys.has("0,0")); // strongest first
+});
+
+test("maskLine says when an epoch has no pixels without data", () => {
+  const loaded = { value: [0, 0.0321] };
+  assert.equal(maskLine({ error: "could not be loaded." }, undefined), "Mask: could not be loaded.");
+  assert.equal(maskLine({}, undefined), "Mask: loading…");
+  assert.equal(maskLine(null, undefined), "Mask: loading…");
+  assert.equal(maskLine(loaded, 0), "Mask: every pixel of this epoch has valid data");
+  assert.match(maskLine(loaded, 0.0321), /amber = no valid data \(3\.2% of this epoch/);
+  assert.match(maskLine(loaded, 0.0004), /\(<0\.1% of this epoch/);
+  assert.match(maskLine(loaded, 0.25), /\(25% of this epoch/);
+  assert.equal(maskLine(loaded, null), "Mask: amber = no valid data in this epoch");
 });

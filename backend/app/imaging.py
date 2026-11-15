@@ -401,6 +401,25 @@ def to_rgb_png(
     return buffer.getvalue()
 
 
+# Mask layer colour: the viewer's amber for data warnings (#fbbf24).
+MASK_RGB = (251, 191, 36)
+
+
+def to_mask_png(image: np.ndarray) -> tuple[bytes, float]:
+    """RGBA PNG on the image's grid: amber where the float data is NaN, transparent elsewhere.
+
+    Uses the float co-add, not the display PNG: the PNG fills small enclosed holes (saturated
+    star cores, ``fill_enclosed_holes``), which have no valid data. Flipped like ``to_png``
+    (north up). Also returns the masked share of the pixels.
+    """
+    missing = ~np.isfinite(image)
+    pixels = np.zeros(missing.shape + (4,), dtype=np.uint8)
+    pixels[missing] = (*MASK_RGB, 255)
+    buffer = io.BytesIO()
+    Image.fromarray(np.flipud(pixels)).save(buffer, format="PNG")
+    return buffer.getvalue(), float(missing.mean()) if missing.size else 0.0
+
+
 def to_npz(image: np.ndarray, variance: np.ndarray) -> bytes:
     """Float32 data for analysis (epoch subtraction, photometry); no stretch, no hole filling."""
     buffer = io.BytesIO()

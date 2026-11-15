@@ -1347,9 +1347,38 @@
   border-color: #fbbf24;
   box-shadow: 0 0 10px rgb(251 191 36 / 0.5);
 }
-/* Epoch built from separate observing bursts (P1-4): amber, like the other data warnings. */
-.epochWarning {
+/* Per-epoch data notes (P1-3, P1-4): amber chips, like the other data warnings. Static: no motion. */
+.epochNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.epochNotes li {
+  padding: 3px 8px;
+  font-size: 0.85em;
+  line-height: 1.35;
+  color: var(--ink);
+  background: rgb(251 191 36 / 0.07);
+  border: 1px solid rgb(251 191 36 / 0.5);
+  border-radius: 6px;
+}
+.epochNotes b {
+  margin-right: 4px;
+  font: 600 0.9em PlexMono, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: #fbbf24;
+}
+/* Mask layer (P1-3): amber over the pixels with no valid data, under the catalog markers. */
+.image > .maskLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.6;
+  pointer-events: none;
 }
 .cardHint {
   margin: 6px 18px;

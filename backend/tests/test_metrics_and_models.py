@@ -128,6 +128,96 @@ def test_epoch_coverage_flags_epochs_that_mix_bursts():
     assert coverage["wavelength_um"] is None
 
 
+def test_epoch_quality_averages_the_frames_inside_the_epoch():
+    from types import SimpleNamespace
+
+    from app.service import mjd_to_datetime
+
+    image = SimpleNamespace(
+        start_utc=mjd_to_datetime(61000.0),
+        end_utc=mjd_to_datetime(61010.0),
+        frames_used=3,
+        frames_available=5,
+    )
+    exposures = [
+        {"mjd_start": 61000.0, "clean_pixel_fraction": 0.9, "science_bad_fraction": 0.1,
+         "saturated_near_target": True},
+        {"mjd_start": 61004.0, "clean_pixel_fraction": 0.8, "science_bad_fraction": 0.2,
+         "saturated_near_target": False},
+        {"mjd_start": 61010.0, "clean_pixel_fraction": None, "science_bad_fraction": float("nan"),
+         "saturated_near_target": None},  # unknown: skipped, never counted as clean
+        {"mjd_start": 61300.0, "clean_pixel_fraction": 0.1, "science_bad_fraction": 0.9,
+         "saturated_near_target": True},  # another epoch
+    ]
+    assert main._epoch_quality(exposures, image) == {
+        "frames_used": 3,
+        "frames_available": 5,
+        "clean_fraction": pytest.approx(0.85),
+        "flagged_fraction": pytest.approx(0.15),
+        "saturated_frames": 1,
+        "saturation_checked_frames": 2,
+    }
+    empty = main._epoch_quality([], image)
+    assert empty["clean_fraction"] is None and empty["flagged_fraction"] is None
+    assert empty["saturated_frames"] == 0 and empty["saturation_checked_frames"] == 0
+
+
+def test_epoch_warnings_codes_and_thresholds():
+    quality = {"frames_used": 16, "saturated_frames": 0, "saturation_checked_frames": 16}
+    calm = {"mixed_bursts": False, "max_gap_days": 2.0}
+    assert main.epoch_warnings(quality, calm, galactic_b=45.0) == []
+    assert main.epoch_warnings(quality, calm, galactic_b=None) == []
+
+    few = main.epoch_warnings(quality | {"frames_used": 3}, calm, 45.0)
+    assert [w["code"] for w in few] == ["few_frames"] and "only 3 images" in few[0]["text"]
+    assert "only 1 image:" in main.epoch_warnings(quality | {"frames_used": 1}, calm, 45.0)[0]["text"]
+    assert main.epoch_warnings(quality | {"frames_used": 4}, calm, 45.0) == []
+
+    dense = main.epoch_warnings(quality, calm, galactic_b=-9.5)
+    assert [w["code"] for w in dense] == ["dense_field"] and "b -9.5°" in dense[0]["text"]
+    assert main.epoch_warnings(quality, calm, galactic_b=10.0) == []
+
+    everything = main.epoch_warnings(
+        quality | {"frames_used": 2, "saturated_frames": 2, "saturation_checked_frames": 2},
+        {"mixed_bursts": True, "max_gap_days": 39.24},
+        galactic_b=1.0,
+    )
+    assert [w["code"] for w in everything] == ["few_frames", "dense_field", "saturation", "mixed_bursts"]
+    assert "2 of 2 checked images" in everything[2]["text"]
+    assert "up to 39 days apart" in everything[3]["text"]
+    # Honest wording: warnings describe the data, they never claim a discovery.
+    assert not any("planet" in w["text"].lower() for w in everything)
+
+
+def test_sky_position_galactic_and_ecliptic_latitude():
+    # The north galactic pole (ICRS 192.85948, +27.12825) and the galactic centre.
+    assert main.sky_position(192.85948, 27.12825)["galactic_b"] == pytest.approx(90.0, abs=1e-3)
+    assert main.sky_position(266.40499, -28.93617)["galactic_b"] == pytest.approx(0.0, abs=1e-2)
+    # The north ecliptic pole is at RA 18h, Dec +66.56 deg.
+    assert main.sky_position(270.0, 66.5607)["ecliptic_beta"] == pytest.approx(90.0, abs=0.01)
+    assert main.sky_position(0.0, 0.0)["ecliptic_beta"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_mask_png_marks_exactly_the_pixels_without_data():
+    import io
+
+    from PIL import Image
+
+    image = np.ones((5, 5))
+    image[0, 1] = np.nan  # FITS row 0 is the bottom: the PNG's last row.
+    image[2, 2] = np.inf  # An enclosed hole: the display PNG fills it, the mask must not.
+    assert np.isfinite(imaging.fill_enclosed_holes(image.copy())[2, 2])
+    mask, fraction = imaging.to_mask_png(image)
+    pixels = np.asarray(Image.open(io.BytesIO(mask)).convert("RGBA"))
+    assert pixels.shape == (5, 5, 4)
+    assert fraction == pytest.approx(2 / 25)
+    masked = pixels[..., 3] > 0
+    assert masked.sum() == 2 and masked[4, 1] and masked[2, 2]
+    assert tuple(pixels[4, 1]) == (*imaging.MASK_RGB, 255)
+    clear, none = imaging.to_mask_png(np.ones((3, 3)))
+    assert none == 0.0 and not np.asarray(Image.open(io.BytesIO(clear)))[..., 3].any()
+
+
 def test_difference_snr_and_mahalanobis_displacement():
     img1, var1 = _make_gaussian_cutout(cx=10.0, cy=10.0, peak=120.0, noise_sigma=0.5)
     img2, var2 = _make_gaussian_cutout(cx=12.0, cy=10.0, peak=120.0, noise_sigma=0.5)

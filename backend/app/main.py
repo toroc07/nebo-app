@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import functools
 import hashlib
 import io
 import math
@@ -13,6 +14,8 @@ import time
 from typing import Any, Literal
 
 import numpy as np
+from astropy import units as u
+from astropy.coordinates import SkyCoord
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -82,7 +85,7 @@ app.add_middleware(
     allow_origins=config.CORS_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
-    expose_headers=["X-Diff-Limit"],
+    expose_headers=["X-Diff-Limit", "X-Masked-Fraction"],
 )
 
 
@@ -163,6 +166,81 @@ def _epoch_coverage(exposures: list[dict], image) -> dict:
     }
 
 
+def _mean_fraction(values: list[Any]) -> float | None:
+    """Mean of the finite values, rounded for display; None when there are none."""
+    finite = [float(v) for v in values if v is not None and math.isfinite(float(v))]
+    return round(sum(finite) / len(finite), 4) if finite else None
+
+
+def _epoch_quality(exposures: list[dict], image) -> dict:
+    """How many frames went into one epoch and how clean they were.
+
+    ``clean_fraction`` and ``flagged_fraction`` average the stored per-frame
+    ``clean_pixel_fraction`` / ``science_bad_fraction`` (pixels free of / carrying a flag that
+    excludes them from photometry, SPHEREx Explanatory Supplement Table 16) over the frames used
+    in the co-add. ``saturated_frames`` counts frames with OVERFLOW/SUR_ERROR in the photometry
+    box around the object; frames never checked are not counted (see
+    ``saturation_checked_frames``).
+    """
+    low, high = float(datetime_to_mjd(image.start_utc)), float(datetime_to_mjd(image.end_utc))
+    inside = [e for e in exposures if low - 1e-4 <= e["mjd_start"] <= high + 1e-4]
+    saturation = [e.get("saturated_near_target") for e in inside]
+    return {
+        "frames_used": image.frames_used,
+        "frames_available": image.frames_available,
+        "clean_fraction": _mean_fraction([e.get("clean_pixel_fraction") for e in inside]),
+        "flagged_fraction": _mean_fraction([e.get("science_bad_fraction") for e in inside]),
+        "saturated_frames": sum(1 for s in saturation if s is True),
+        "saturation_checked_frames": sum(1 for s in saturation if s is not None),
+    }
+
+
+@functools.lru_cache(maxsize=4096)
+def sky_position(ra: float, dec: float) -> dict:
+    """Galactic latitude b and (barycentric mean) ecliptic latitude beta of a patch, degrees."""
+    coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame="icrs")
+    return {
+        "galactic_b": round(float(coord.galactic.b.deg), 3),
+        "ecliptic_beta": round(float(coord.barycentricmeanecliptic.lat.deg), 3),
+    }
+
+
+def epoch_warnings(quality: dict, coverage: dict, galactic_b: float | None) -> list[dict]:
+    """Calm, honest notes about one epoch: what may make its image less reliable.
+
+    Codes: ``few_frames``, ``dense_field``, ``saturation``, ``mixed_bursts``. The text is the
+    viewer's wording; clients may show their own for a known code.
+    """
+    warnings: list[dict] = []
+    used = quality["frames_used"]
+    if used < config.FEW_FRAMES_WARNING:
+        warnings.append({
+            "code": "few_frames",
+            "text": f"Built from only {used} image{'' if used == 1 else 's'}: expect more noise "
+            "than in a full epoch.",
+        })
+    if galactic_b is not None and abs(galactic_b) < config.DENSE_FIELD_GALACTIC_B_DEG:
+        warnings.append({
+            "code": "dense_field",
+            "text": f"Crowded field near the Milky Way plane (b {galactic_b:+.1f}°): nearby "
+            "sources can blend together.",
+        })
+    if quality["saturated_frames"]:
+        warnings.append({
+            "code": "saturation",
+            "text": f"Saturated pixels at the centre mark in {quality['saturated_frames']} of "
+            f"{quality['saturation_checked_frames']} checked images: the brightness measured "
+            "there is only a lower limit.",
+        })
+    if coverage.get("mixed_bursts"):
+        warnings.append({
+            "code": "mixed_bursts",
+            "text": "Mixes separate observing bursts (frames used up to "
+            f"{round(coverage['max_gap_days'])} days apart): the date of this image is approximate.",
+        })
+    return warnings
+
+
 def _sector_payload(patch: Patch, size: str) -> dict:
     """Centre and 4 corners of the image in ICRS degrees (the centre is the central pixel)."""
     sector = imaging.compute_sector_coordinates(patch.ra, patch.dec, size, config.SIZES_DEG[size])
@@ -208,8 +286,19 @@ def _epochs_payload(view: TimelineView, size: str, store: Store) -> list[dict]:
         return []
     exposures = store.list_nasa_sector_exposures(view.patch.id, detector=view.detector)
     target = store.get_target(view.patch.target_slug) if view.patch.target_slug else None
-    return [
-        {
+    galactic_b = sky_position(view.patch.ra, view.patch.dec)["galactic_b"]
+    # The mask layer reads the float data, stored only with the largest size's final images.
+    largest = max(config.SIZES_DEG, key=config.SIZES_DEG.get)
+    with_npz = {
+        i.epoch_index: i.id
+        for i in (view.images if size == largest else store.list_images(view.timeline.id, largest))
+        if i.has_npz
+    }
+    epochs = []
+    for image in view.images:
+        coverage = _epoch_coverage(exposures, image)
+        quality = _epoch_quality(exposures, image)
+        epochs.append({
             "index": image.epoch_index,
             "start_utc": image.start_utc.isoformat(),
             "end_utc": image.end_utc.isoformat(),
@@ -219,13 +308,19 @@ def _epochs_payload(view: TimelineView, size: str, store: Store) -> list[dict]:
             "display_min": image.display_min,
             "display_max": image.display_max,
             "releases": _epoch_releases(exposures, image),
-            "coverage": _epoch_coverage(exposures, image),
+            "coverage": coverage,
+            "quality": quality,
+            "warnings": epoch_warnings(quality, coverage, galactic_b),
             "expected_position": _expected_position(view.patch, target, image.mid_mjd, size),
             "image_url": f"{API_PREFIX}/images/{image.id}.png",
+            **(
+                {"mask_url": f"{API_PREFIX}/images/{with_npz[image.epoch_index]}/mask.png?size={size}"}
+                if image.epoch_index in with_npz
+                else {}
+            ),
             **({"npz_url": f"{API_PREFIX}/images/{image.id}.npz"} if image.has_npz else {}),
-        }
-        for image in view.images
-    ]
+        })
+    return epochs
 
 
 def _timeline_meta_payload(
@@ -243,6 +338,7 @@ def _timeline_meta_payload(
         },
         "orientation": "north_up_east_left",
         "sector": _sector_payload(view.patch, size),
+        **sky_position(view.patch.ra, view.patch.dec),
         "display": {
             "stretch": "asinh",
             "unit": "MJy/sr",
@@ -503,6 +599,38 @@ def get_image(image_id: int = Path(..., ge=1), store: Store = Depends(get_store)
         content=png,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@app.get(f"{API_PREFIX}/images/{{image_id}}/mask.png")
+def get_image_mask(
+    image_id: int = Path(..., ge=1),
+    size: SizeName = Query(config.DEFAULT_SIZE, description="Crop of the epoch to mask, as /timeline."),
+    store: Store = Depends(get_store),
+) -> Response:
+    """Mask layer of one epoch: amber where it has no valid data, transparent elsewhere.
+
+    ``image_id`` is the epoch's image with float data (``mask_url`` in ``/timeline`` gives it);
+    the mask is its central crop for ``size``, on the same grid as that size's PNG. "No valid
+    data" = NaN in the float co-add: no frame covered the pixel, or it was NONFUNC/MISSING_DATA
+    or non-finite in every co-added frame (this includes saturated cores that the PNG fills for
+    display). Header ``X-Masked-Fraction`` is their share of the crop.
+    """
+    npz = store.get_npz(image_id)
+    if npz is None:
+        raise HTTPException(status_code=404, detail="No float data for this image.")
+    image = np.load(io.BytesIO(npz))["image"]
+    side = imaging.grid_pixels(config.SIZES_DEG[size])
+    if side > image.shape[0]:
+        raise HTTPException(status_code=404, detail="No float data for this size.")
+    mask, fraction = imaging.to_mask_png(imaging.crop_center(image, side))
+    return Response(
+        content=mask,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Masked-Fraction": f"{fraction:.4f}",
+        },
     )
 
 

@@ -74,6 +74,9 @@ CatWISE2020 data. The full split is in [architecture §9](architecture.md#9-real
 | Gaia distance | `1000 / parallax` (pc), only if parallax > 0.1 mas; 1 pc = 3.26156 ly | `gaia.py`, `frontend/lib/overlays.ts` | Detail card; tiny parallaxes give meaningless distances |
 | Epoch split | New epoch if gap > 30 d; spans cut at 14 d; spans < 12 frames merged into a neighbour | `service.group_into_epochs`, `split_into_epochs`, `config.py` | SPHEREx revisits a field in passes ~6 months apart; deep fields are observed for months |
 | Frames per epoch | ≤ 16, spread evenly over wavelength (`select_evenly`) | `config.py`, `service.py` | Bounded build time with full band coverage |
+| Epoch quality | `clean_fraction` = mean of per-frame `clean_pixel_fraction` (1 − share of pixels with a science-excluding flag) over the frames used; `flagged_fraction` = mean `science_bad_fraction` | `main._epoch_quality` | Shows how much of each epoch is trustworthy |
+| Epoch warnings | `few_frames` if frames used < 4 (`FEW_FRAMES_WARNING`: noise ≥ 2× a full 16-frame epoch); `dense_field` if \|b\| < 10° (`DENSE_FIELD_GALACTIC_B_DEG`: sources blend at 6.15″/px); `saturation` if any frame is saturated at the centre; `mixed_bursts` from `coverage` | `config.py`, `main.epoch_warnings` | Calm, honest notes next to each epoch |
+| Galactic / ecliptic latitude | astropy `SkyCoord(...).galactic.b`, `.barycentricmeanecliptic.lat` of the patch centre | `main.sky_position` | Crowding and zodiacal context of the field |
 
 ## 4. Imaging and display
 
@@ -83,6 +86,7 @@ CatWISE2020 data. The full split is in [architecture §9](architecture.md#9-real
 | Flags | Science exclusion list (SUR_ERROR … HALO); display drops only NONFUNC, MISSING_DATA | `imaging.py` | Keep bad pixels out of photometry but not out of the picture |
 | Co-add | Inverse variance: `mean = Σ(w·x)/Σw`, `var = 1/Σw`, `w = 1/var` | `imaging.py` | One image per epoch; noise falls as 1/√n |
 | Hole filling | NaN groups ≤ 16 px not touching the edge → max of their border | `imaging.py` | Display only: saturated star cores would look black |
+| Mask layer | Amber where the float co-add (NPZ) is NaN, central crop per size; not from the PNG, whose filled holes would hide saturated cores | `imaging.to_mask_png`, `/images/{id}/mask.png` | Shows which pixels carry no valid data |
 | Stretch limits | Percentiles 1 and 99.7, **shared by all epochs** of a size | `imaging.stretch_limits`, `main.py` (`display_min/max`) | Same scale for every epoch → visible changes are real |
 | Stretch curve | `asinh(clip((x−lo)/(hi−lo))·10) / asinh(10)` | `imaging.to_png` | Shows faint sources and bright stars together |
 | Palettes | amber; inferno | `imaging.py` | Colour only; never changes the data |

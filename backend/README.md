@@ -392,6 +392,27 @@ valid for bright sources; faint ones are dominated by sky background.
   `EPOCH_MAX_SPAN_DAYS`, which only happens when small spans were folded into it. `span_days`
   covers every frame of the epoch; `max_gap_days` and `wavelength_um` only the frames used in
   the co-add, so `max_gap_days` can exceed `EPOCH_GAP_DAYS` when unused frames sit in a gap.
+- per epoch: `quality`: `{frames_used, frames_available, clean_fraction, flagged_fraction,
+  saturated_frames, saturation_checked_frames}`. `clean_fraction` / `flagged_fraction` are the
+  mean of the stored per-frame `clean_pixel_fraction` / `science_bad_fraction` over the frames
+  used (`null` when none is stored); `saturated_frames` counts frames with OVERFLOW/SUR_ERROR in
+  the 5×5 box at the centre (frames never checked are not counted).
+- per epoch: `warnings`: list of `{code, text}`, empty when there is nothing to note. Codes:
+  `few_frames` (fewer than `FEW_FRAMES_WARNING` = 4 frames used), `dense_field` (|`galactic_b`| <
+  `DENSE_FIELD_GALACTIC_B_DEG` = 10°), `saturation` (`saturated_frames` > 0) and `mixed_bursts`
+  (from `coverage`). `text` is calm, ready-to-show wording.
+- per epoch: `mask_url` (only once the epoch has float data, i.e. a final build):
+  `/images/{id}/mask.png?size=<size>`, see below.
+- per timeline: `galactic_b` and `ecliptic_beta`, the galactic and (barycentric mean) ecliptic
+  latitude of the patch centre in degrees (astropy). Also in `202` answers.
+
+`GET /images/{id}/mask.png?size=small|medium|large`: the mask layer of one epoch. RGBA PNG on
+the same grid as that size's epoch PNG: amber (`#fbbf24`) where the float co-add is NaN (no frame
+covered the pixel, or it was NONFUNC/MISSING_DATA/non-finite in every frame used), transparent
+elsewhere. `id` is the epoch's image that holds the float data (the `large` one). Read from the
+NPZ, not the PNG: the PNG fills small enclosed holes (saturated cores) for display, the mask does
+not. Header `X-Masked-Fraction` (exposed by CORS) is the masked share; immutable, cache forever.
+`404` when the image has no float data.
 
 `GET /timeline/diff?a=0&b=1` (same `ra`/`dec`/`target`, `size`, `detector` as `/timeline`):
 PNG of epoch `b` minus epoch `a`. Red = brighter in `b`, blue = fainter, black = unchanged,

@@ -65,6 +65,12 @@ MIN_FRAMES_PER_EPOCH = 12
 # Frames co-added per epoch (noise falls as 1/sqrt(n)); a pass usually has 17-24 per detector.
 MAX_FRAMES_PER_EPOCH = 16
 
+# Per-epoch quality warnings shown in the viewer (GET /timeline, epochs[].warnings).
+# An epoch co-added from fewer frames than this is at least 2x noisier than a full one (16).
+FEW_FRAMES_WARNING = 4
+# Fields closer to the galactic plane than this are crowded: at 6.15"/px sources blend together.
+DENSE_FIELD_GALACTIC_B_DEG = 10.0
+
 # A "building" timeline not updated for this long is considered dead and is rebuilt.
 STALE_BUILD_S = 15 * 60
 # A failed timeline can be retried after this long.
