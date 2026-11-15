@@ -557,6 +557,14 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Journey (P1-2): the field viewer overlays Gaia DR3, CatWISE2020 and detected
+  changes (Known vs New badges), shows a detail card for the clicked source, an alignment check
+  with a labelled simulated offset, and suggested destinations. Frontend only; it reuses
+  `/patches/{id}/gaia|wise|candidates|alignment` and `/explore/suggested`. CatWISE: an IRSA answer
+  that is not a CSV table is now an error (it used to be cached as zero sources), and an empty
+  cached CatWISE list is ignored. Shared coordinate links accept an optional `name`. The
+  frontend reads `/candidates` changes from `classification` (it used to read a missing `label`,
+  so every change looked alike in the viewer and in the Analysis panel).
 - **2026-11-15** — Slow IRSA (P0-7): the Field gives up after 3 min without images (automatic
   retries included) and offers Retry / Choose another object; a field being built says it is not
   preloaded and points to the 5 catalogued targets. `NEBO_ARCHIVE_WAIT_S` default 300 → 150 s.
