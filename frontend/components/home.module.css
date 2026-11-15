@@ -25,6 +25,55 @@
   pointer-events: none;
 }
 
+/* The forest window: same cover-fit maths as the art, clipped to the octagonal glass. */
+.window {
+  position: absolute;
+  left: calc(50vw + (var(--win-x) - var(--art-w) / 2) * var(--S));
+  top: calc(50dvh + (var(--win-y) - var(--art-h) / 2) * var(--S));
+  width: calc(var(--win-w) * var(--S));
+  height: calc(var(--win-h) * var(--S));
+  overflow: hidden;
+  pointer-events: none;
+  clip-path: polygon(22% 3%, 62% 3%, 95% 24%, 95% 80%, 87% 96%, 12% 98%, 2% 80%, 2% 20%);
+}
+.leaf {
+  position: absolute;
+  top: calc(-14 * var(--S));
+  width: calc(var(--size) * var(--S));
+  height: calc(var(--size) * 0.62 * var(--S));
+  border-radius: 0 100% 0 100%;
+  background: linear-gradient(135deg, var(--leaf), color-mix(in srgb, var(--leaf), #3a1a05 45%));
+  box-shadow: 0 0 calc(3 * var(--S)) rgb(255 190 110 / 0.35);
+  opacity: 0;
+  animation: leaf-fall linear infinite;
+}
+@keyframes leaf-fall {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg) rotateX(0deg); }
+  8% { opacity: 0.95; }
+  25% { transform: translate(calc(var(--sway) * var(--S)), calc(var(--win-h) * 0.27 * var(--S))) rotate(120deg) rotateX(60deg); }
+  50% { transform: translate(calc(var(--sway) * -0.4 * var(--S)), calc(var(--win-h) * 0.55 * var(--S))) rotate(230deg) rotateX(0deg); }
+  75% { transform: translate(calc(var(--sway) * 0.8 * var(--S)), calc(var(--win-h) * 0.82 * var(--S))) rotate(340deg) rotateX(60deg); }
+  90% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(0, calc(var(--win-h) * 1.08 * var(--S))) rotate(450deg) rotateX(0deg); }
+}
+/* Dust in the low sun (the sun sits at the window's upper left). */
+.mote {
+  position: absolute;
+  width: max(2px, calc(2.5 * var(--S)));
+  height: max(2px, calc(2.5 * var(--S)));
+  border-radius: 50%;
+  background: rgb(255 226 170);
+  box-shadow: 0 0 calc(4 * var(--S)) rgb(255 200 120 / 0.9);
+  opacity: 0;
+  animation: mote-drift ease-in-out infinite;
+}
+@keyframes mote-drift {
+  0% { opacity: 0; transform: translate(0, 0); }
+  30% { opacity: 0.8; }
+  70% { opacity: 0.6; }
+  100% { opacity: 0; transform: translate(calc(26 * var(--S)), calc(-30 * var(--S))); }
+}
+
 /* The wall screen, centred on the bay wherever the cover crop falls. */
 .screen {
   position: absolute;
@@ -69,9 +118,6 @@
   pointer-events: none;
   user-select: none;
   filter: drop-shadow(0 0 calc(10 * var(--S)) rgb(63 210 255 / 0.35));
-}
-.header h1 span {
-  color: var(--cyan);
 }
 /* START pressed: the picture collapses to a line and goes dark before the camera turns. */
 .screen[data-off] {
@@ -216,7 +262,13 @@
   .screen {
     animation: none;
   }
+  .window {
+    display: none;
+  }
 }
 :global(html[data-reduced="true"]) .screen {
   animation: none;
+}
+:global(html[data-reduced="true"]) .window {
+  display: none;
 }

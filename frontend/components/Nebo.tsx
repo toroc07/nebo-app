@@ -577,7 +577,7 @@ export default function Nebo() {
         >
           <img
             className="brand-logo"
-            src="/brand/nebo-logo-cyan.png"
+            src="/brand/nebo-logo-ui.png"
             width={504}
             height={393}
             alt=""

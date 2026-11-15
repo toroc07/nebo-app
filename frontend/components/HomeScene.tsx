@@ -12,6 +12,8 @@ import s from "./home.module.css";
 export const HOME_ART = { w: 1536, h: 1024 };
 /** The screen bay inside home-bg.webp (art pixels). */
 export const HOME_BAY = { x: 731, y: 251, w: 701, h: 349 };
+/** Bounding box of the forest window's glass (art pixels); the octagon is a clip-path. */
+export const HOME_WINDOW = { x: 95, y: 250, w: 270, h: 350 };
 
 const bayStyle = {
   "--art-w": HOME_ART.w,
@@ -20,7 +22,41 @@ const bayStyle = {
   "--bay-y": HOME_BAY.y,
   "--bay-w": HOME_BAY.w,
   "--bay-h": HOME_BAY.h,
+  "--win-x": HOME_WINDOW.x,
+  "--win-y": HOME_WINDOW.y,
+  "--win-w": HOME_WINDOW.w,
+  "--win-h": HOME_WINDOW.h,
 } as CSSProperties;
+
+/*
+ * Life outside the window: leaves drifting down and dust motes in the sunlight. Fixed values
+ * (no Math.random) so server and client render the same markup.
+ * [left %, delay s, duration s, size art-px, sway art-px, hue]
+ */
+const LEAVES: [number, number, number, number, number, string][] = [
+  [8, 0, 9, 16, 34, "#e8a33a"],
+  [22, 3.2, 11, 13, -28, "#c9662a"],
+  [37, 6.5, 10, 18, 40, "#d9b44a"],
+  [51, 1.6, 12, 14, -36, "#9fae3c"],
+  [64, 4.8, 9.5, 16, 30, "#e08a2e"],
+  [78, 8.1, 11.5, 12, -24, "#c9662a"],
+  [90, 2.4, 10.5, 15, -40, "#e8a33a"],
+  [30, 9.6, 12.5, 11, 26, "#b8c24a"],
+  [45, 0.8, 8.5, 13, -30, "#d97a2a"],
+  [70, 5.6, 10, 17, 36, "#c9a03a"],
+  [15, 7.2, 11, 12, -22, "#9fae3c"],
+  [58, 10.4, 9, 14, 28, "#e8a33a"],
+];
+/** [left %, top %, delay s, duration s] */
+const MOTES: [number, number, number, number][] = [
+  [12, 30, 0, 7],
+  [20, 18, 2.5, 9],
+  [28, 42, 1.2, 8],
+  [16, 55, 4, 10],
+  [34, 26, 5.5, 7.5],
+  [42, 48, 3, 9.5],
+  [8, 40, 6.2, 8.5],
+];
 
 export default function HomeScene({
   headingRef,
@@ -46,10 +82,35 @@ export default function HomeScene({
   return (
     <section className={s.scene} data-scene="home" aria-labelledby="home-title" style={bayStyle}>
       <img className={s.room} src="/panels/home-bg.webp" alt="" aria-hidden="true" draggable={false} />
+      <div className={s.window} aria-hidden="true">
+        {MOTES.map(([left, top, delay, dur], i) => (
+          <span
+            key={`m${i}`}
+            className={s.mote}
+            style={{ left: `${left}%`, top: `${top}%`, animationDelay: `${delay}s`, animationDuration: `${dur}s` }}
+          />
+        ))}
+        {LEAVES.map(([left, delay, dur, size, sway, color], i) => (
+          <span
+            key={`l${i}`}
+            className={s.leaf}
+            style={
+              {
+                left: `${left}%`,
+                animationDelay: `${delay}s`,
+                animationDuration: `${dur}s`,
+                "--size": size,
+                "--sway": sway,
+                "--leaf": color,
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
       <div className={s.screen} data-off={off || undefined}>
         <img
           className={s.logo}
-          src="/brand/nebo-logo-cyan.png"
+          src="/brand/nebo-logo-ui.png"
           alt=""
           aria-hidden="true"
           width={504}
@@ -61,7 +122,7 @@ export default function HomeScene({
             <span aria-hidden="true" /> Landed · Earth · systems ready
           </p>
           <h1 id="home-title" ref={headingRef} tabIndex={-1}>
-            Nebo<span>.</span>
+            Nebo
           </h1>
           <p className={s.tagline}>The infrared sky of SPHEREx, epoch by epoch.</p>
         </header>
