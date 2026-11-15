@@ -45,6 +45,7 @@ class MemoryStore:
         self.model2_classifications: dict[tuple[int, str], dict[str, Any]] = {}
         self.model3_forecasts: dict[tuple[int, str], dict[str, Any]] = {}
         self.citizen_votes: list[dict[str, Any]] = []
+        self.chat_messages: list[dict[str, Any]] = []
         self._ids = {
             "patch": 0,
             "timeline": 0,
@@ -590,3 +591,36 @@ class MemoryStore:
             if v["patch_id"] == patch_id and (epoch_index is None or v["epoch_index"] == epoch_index)
         ]
         return sorted(rows, key=lambda x: x["id"])
+
+    # ----- public chat ------------------------------------------------------------------
+
+    def add_chat_message(self, room: str, nickname: str, body: str) -> dict[str, Any]:
+        with self._lock:
+            row = {
+                "id": len(self.chat_messages) + 1 if not self.chat_messages
+                else self.chat_messages[-1]["id"] + 1,
+                "room": room,
+                "nickname": nickname,
+                "body": body,
+                "created_at": datetime.now(timezone.utc),
+            }
+            self.chat_messages.append(row)
+            return dict(row)
+
+    def list_chat_messages(
+        self, room: str, after_id: int, limit: int, max_age_s: float
+    ) -> list[dict[str, Any]]:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_s)
+        with self._lock:
+            rows = [
+                dict(m) for m in self.chat_messages
+                if m["room"] == room and m["created_at"] > cutoff and m["id"] > after_id
+            ]
+        return rows[:limit] if after_id > 0 else rows[-limit:]
+
+    def purge_chat_messages(self, max_age_s: float) -> int:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_s)
+        with self._lock:
+            before = len(self.chat_messages)
+            self.chat_messages = [m for m in self.chat_messages if m["created_at"] >= cutoff]
+            return before - len(self.chat_messages)

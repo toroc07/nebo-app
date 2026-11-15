@@ -175,6 +175,7 @@ flowchart TB
 | Science (simulated) | `GET /patches/{id}/spectrum`, `GET /patches/{id}/metrics`, `POST /patches/{id}/analyze` |
 | Models (simulated) | `POST /models/classify-event`, `POST /models/classify-spectrum`, `POST /models/forecast-temporal`, `GET /patches/{id}/models/{event,spectrum,forecast}` |
 | Citizen votes | `POST /patches/{id}/votes`, `GET /patches/{id}/votes` |
+| Public chat | `GET /chat/{room}/messages?after=`, `POST /chat/{room}/messages` (room = target slug or `general`) |
 
 Status codes on `/timeline`: `200` ready, `202` building (`Retry-After` 2 s early, 5 s later),
 `502` failed (retried after 60 s), `503` no database or too many builds, `404` unknown target.
@@ -353,6 +354,13 @@ erDiagram
     text provider
     jsonb response_json
   }
+  chat_messages {
+    bigint id PK
+    text room
+    text nickname
+    text body
+    timestamptz created_at
+  }
 ```
 
 | Table | What it holds | Written by | Read by |
@@ -369,6 +377,7 @@ erDiagram
 | `ml_model1_attributions`, `ml_model2_classifications`, `ml_model3_forecasts` | Model outputs (simulated) | model endpoints | model endpoints |
 | `citizen_votes` | Votes per epoch (`REAL_CHANGE`, `ARTIFACT`, `MOVER`, `UNSURE`) | `POST /votes` | `GET /votes` (token hidden) |
 | `gcs_media_assets` | Planned registry of GCS objects | **never written** | **never read** |
+| `chat_messages` | Public chat, one room per target plus `general`; no foreign keys, rows older than 24 h are deleted | `POST /chat/{room}/messages` (also purges) | `GET /chat/{room}/messages` |
 
 ## 7. Caches and storage
 
@@ -409,6 +418,7 @@ graph TD
   Nebo --> Cockpit
   Nebo --> Flight["Flight (r3f star burst)"]
   Nebo --> Field["Field (blink comparator)"]
+  Nebo --> ChatPanel["ChatPanel (public chat, sky view only)"]
   Field --> ConsoleSelect
   Cockpit --> CoordinatePanel
   Cockpit --> CockpitScreens
@@ -426,6 +436,7 @@ graph TD
 | `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
 | `ObservationLab`, `ImageViewport` | Lab viewer: nested 3′/6′/15′ levels, pan/zoom, Gaia rings, expected-position marker |
 | `Flight` | Short WebGL2 star burst (desktop only) |
+| `ChatPanel` | Public chat key (top-left) and panel in the sky explorer: room = selected target or `general`, polls every 3 s while open, generated nickname in `localStorage` |
 
 ### User journey
 
@@ -469,7 +480,7 @@ flowchart LR
   lab --> contract
   contract -- "source = api" --> api_ts
   contract -- "source = demo" --> demo["/lab/demo/* route<br/>shared/demo*"]
-  api_ts -- "/targets, /patches, /timeline,<br/>/images, /patches/{id}/gaia" --> api["Nebo API"]
+  api_ts -- "/targets, /patches, /timeline,<br/>/images, /patches/{id}/gaia,<br/>/chat/{room}/messages" --> api["Nebo API"]
   aladin -- "HiPS tiles" --> hips["IRSA SPHEREx HiPS"]
 ```
 
@@ -523,6 +534,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Public chat: `chat_messages` table, `GET/POST /chat/{room}/messages` with
+  server-side filters (banned words, links and personal data, 3 s anti-flood, 24 h retention)
+  and the `ChatPanel` in the sky explorer.
 - **2026-11-15** — First version of this document (deployment, backend, build pipeline, DB,
   frontend, data sources).
 - **2026-11-15** — Faster coordinate searches (PR #15): stage-based `Retry-After` (2/5 s), all

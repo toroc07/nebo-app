@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from . import config, db, ephemeris, gaia, imaging, irsa, metrics, models, science_catalogs
+from . import chat, config, db, ephemeris, gaia, imaging, irsa, metrics, models, science_catalogs
 from .service import (
     ServiceBusy,
     TargetNotFound,
@@ -918,3 +918,89 @@ def list_citizen_votes(
         {key: value for key, value in vote.items() if key != "voter_token"}
         for vote in store.list_citizen_votes(patch_id, epoch_index=epoch_index)
     ]
+
+
+# ----- public chat ------------------------------------------------------------------------
+
+_chat_flood = chat.FloodGuard()
+_CHAT_MAX_AGE_S = chat.RETENTION_HOURS * 3600.0
+
+
+class ChatMessageRequest(BaseModel):
+    nickname: str = Field(..., max_length=32)
+    # Generous here so an over-long message gets the friendly "too_long" answer below.
+    body: str = Field(..., max_length=2000)
+
+
+def _chat_room_or_404(store: Store, room: str) -> str:
+    """'general' or the slug of a catalogue object."""
+    if room != chat.GENERAL_ROOM and (not chat.valid_room(room) or store.get_target(room) is None):
+        raise HTTPException(status_code=404, detail="Unknown chat room.")
+    return room
+
+
+def _chat_message_payload(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "nickname": row["nickname"],
+        "body": row["body"],
+        "created_at": row["created_at"].isoformat(),
+    }
+
+
+def _client_address(request: Request) -> str:
+    """The caller's address for the anti-flood limit, never stored. Cloud Run's proxy appends the
+    real address to X-Forwarded-For, so the last entry is used (the first one can be forged)."""
+    forwarded = [part.strip() for part in request.headers.get("x-forwarded-for", "").split(",")]
+    forwarded = [part for part in forwarded if part]
+    if forwarded:
+        return forwarded[-1]
+    return request.client.host if request.client else "unknown"
+
+
+@app.get(f"{API_PREFIX}/chat/{{room}}/messages")
+def list_chat_messages(
+    room: str = Path(..., pattern=r"^[a-z0-9-]{1,64}$"),
+    after: int = Query(0, ge=0, description="Only messages with a larger id (for polling)."),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Public chat of a catalogue object ('general' for everyone else), oldest first.
+
+    Without ``after``: the latest messages. Poll with ``after`` = the last id received.
+    Messages are deleted after 24 hours.
+    """
+    _chat_room_or_404(store, room)
+    rows = store.list_chat_messages(room, after, chat.PAGE_SIZE, _CHAT_MAX_AGE_S)
+    return {
+        "room": room,
+        "retention_hours": chat.RETENTION_HOURS,
+        "max_length": chat.MAX_LENGTH,
+        "messages": [_chat_message_payload(row) for row in rows],
+    }
+
+
+@app.post(f"{API_PREFIX}/chat/{{room}}/messages", status_code=201)
+def post_chat_message(
+    body: ChatMessageRequest,
+    request: Request,
+    room: str = Path(..., pattern=r"^[a-z0-9-]{1,64}$"),
+    store: Store = Depends(get_store),
+):
+    """Post to a public chat room. Filtered on the server: no banned words, links, email
+    addresses, handles or phone numbers. 422 with ``code`` when refused, 429 when too fast."""
+    _chat_room_or_404(store, room)
+    try:
+        nickname = chat.check_nickname(body.nickname)
+        text = chat.check_message(body.body)
+    except chat.ChatRejected as error:
+        return JSONResponse(status_code=422, content={"code": error.code, "detail": str(error)})
+    wait = _chat_flood.wait_s(_client_address(request))
+    if wait > 0:
+        seconds = int(wait) + 1
+        return JSONResponse(
+            status_code=429,
+            content={"code": "too_fast", "detail": f"Wait {seconds} s before sending another message."},
+            headers={"Retry-After": str(seconds)},
+        )
+    store.purge_chat_messages(_CHAT_MAX_AGE_S)
+    return _chat_message_payload(store.add_chat_message(room, nickname, text))

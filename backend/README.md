@@ -247,6 +247,21 @@ that star). Cold brown dwarfs such as WISE 0855 and Eps Indi B are not in Gaia: 
 source with no Gaia star on it is expected for them. `502` with `code: "gaia_unavailable"` when
 the ESA archive does not answer (retry after `Retry-After`); `404` for an unknown patch.
 
+### Public chat: `GET` / `POST /chat/{room}/messages`
+
+One room per catalogue object (`room` = its slug) plus `general`. Anonymous: the browser
+generates the nickname (`Stargazer-4821`, words in `app/chat.py`) and the server accepts no other
+shape. Messages are deleted after 24 hours and nothing about the sender is stored.
+
+- `GET ?after=<id>`: messages oldest first; without `after`, the latest 50. Poll with the last
+  id received (the web polls every 3 s while the chat is open).
+  `{"room", "retention_hours": 24, "max_length": 280, "messages": [{id, nickname, body, created_at}]}`
+- `POST {"nickname": "Nova-0001", "body": "..."}`: `201` with the stored message.
+  `422 {"code", "detail"}` when refused: `blocked_words` (Spanish and English, also with digits,
+  symbols, stretched or spaced letters), `personal_data` (links, emails, @handles, phone
+  numbers), `too_long`, `empty` or `nickname`. `429` + `Retry-After` for more than one message
+  every 3 s from the same address (kept in memory only). `404` for an unknown room.
+
 ## Notes for the frontend
 
 - Show the epochs in order as a blink animation. All epochs and all sizes share the

@@ -19,6 +19,8 @@ npm run typecheck
 npm run build
 ```
 
+The sky explorer has a public chat (top-left key): one room per catalogue object, or a general room when nothing is selected. Nobody signs in; the browser keeps a generated nickname (`nebo.chat.nickname` in localStorage). The backend filters every message and deletes it after 24 hours (contract in `backend/README.md`).
+
 Display settings are stored only in localStorage. Playback starts paused and stops when the tab is hidden. The system reduced-motion setting takes priority. Searches use ICRS degrees, and the viewer keeps the detector across epochs.
 
 The landscape is a decorative image generated for Nebo. The Barlow Condensed and IBM Plex fonts are served locally; their OFL licenses are included in `public/fonts`.

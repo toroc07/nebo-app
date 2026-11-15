@@ -26,6 +26,8 @@ import {
 } from "@/lib/api";
 import Field from "./Field";
 import Cockpit from "./Cockpit";
+import ChatPanel from "./ChatPanel";
+import { GENERAL_ROOM } from "@/lib/chat";
 import HomeScene from "./HomeScene";
 import type { SkyCommand, SkyLayers, SkyView } from "./Sky";
 import { launchWarp } from "@/lib/warp";
@@ -587,6 +589,14 @@ export default function Nebo() {
           </span>
         </a>
       </header>
+      {/* Public chat, only in the sky explorer (it goes away on View images): the selected
+          object's room, else the general one. */}
+      {view === "Explore" && (
+        <ChatPanel
+          room={selected?.slug ?? GENERAL_ROOM}
+          roomLabel={selected ? `${selected.name} chat` : "General chat"}
+        />
+      )}
       <main id="content" tabIndex={-1} className="view-content">
         {view === "Home" ? (
           <HomeScene

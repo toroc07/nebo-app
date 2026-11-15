@@ -398,6 +398,20 @@ ALTER TABLE ml_model2_classifications
                             'YOUNG_STELLAR_OBJECT_ACCRETION', 'PULSATING_MIRA_VARIABLE',
                             'SOLAR_SYSTEM_COMET')
     ) NOT VALID;
+-- Public chat (app/chat.py): one room per catalogue object plus 'general'. Anonymous: the
+-- nickname is generated in the browser and nothing identifies the sender. Rows older than 24 h
+-- are deleted by the API, so the table only ever holds one day of messages.
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    room        text NOT NULL CHECK (room ~ '^[a-z0-9-]{1,64}$'),
+    nickname    text NOT NULL CHECK (char_length(nickname) <= 32),
+    body        text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 280),
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_room ON chat_messages (room, id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages (created_at);
+
 ALTER TABLE citizen_votes DROP CONSTRAINT IF EXISTS citizen_votes_vote_check;
 ALTER TABLE citizen_votes
     ADD CONSTRAINT citizen_votes_vote_check CHECK (

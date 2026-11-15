@@ -210,6 +210,12 @@ class Store(Protocol):
         self, patch_id: int, epoch_index: int | None = None
     ) -> list[dict[str, Any]]: ...
 
+    def add_chat_message(self, room: str, nickname: str, body: str) -> dict[str, Any]: ...
+    def list_chat_messages(
+        self, room: str, after_id: int, limit: int, max_age_s: float
+    ) -> list[dict[str, Any]]: ...
+    def purge_chat_messages(self, max_age_s: float) -> int: ...
+
 
 def angular_separation_deg(ra1, dec1, ra2, dec2):
     """Great-circle distance in degrees (haversine; inputs in degrees, numpy-friendly)."""
@@ -1366,3 +1372,44 @@ class PostgresStore:
                 "SELECT * FROM citizen_votes WHERE patch_id = %s AND epoch_index = %s ORDER BY id",
                 (patch_id, epoch_index),
             ).fetchall()
+
+    # ----- public chat ------------------------------------------------------------------
+
+    def add_chat_message(self, room: str, nickname: str, body: str) -> dict[str, Any]:
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "INSERT INTO chat_messages (room, nickname, body) VALUES (%s, %s, %s) "
+                "RETURNING id, room, nickname, body, created_at",
+                (room, nickname, body),
+            ).fetchone()
+        assert row is not None
+        return row
+
+    def list_chat_messages(
+        self, room: str, after_id: int, limit: int, max_age_s: float
+    ) -> list[dict[str, Any]]:
+        """Messages newer than ``after_id``, oldest first; with ``after_id`` 0, the latest
+        ``limit`` ones. Only messages younger than ``max_age_s`` are ever returned."""
+        with self.pool.connection() as conn:
+            if after_id > 0:
+                return conn.execute(
+                    "SELECT id, room, nickname, body, created_at FROM chat_messages "
+                    "WHERE room = %s AND id > %s "
+                    "AND created_at > now() - make_interval(secs => %s) "
+                    "ORDER BY id LIMIT %s",
+                    (room, after_id, max_age_s, limit),
+                ).fetchall()
+            return conn.execute(
+                "SELECT * FROM (SELECT id, room, nickname, body, created_at FROM chat_messages "
+                "WHERE room = %s AND created_at > now() - make_interval(secs => %s) "
+                "ORDER BY id DESC LIMIT %s) latest ORDER BY id",
+                (room, max_age_s, limit),
+            ).fetchall()
+
+    def purge_chat_messages(self, max_age_s: float) -> int:
+        with self.pool.connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM chat_messages WHERE created_at < now() - make_interval(secs => %s)",
+                (max_age_s,),
+            )
+            return cur.rowcount
