@@ -13,7 +13,7 @@ import Cockpit from "./Cockpit";
 import ChatPanel from "./ChatPanel";
 import { GENERAL_ROOM } from "@/lib/chat";
 import HomeScene from "./HomeScene";
-import type { SkyCommand, SkyLayers, SkyView } from "./Sky";
+import type { SkyCommand, SkyLayers, SkySnapshot, SkyView } from "./Sky";
 import { launchWarp, warp } from "@/lib/warp";
 import NeboBoot from "./NeboBoot";
 const Sky = dynamic(() => import("./Sky"), {
@@ -31,6 +31,9 @@ export default function Nebo() {
     [prefs, setPrefs] = useState(defaults),
     [loaded, setLoaded] = useState(false),
     [systemReduced, setSystemReduced] = useState(false);
+  // A still of the live sky map, shown through the analysis room's side window.
+  const [skyBackdrop, setSkyBackdrop] = useState<SkySnapshot | null>(null);
+  const captureSky = useRef<(() => Promise<SkySnapshot | null>) | null>(null);
   const [targets, setTargets] = useState<Target[]>([]),
     [catalogError, setCatalogError] = useState(""),
     [catalogLoading, setCatalogLoading] = useState(false),
@@ -222,6 +225,11 @@ export default function Nebo() {
   }
   const go = contextSafe((destination: View) => {
     if (departing.current || destination === view || turn) return;
+    // The analysis room's side window looks out on the same sky the cockpit was showing: take a
+    // still of the live map now, before the camera turns (it arrives within a frame or two).
+    if (view === "Explore" && destination === "Field") {
+      void captureSky.current?.().then((still) => still && setSkyBackdrop(still));
+    }
     const motion =
       loaded && !reduced && !matchMedia("(prefers-reduced-motion: reduce)").matches;
     // Cockpit ⇄ analysis screen is one room: the camera turns instead of cutting.
@@ -453,6 +461,7 @@ export default function Nebo() {
                 initialEpoch={link?.query === query ? link.epoch : undefined}
                 speed={prefs.speed}
                 reduced={reduced}
+                skyBackdrop={skyBackdrop}
               />
             )}
           </>
@@ -481,6 +490,7 @@ export default function Nebo() {
                 />
               )}
               <Sky
+                onCapture={(capture) => (captureSky.current = capture)}
                 targets={targets}
                 selected={selected}
                 coordinates={skyCoordinates}

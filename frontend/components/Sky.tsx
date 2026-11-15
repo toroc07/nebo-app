@@ -17,7 +17,11 @@ type Viewer = {
   getRaDec: () => [number, number];
   showCooGrid: () => void;
   hideCooGrid: () => void;
+  // aladin.js 3.9: renders the HiPS layers (plus the reticle, and the logo unless logo: false).
+  getViewDataURL: (options: { format?: string; logo?: boolean }) => Promise<string>;
 };
+/** A still of the sky map as the cockpit shows it, with the map's on-screen size in CSS px. */
+export type SkySnapshot = { url: string; width: number; height: number };
 /** What the map is showing right now: its centre and horizontal field of view, in degrees. */
 export type SkyView = { ra: number; dec: number; fov: number };
 export type SkyLayers = { markers: boolean; grid: boolean };
@@ -43,6 +47,7 @@ export default function Sky({
   layers,
   onSelect,
   onView,
+  onCapture,
 }: {
   targets: Target[];
   selected: Target | null;
@@ -51,6 +56,11 @@ export default function Sky({
   layers: SkyLayers;
   onSelect: (t: Target) => void;
   onView: (view: SkyView) => void;
+  /**
+   * Hands the page a way to take a still of the real sky map (for the analysis room's side
+   * window); called with null while the map is not ready.
+   */
+  onCapture?: (capture: (() => Promise<SkySnapshot | null>) | null) => void;
 }) {
   const host = useRef<HTMLDivElement>(null),
     fieldOfView = useRef(180),
@@ -70,6 +80,23 @@ export default function Sky({
     [retry, setRetry] = useState(0);
   callback.current = onSelect;
   viewCallback.current = onView;
+  const captureCallback = useRef(onCapture);
+  captureCallback.current = onCapture;
+  useEffect(() => {
+    if (!ready) return;
+    const take = async (): Promise<SkySnapshot | null> => {
+      const node = host.current;
+      if (!viewer.current || !node) return null;
+      try {
+        const url = await viewer.current.getViewDataURL({ format: "image/jpeg", logo: false });
+        return { url, width: node.clientWidth, height: node.clientHeight };
+      } catch {
+        return null; // No still: the room keeps its painted window.
+      }
+    };
+    captureCallback.current?.(take);
+    return () => captureCallback.current?.(null);
+  }, [ready]);
   useEffect(() => {
     let cancelled = false;
     setError(false);

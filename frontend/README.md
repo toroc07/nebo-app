@@ -23,6 +23,8 @@ The sky explorer has a public chat (top-left key): one room per catalogue object
 
 In the observation room, the wall tablet shows the observed object as a spinning 3D model (`components/StarHologram.tsx`). It is an illustration from the object's type and temperature, not SPHEREx data, and it says so on screen.
 
+The room's side window looks out on the real sky: `public/panels/console-bg.webp` has its glass cut out (alpha), and behind it `Field` shows a still of the cockpit's live SPHEREx map (`Sky` → `getViewDataURL`, taken when *View images* is pressed), at the cockpit's scale and mirrored so the cockpit's right edge meets the room's left edge: the space carries on round the corner as the camera turns. A field opened from a link (no map yet) shows the original painted window (`console-bg-space.webp`).
+
 Playback starts paused and stops when the tab is hidden; the blink speed is chosen in the field console. The system reduced-motion setting turns off every animation. Searches use ICRS degrees, and the viewer keeps the detector across epochs.
 
 The landscape is a decorative image generated for Nebo. The Barlow Condensed and IBM Plex fonts are served locally; their OFL licenses are included in `public/fonts`.

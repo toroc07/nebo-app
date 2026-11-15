@@ -548,6 +548,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — The field room's side window shows the real sky: a still of the cockpit's
+  Aladin map (`getViewDataURL`, taken on *View images*) behind the cut-out glass of
+  `console-bg.webp`, mirrored to continue the cockpit view round the corner; the painted window
+  (`console-bg-space.webp`) stays as the fallback for fields opened from a link. Frontend only.
 - **2026-11-15** — Contamination flags per epoch: `/timeline` epoch `quality` adds
   `center_flags` (SPHEREx FLAGS bit name → frames whose centre pixel carries it, decoded from the
   already stored `flags_bitmask_center`) and `center_flags_checked_frames`. The field viewer lists

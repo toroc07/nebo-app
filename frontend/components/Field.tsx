@@ -1,5 +1,5 @@
 "use client";
-import { Component, useEffect, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
+import { Component, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type Ref } from "react";
 import { sfx } from "@/lib/audio";
 import {
   ArrowLeft,
@@ -73,6 +73,7 @@ import {
 import FieldOverlays from "./FieldOverlays";
 import dynamic from "next/dynamic";
 import ConsoleSelect from "./ConsoleSelect";
+import type { SkySnapshot } from "./Sky";
 import EpochDiffTriplet from "./science/EpochDiffTriplet";
 import ModelsAndMetricsPanel from "./science/ModelsAndMetricsPanel";
 import RgbCompositeView from "./science/RgbCompositeView";
@@ -130,6 +131,7 @@ export default function Field({
   powered = true,
   initialSize = "medium",
   initialEpoch = 0,
+  skyBackdrop = null,
 }: {
   query: Query;
   target: Target | null;
@@ -148,6 +150,13 @@ export default function Field({
    * turns towards or away from it; switching it on plays the boot sequence.
    */
   powered?: boolean;
+  /**
+   * A still of the cockpit's live sky map. The room art's side window is cut out, so this sky
+   * shows through it, mirrored: its right edge (where the cockpit view ends) meets the room's
+   * left edge, and the space carries on round the corner as the camera turns. Without it (a
+   * field opened from a link, no map yet) the painted starfield stays.
+   */
+  skyBackdrop?: SkySnapshot | null;
   /** Field size and epoch index to open first (from a shared link). */
   initialSize?: string;
   initialEpoch?: number;
@@ -547,6 +556,20 @@ export default function Field({
   return (
     <section className={s.scene} data-console="field" aria-labelledby="field-title">
       <div className={s.stage}>
+        <div
+          className={s.space}
+          aria-hidden="true"
+          data-live={skyBackdrop ? "" : undefined}
+          style={
+            skyBackdrop
+              ? ({
+                  "--sky": `url("${skyBackdrop.url}")`,
+                  "--sky-w": `${skyBackdrop.width}px`,
+                  "--sky-h": `${skyBackdrop.height}px`,
+                } as CSSProperties)
+              : undefined
+          }
+        />
         <img className={s.room} src="/panels/console-bg.webp" alt="" aria-hidden="true" draggable={false} />
         {/* The wall tablet shows the observed object as a spinning 3D model (an illustration). */}
         <StarHologram target={target} reduced={reduced} />

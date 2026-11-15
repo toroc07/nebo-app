@@ -34,6 +34,25 @@
   user-select: none;
   pointer-events: none;
 }
+/*
+ * What is seen through the room art's side window (cut out of console-bg.webp). Framed like
+ * .room so the painted fallback (console-bg-space.webp, the original art) lines up exactly.
+ */
+.space {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: #020509 url("/panels/console-bg-space.webp") 60% 50% / cover no-repeat;
+}
+/*
+ * Live: a still of the cockpit's SPHEREx sky map at its on-screen scale, mirrored so the edge
+ * where the cockpit view ends (its right edge) sits at the room's left edge. The two walls meet
+ * there while the camera turns, so the space carries on round the corner.
+ */
+.space[data-live] {
+  transform: scaleX(-1);
+  background: #000 var(--sky) right top / var(--sky-w) var(--sky-h) no-repeat;
+}
 
 /* ---------- Screen (shared) ---------- */
 .screen {
