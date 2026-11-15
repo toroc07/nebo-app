@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type Ref } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Compass, Orbit, Rocket, ScanEye } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
+import { BookOpen, Rocket } from "lucide-react";
+import TutorialTour from "./TutorialTour";
 import s from "./home.module.css";
 
 /*
@@ -47,30 +48,6 @@ const LEAVES: [number, number, number, number, number, string][] = [
   [15, 7.2, 11, 12, -22, "#9fae3c"],
   [58, 10.4, 9, 14, 28, "#e8a33a"],
 ];
-/** The tutorial, shown on the same wall screen as the menu. */
-const STEPS = [
-  {
-    icon: Rocket,
-    title: "Launch",
-    text: "Press START: the ship lifts off and you take the cockpit, flying over the SPHEREx all-sky map.",
-  },
-  {
-    icon: Compass,
-    title: "Fly",
-    text: "Drag the sky to move and zoom from the console. Pick a featured object in Objects, or type a position in Coords.",
-  },
-  {
-    icon: ScanEye,
-    title: "Observe",
-    text: "Press View images. Nebo fetches the real SPHEREx images of that field from NASA/IPAC IRSA, one per epoch. A new field can take a minute.",
-  },
-  {
-    icon: Orbit,
-    title: "Compare",
-    text: "Play the blink or step through the epochs with the same detector. What moves is an observed change, a candidate signal, never a confirmed discovery.",
-  },
-];
-
 /** [left %, top %, delay s, duration s] */
 const MOTES: [number, number, number, number][] = [
   [12, 30, 0, 7],
@@ -90,31 +67,14 @@ export default function HomeScene({
   onStart: () => void;
 }) {
   const [off, setOff] = useState(false);
-  const [mode, setMode] = useState<"menu" | "tutorial">("menu");
-  const [step, setStep] = useState(0);
-  const stepTitle = useRef<HTMLHeadingElement>(null);
+  const [touring, setTouring] = useState(false);
   const tutorialButton = useRef<HTMLButtonElement>(null);
   const opened = useRef(false);
-  // Keyboard and screen-reader users land on each new step title, and back on TUTORIAL after.
+  // Back on TUTORIAL after closing the tour (TutorialTour focuses its own step titles).
   useEffect(() => {
-    if (mode === "tutorial") {
-      opened.current = true;
-      stepTitle.current?.focus();
-    } else if (opened.current) {
-      tutorialButton.current?.focus();
-    }
-  }, [mode, step]);
-  const last = step === STEPS.length - 1;
-  const next = () => (last ? start() : setStep((n) => n + 1));
-  const previous = () => (step === 0 ? setMode("menu") : setStep((n) => n - 1));
-  function onTourKey(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowRight") next();
-    else if (event.key === "ArrowLeft") previous();
-    else if (event.key === "Escape") setMode("menu");
-    else return;
-    event.preventDefault();
-  }
-  const Icon = STEPS[step].icon;
+    if (touring) opened.current = true;
+    else if (opened.current) tutorialButton.current?.focus();
+  }, [touring]);
   /** START: the wall screen switches off first, then the camera turns to the cockpit. */
   function start() {
     if (off) return;
@@ -164,7 +124,7 @@ export default function HomeScene({
           height={393}
           draggable={false}
         />
-        <header className={s.header} hidden={mode === "tutorial" || undefined}>
+        <header className={s.header}>
           <p className={s.status}>
             <span aria-hidden="true" /> Landed · Earth · systems ready
           </p>
@@ -173,67 +133,32 @@ export default function HomeScene({
           </h1>
           <p className={s.tagline}>The infrared sky of SPHEREx, epoch by epoch.</p>
         </header>
-        {mode === "menu" ? (
-          <nav key="menu" className={`${s.menu} ${s.swap}`} aria-label="Start menu">
-            <button type="button" className={s.start} onClick={start}>
-              <Rocket aria-hidden="true" />
-              <span>
-                <strong>Start</strong>
-                <small>Launch to the sky</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              ref={tutorialButton}
-              className={s.tutorial}
-              onClick={() => {
-                setStep(0);
-                setMode("tutorial");
-              }}
-            >
-              <BookOpen aria-hidden="true" />
-              <span>
-                <strong>Tutorial</strong>
-                <small>Your first trip, step by step</small>
-              </span>
-            </button>
-          </nav>
-        ) : (
-          <div key={`step${step}`} className={`${s.tour} ${s.swap}`} onKeyDown={onTourKey}>
-            <p className={`${s.status} ${s.tourStatus}`}>
-              <span aria-hidden="true" /> Tutorial · step {String(step + 1).padStart(2, "0")} /{" "}
-              {String(STEPS.length).padStart(2, "0")}
-            </p>
-            <ol className={s.progress} aria-hidden="true">
-              {STEPS.map((item, i) => (
-                <li key={item.title} data-on={i <= step || undefined} />
-              ))}
-            </ol>
-            <div className={s.tourBody} aria-live="polite">
-              <div className={s.ring} aria-hidden="true">
-                <Icon />
-              </div>
-              <div>
-                <h2 ref={stepTitle} tabIndex={-1}>
-                  {STEPS[step].title}
-                </h2>
-                <p>{STEPS[step].text}</p>
-              </div>
-            </div>
-            <div className={s.tourNav}>
-              <button type="button" className={s.back} onClick={previous}>
-                <ArrowLeft aria-hidden="true" /> {step === 0 ? "Menu" : "Back"}
-              </button>
-              <button type="button" className={s.next} onClick={next}>
-                {last ? "Launch" : "Next"} <ArrowRight aria-hidden="true" />
-              </button>
-              <button type="button" className={s.skipTour} onClick={start}>
-                Skip tutorial
-              </button>
-            </div>
-          </div>
-        )}
+        <nav className={s.menu} aria-label="Start menu" inert={touring || undefined}>
+          <button type="button" className={s.start} onClick={start}>
+            <Rocket aria-hidden="true" />
+            <span>
+              <strong>Start</strong>
+              <small>Launch to the sky</small>
+            </span>
+          </button>
+          <button type="button" ref={tutorialButton} className={s.tutorial} onClick={() => setTouring(true)}>
+            <BookOpen aria-hidden="true" />
+            <span>
+              <strong>Tutorial</strong>
+              <small>Every section, step by step</small>
+            </span>
+          </button>
+        </nav>
       </div>
+      {touring && (
+        <TutorialTour
+          onClose={() => setTouring(false)}
+          onStart={() => {
+            setTouring(false);
+            start();
+          }}
+        />
+      )}
     </section>
   );
 }

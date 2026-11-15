@@ -11,7 +11,7 @@ npm run dev
 
 Open http://localhost:3000. The backend is expected at http://127.0.0.1:8000. To change it, create `.env.local` with `NEXT_PUBLIC_API_ORIGIN=https://your-api.example` and restart Next.js. In a deployment, use a public HTTPS URL reachable from the browser, and set the allowed origin in the backend as well.
 
-The catalog and the images require the backend with PostgreSQL configured and data available. The start screen and its tutorial work without the API; service errors are shown where the data would be. No fictitious scientific images are included. The sky map is the SPHEREx all-sky HiPS from NASA/IPAC IRSA; the comparison cutouts come from SPHEREx too.
+The catalog and the images require the backend with PostgreSQL configured and data available. The start screen and its tutorial work without the API (the tutorial screenshots live in `public/tutorial/`; retake them and update the callout positions in `components/TutorialTour.tsx` if the UI changes); service errors are shown where the data would be. No fictitious scientific images are included. The sky map is the SPHEREx all-sky HiPS from NASA/IPAC IRSA; the comparison cutouts come from SPHEREx too.
 
 ```bash
 npm test
