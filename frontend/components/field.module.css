@@ -1336,6 +1336,10 @@
   border-color: #fbbf24;
   box-shadow: 0 0 10px rgb(251 191 36 / 0.5);
 }
+/* Epoch built from separate observing bursts (P1-4): amber, like the other data warnings. */
+.epochWarning {
+  color: #fbbf24;
+}
 .cardHint {
   margin: 6px 18px;
   font-size: 0.85em;

@@ -129,6 +129,34 @@ def _epoch_releases(exposures: list[dict], image) -> list[str]:
     return sorted({e["release"] for e in exposures if low - 1e-4 <= e["mjd_start"] <= high + 1e-4})
 
 
+def _epoch_coverage(exposures: list[dict], image) -> dict:
+    """How long one epoch lasts, its longest internal gap and the wavelengths it covers.
+
+    ``split_into_epochs`` cuts passes into spans shorter than ``EPOCH_MAX_SPAN_DAYS``; an epoch
+    longer than that had small spans folded into it, so it mixes separate observing bursts
+    (and, through the LVF filter, different wavelengths). The viewer warns about those.
+    """
+    # Plain floats: datetime_to_mjd returns numpy scalars, which JSON cannot encode.
+    low, high = float(datetime_to_mjd(image.start_utc)), float(datetime_to_mjd(image.end_utc))
+    inside = [e for e in exposures if low - 1e-4 <= e["mjd_start"] <= high + 1e-4]
+    mjds = sorted(float(e["mjd_start"]) for e in inside)
+    gaps = [b - a for a, b in zip(mjds, mjds[1:])]
+    span_days = high - low
+    lambdas = [
+        float(e["wavelength_um"])
+        for e in inside
+        if e.get("wavelength_um") is not None and math.isfinite(float(e["wavelength_um"]))
+    ]
+    return {
+        "span_days": round(span_days, 2),
+        "max_gap_days": round(max(gaps), 2) if gaps else 0.0,
+        "mixed_bursts": bool(span_days > config.EPOCH_MAX_SPAN_DAYS),
+        "wavelength_um": (
+            {"min": round(min(lambdas), 4), "max": round(max(lambdas), 4)} if lambdas else None
+        ),
+    }
+
+
 def _sector_payload(patch: Patch, size: str) -> dict:
     """Centre and 4 corners of the image in ICRS degrees (the centre is the central pixel)."""
     sector = imaging.compute_sector_coordinates(patch.ra, patch.dec, size, config.SIZES_DEG[size])
@@ -185,6 +213,7 @@ def _epochs_payload(view: TimelineView, size: str, store: Store) -> list[dict]:
             "display_min": image.display_min,
             "display_max": image.display_max,
             "releases": _epoch_releases(exposures, image),
+            "coverage": _epoch_coverage(exposures, image),
             "expected_position": _expected_position(view.patch, target, image.mid_mjd, size),
             "image_url": f"{API_PREFIX}/images/{image.id}.png",
             **({"npz_url": f"{API_PREFIX}/images/{image.id}.npz"} if image.has_npz else {}),

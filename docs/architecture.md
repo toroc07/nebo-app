@@ -388,7 +388,7 @@ erDiagram
 | `timelines` | One per patch × detector: status, stage, progress; doubles as the build queue | claim, progress, partial/complete/fail | `/timeline`, `/patches`, worker |
 | `timeline_images` | PNG per epoch × size, NPZ for the large size | partial and final saves | `/timeline`, `/images`, `/timeline/diff`, `/metrics` |
 | `sector_coordinates` | Corners and bounds of each size and the fetch size | `create_patch` | `/patches/{id}/sectors` |
-| `nasa_sector_exposures` | Every IRSA exposure used: uri, release, times, WCS, photometry, cutout URL | builds | epoch `releases`, `/sectors` |
+| `nasa_sector_exposures` | Every IRSA exposure used: uri, release, times, WCS, photometry, cutout URL | builds | epoch `releases` and `coverage`, `/sectors` |
 | `api_query_cache` | IRSA TAP frame lists (`irsa_spherex_tap`) and Gaia cones (`gaia_dr3_tap`) | builds, `/gaia` | builds, `/gaia` |
 | `spherex_channels`, `spectral_index_definitions` | 102 channels and 17 spectral indices | `db init` | `/catalogs/*`, science |
 | `patch_spectra`, `patch_spectral_indices` | Per-patch spectra and indices (simulated) | science endpoints | science endpoints |
@@ -563,6 +563,12 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Honest spectrum and epochs (P1-1, P1-4): while the spectrum is a model
+  (`simulated`), the Spectrum tab is called "Spectrum (model)", reads "Illustrative model · not
+  SPHEREx data" and hides Model 2's χ²red. Each `/timeline` epoch adds `coverage` (`span_days`,
+  `max_gap_days`, `wavelength_um` min/max from the exposures, and `mixed_bursts` when the epoch is
+  longer than `EPOCH_MAX_SPAN_DAYS`, i.e. small spans were folded in); the viewer shows it under
+  "This epoch" with an amber note when bursts are mixed. Epoch grouping itself is unchanged.
 - **2026-11-15** — Docs: new [`science-and-techniques.md`](science-and-techniques.md) lists every
   constant, threshold, formula and technique with its purpose; linked from this file, the docs
   index, `data-sources.md`, `observation-lab.md`, the README and the `AGENTS.md` checklist.

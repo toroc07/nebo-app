@@ -27,6 +27,15 @@ export type Epoch = {
   mid_mjd?: number;
   // SPHEREx data releases of the exposures in this epoch, e.g. ["dr1"] or ["dr1", "qr3"].
   releases?: string[];
+  /** How long the epoch lasts and which wavelengths its exposures cover (LVF filter). */
+  coverage?: EpochCoverage;
+};
+export type EpochCoverage = {
+  span_days: number;
+  max_gap_days: number;
+  /** The epoch joins separate observing bursts (it is longer than one burst can be). */
+  mixed_bursts: boolean;
+  wavelength_um: { min: number; max: number } | null;
 };
 export type Timeline = {
   status: "ready";
@@ -380,6 +389,15 @@ export function releaseLabel(releases?: string[]) {
     .filter(Boolean)
     .sort();
   return names.length ? `SPHEREx ${names.join(" + ")}` : "SPHEREx";
+}
+// "12 days · λ 1.10–1.25 µm" for an epoch; null when the API did not report its coverage.
+export function coverageLabel(coverage?: EpochCoverage | null) {
+  if (!coverage) return null;
+  const days = Math.max(1, Math.round(coverage.span_days));
+  const parts = [`${days} ${days === 1 ? "day" : "days"}`];
+  const lambda = coverage.wavelength_um;
+  if (lambda) parts.push(`λ ${lambda.min.toFixed(2)}–${lambda.max.toFixed(2)} µm`);
+  return parts.join(" · ");
 }
 export function nextEpoch(index: number, count: number) {
   return count > 1 ? (index + 1) % count : 0;

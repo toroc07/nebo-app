@@ -28,6 +28,7 @@ import {
   nextEpoch,
   epochDateRange,
   releaseLabel,
+  coverageLabel,
   ApiError,
   fetchPatchCandidates,
   read,
@@ -877,6 +878,21 @@ export default function Field({
                     {/* The data release comes from the API for the epoch on screen; never hard-coded. */}
                     <dd>{releaseLabel(current?.releases)}</dd>
                   </div>
+                  {coverageLabel(current?.coverage) && (
+                    <div>
+                      <dt>This epoch</dt>
+                      <dd>
+                        {coverageLabel(current?.coverage)}
+                        {current?.coverage?.mixed_bursts && (
+                          <span role="note" className={s.epochWarning}>
+                            {" "}· Mixes separate observing bursts (gap up to{" "}
+                            {Math.round(current.coverage.max_gap_days)} days): the stars were seen at
+                            different wavelengths within this epoch.
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </section>
               {suggestions?.value && suggestions.value.destinations.length > 0 && (
@@ -1012,7 +1028,7 @@ export default function Field({
                     [
                       ["diff", "Compare (3-Panel)"],
                       ["rgb", "RGB Composite"],
-                      ["spectrum", "Spectrum (102 ch)"],
+                      ["spectrum", "Spectrum (model)"],
                       ["models", "Models & Metrics"],
                     ] as const
                   ).map(([id, label]) => (

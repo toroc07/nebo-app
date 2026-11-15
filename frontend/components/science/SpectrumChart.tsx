@@ -101,16 +101,34 @@ export default function SpectrumChart({ patchId }: { patchId: number }) {
   }
   if (currentPts.length) segments.push(currentPts.join(" "));
 
+  // Until the spectrum is measured from SPHEREx exposures, it is a model curve: say so plainly
+  // and hide the fit statistic, since a χ² of a model fitted to itself means nothing.
+  const illustrative = Boolean(spectrum.simulated || model2?.simulated);
+
   return (
-    <section className={s.panel} aria-label="102-channel SPHEREx spectrum and Model 2">
+    <section
+      className={s.panel}
+      aria-label={illustrative ? "Illustrative model spectrum" : "102-channel SPHEREx spectrum and Model 2"}
+    >
       <div className={s.panelHeader}>
-        <h2 className={s.panelTitle}>102-Channel SPHEREx Spectrum &amp; Molecular Indices</h2>
+        <h2 className={s.panelTitle}>
+          {illustrative
+            ? "Illustrative Model Spectrum (not measured)"
+            : "102-Channel SPHEREx Spectrum & Molecular Indices"}
+        </h2>
         <div className={s.badgeRow}>
-          {(spectrum.simulated || model2?.simulated) && (
-            <span className={s.badgeSimulated}>Simulated profile</span>
+          {illustrative && (
+            <span className={s.badgeSimulated}>Illustrative model · not SPHEREx data</span>
           )}
         </div>
       </div>
+      {illustrative && (
+        <p className={s.note} role="note">
+          This curve is a model template drawn on the 102 SPHEREx channels, not a spectrum
+          measured from this field&apos;s exposures. Use it to read where molecular bands fall,
+          not as a result.
+        </p>
+      )}
 
       <div className={s.controls}>
         <label>
@@ -125,8 +143,16 @@ export default function SpectrumChart({ patchId }: { patchId: number }) {
         </label>
         {model2 && (
           <span className={s.mono}>
-            Model 2: <strong>{model2.predicted_class}</strong> · {model2.best_template_name} (χ²
-            <sub>red</sub> = {model2.chi2_reduced.toFixed(2)})
+            {illustrative ? (
+              <>
+                Model template: <strong>{model2.best_template_name}</strong>
+              </>
+            ) : (
+              <>
+                Model 2: <strong>{model2.predicted_class}</strong> · {model2.best_template_name} (χ²
+                <sub>red</sub> = {model2.chi2_reduced.toFixed(2)})
+              </>
+            )}
           </span>
         )}
       </div>
