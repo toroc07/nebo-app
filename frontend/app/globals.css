@@ -553,12 +553,16 @@ footer .mono {
   top: 0;
   left: 0;
   z-index: 7;
-  width: min(150dvh, 85vw);
+  width: calc(100dvh * 1.5);
   height: 100dvh;
-  background: #020509 url("/panels/turn-corner.webp") center / cover no-repeat;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
-  margin-left: calc(min(150dvh, 85vw) * -0.09);
+  background: url("/panels/turn-corner.webp") 0 0 / 100% 100% no-repeat;
+  /*
+   * The outer 39 % on each side repeat the live views at their on-screen scale. The cockpit's
+   * sky is transparent in the image itself (the live sky shows through; no doubled stars), so
+   * the left mask only has to stay clear of the console labels the live cockpit draws (< 25 %).
+   */
+  -webkit-mask-image: linear-gradient(90deg, transparent 25%, #000 28%, #000 63%, transparent 96%);
+  mask-image: linear-gradient(90deg, transparent 25%, #000 28%, #000 63%, transparent 96%);
   pointer-events: none;
 }
 /*
