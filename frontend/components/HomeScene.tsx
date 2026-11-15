@@ -88,7 +88,7 @@ const CREW = [
     github: "shalom-A26",
   },
   {
-    name: "Daryem Antonio Garcia Cardona",
+    name: "Dariem Antonio Garcia Cardona",
     role: "Data Engineer & Scientist",
     photo: "/crew/daryem.webp",
     github: "Dmgar",
