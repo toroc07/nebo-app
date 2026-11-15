@@ -45,11 +45,11 @@ export type SpectralChannelPoint = {
 
 export type SpectralIndexValue = {
   index_code: string;
-  target_physics?: string;
   value: number | null;
-  sigma: number | null;
+  uncertainty: number | null;
   snr?: number | null;
-  is_significant?: boolean;
+  is_significant_3s?: boolean;
+  is_valid?: boolean;
 };
 
 export type PatchSpectrumResponse = {
@@ -78,17 +78,22 @@ export type PatchMetricsResponse = {
   patch: { id: number; ra: number; dec: number; target?: string | null };
   simulated?: boolean;
   data_note?: string;
+  // Names as the backend sends them (metrics.compute_global_confidence_score and friends).
   confidence: {
-    score: number;
-    grade?: string;
-    components?: Record<string, number>;
+    c_global: number;
+    s_snr?: number;
+    s_dipole?: number;
+    s_flags?: number;
+    s_psf?: number;
   };
   variability: {
-    chi2_var?: number;
-    chi2_red?: number;
+    n_epochs?: number;
+    weighted_mean_mjy?: number;
+    chi2_var_reduced?: number;
     stetson_j?: number;
-    eta?: number;
-    lomb_scargle_fap?: number;
+    von_neumann_eta?: number;
+    lomb_scargle_power?: number;
+    lomb_scargle_period_days?: number | null;
     is_variable?: boolean;
   };
   spectral_indices: SpectralIndexValue[];
@@ -104,9 +109,7 @@ export type Model1EventResponse = {
     per_feature?: Record<string, number>;
     top_drivers?: Array<{
       feature: string;
-      shap_value?: number;
-      contribution?: number;
-      direction?: string;
+      phi: number;
     }>;
   };
   citizen_level1?: {

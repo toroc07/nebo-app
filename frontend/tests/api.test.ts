@@ -195,3 +195,22 @@ test("diffImageUrl and rgbImageUrl support both target and ra/dec queries", () =
   assert.equal(rgbUrl.searchParams.get("g"), "3");
   assert.equal(rgbUrl.searchParams.get("b"), "1");
 });
+
+// Real backend answers (trimmed), captured from GET /patches/{id}/spectrum, /metrics and
+// /models/event. The science panels crashed when these names drifted from the TS types.
+test("science responses carry the fields the panels read", async () => {
+  const { readFileSync } = await import("node:fs");
+  const fx = JSON.parse(readFileSync(new URL("./fixtures/science-responses.json", import.meta.url), "utf8"));
+  const spectrum: import("../lib/api").PatchSpectrumResponse = fx.spectrum;
+  const metrics: import("../lib/api").PatchMetricsResponse = fx.metrics;
+  const model1: import("../lib/api").Model1EventResponse = fx.model1;
+
+  assert.equal(spectrum.channels.length, 102);
+  for (const c of spectrum.channels) {
+    assert.equal(typeof c.lambda_c_um, "number");
+    assert.ok(c.flux_mjy === null || typeof c.flux_mjy === "number");
+  }
+  assert.deepEqual(spectrum.channels.filter((c) => c.is_blankch).map((c) => c.flux_mjy), [null, null]);
+  assert.equal(typeof metrics.confidence.c_global, "number");
+  assert.ok(model1.treeshap_values!.top_drivers!.every((d) => typeof d.phi === "number"));
+});

@@ -89,7 +89,7 @@ export default function ModelsAndMetricsPanel({
   const shapDrivers = model1.treeshap_values?.top_drivers ?? [];
   const maxShap = Math.max(
     0.01,
-    ...shapDrivers.map((d) => Math.abs(d.shap_value ?? d.contribution ?? 0)),
+    ...shapDrivers.map((d) => Math.abs(d.phi ?? 0)),
   );
   const forecast = model3.forecast_series ?? [];
 
@@ -136,7 +136,7 @@ export default function ModelsAndMetricsPanel({
               <h3 style={{ marginTop: "0.75rem" }}>Top SHAP Drivers</h3>
               <div className={s.barList}>
                 {shapDrivers.slice(0, 5).map((d) => {
-                  const val = d.shap_value ?? d.contribution ?? 0;
+                  const val = d.phi ?? 0;
                   return (
                     <div key={d.feature} className={s.barRow}>
                       <span className={s.mono}>{d.feature}</span>
@@ -210,8 +210,7 @@ export default function ModelsAndMetricsPanel({
         <div className={s.subCard}>
           <h3>Global Confidence &amp; Citizen Classification</h3>
           <p className={s.mono} style={{ margin: "0 0 0.4rem" }}>
-            C_global: <strong>{metricsData.confidence.score.toFixed(1)} / 100</strong>
-            {metricsData.confidence.grade ? ` (${metricsData.confidence.grade})` : ""}
+            C_global: <strong>{metricsData.confidence.c_global.toFixed(1)} / 100</strong>
           </p>
           <p className={s.note}>Classify this observed change ({votes.length} recorded):</p>
           <div className={s.voteRow}>
