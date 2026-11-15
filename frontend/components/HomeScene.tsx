@@ -52,7 +52,7 @@ export default function HomeScene({
             <span aria-hidden="true" /> Landed · Earth · systems ready
           </p>
           <h1 id="home-title" ref={headingRef} tabIndex={-1}>
-            nebo<span>.</span>
+            <img className={s.logo} src="/brand/nebo-logo.png" alt="Nebo" width={827} height={524} />
           </h1>
           <p className={s.tagline}>The infrared sky of SPHEREx, epoch by epoch.</p>
         </header>
