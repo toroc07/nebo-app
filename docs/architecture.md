@@ -27,7 +27,7 @@ Contents:
 ## 1. System context
 
 Nebo is a web viewer of the infrared sky. The user flies over an all-sky SPHEREx map, picks a
-target or types coordinates, and opens a small field where the SPHEREx images of each epoch
+target, types coordinates or just centres the map, and opens a small field where the SPHEREx images of each epoch
 can be blinked to spot real changes (movers, variables).
 
 ```mermaid
@@ -223,6 +223,9 @@ sequenceDiagram
 Notes:
 - `wait_for=first_light|preview` is opt-in and only for coordinate searches; the default
   (`complete`) keeps answering `202` until the build ends.
+- The web frontend uses the default and renders the `epochs[]` already present in each `202`
+  as a "Preview" (with the build steps and a progress bar) and keeps epoch comparison locked
+  until the final `200`, so a new coordinate shows its first image at first light.
 - Partial saves replace the image rows, so **image ids change**: clients re-read
   `image_url` on every poll.
 - All epochs of one size share `display_min/max`, so a blink compares like with like.
@@ -454,7 +457,7 @@ stateDiagram-v2
     Tutorial --> Menu: Menu, × or Esc
   }
   Home --> Explore: START or Launch (warp to the cockpit)
-  Explore --> Field: View images (object or RA and Dec)
+  Explore --> Field: View images (object, RA and Dec, or map centre)
   Field --> Explore: Back
   Explore --> Home: Back
   note right of Explore
@@ -540,6 +543,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Field renders the partial epochs of `202` timeline answers while the build
+  refines (no `wait_for`), so coordinate searches show images from first light.
+- **2026-11-15** — Journey: the cockpit destination can be cleared (× on the title screen),
+  and with no destination View images opens the field at the map centre (`/timeline?ra&dec`).
 - **2026-11-15** — Scientific analysis filters & RGB composite: added `GET /api/v1/timeline/rgb`
   (`imaging.to_rgb_png` combining three float32 detectors), typed scientific API helpers in
   `frontend/lib/api.ts`, and modular `frontend/components/science/` filter panels (`EpochDiffTriplet`,
