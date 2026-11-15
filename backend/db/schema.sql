@@ -45,6 +45,18 @@ CREATE TABLE IF NOT EXISTS timelines (
     UNIQUE (patch_id, detector)
 );
 
+-- Every failed IRSA query and every failed build, with its cause (for diagnosing slow fields).
+CREATE TABLE IF NOT EXISTS timeline_build_attempts (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    timeline_id bigint NOT NULL REFERENCES timelines (id) ON DELETE CASCADE,
+    attempt     integer NOT NULL,
+    stage       text NOT NULL,
+    cause       text NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS timeline_build_attempts_timeline_idx
+    ON timeline_build_attempts (timeline_id);
+
 -- One processed PNG per timeline, epoch (~6-month survey pass) and display size.
 CREATE TABLE IF NOT EXISTS timeline_images (
     id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

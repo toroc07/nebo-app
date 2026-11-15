@@ -58,6 +58,11 @@ class TimelineView:
     images: list[ImageInfo] = field(default_factory=list)
 
 
+def _cause(error: BaseException) -> str:
+    """One-line cause of a failed build step, for the attempt log."""
+    return f"{type(error).__name__}: {error}"[:500]
+
+
 def group_into_epochs(mjds: list[float], gap_days: float = config.EPOCH_GAP_DAYS) -> list[list[int]]:
     """Split time-sorted observations into epochs wherever the gap exceeds ``gap_days``."""
     groups: list[list[int]] = []
@@ -482,14 +487,17 @@ class TimelineService:
     def _run_build(self, patch: Patch, timeline: Timeline) -> None:
         try:
             self._build(patch, timeline)
-        except NoDataError as error:
-            self.store.fail_timeline(timeline.id, str(error))
-        except requests.RequestException as error:
-            log.warning("Timeline build failed, IRSA unavailable: patch %s: %s", patch.id, error)
-            self.store.fail_timeline(timeline.id, ARCHIVE_UNAVAILABLE)
-        except Exception as error:  # Reported to the client; details stay in the log.
-            log.exception("Timeline build failed: patch %s detector %s", patch.id, timeline.detector)
-            self.store.fail_timeline(timeline.id, f"Build failed: {type(error).__name__}")
+        except Exception as error:
+            if isinstance(error, NoDataError):
+                message = str(error)
+            elif isinstance(error, requests.RequestException):
+                log.warning("Timeline build failed, IRSA unavailable: patch %s: %s", patch.id, error)
+                message = ARCHIVE_UNAVAILABLE
+            else:  # Reported to the client; details stay in the log.
+                log.exception("Timeline build failed: patch %s detector %s", patch.id, timeline.detector)
+                message = f"Build failed: {type(error).__name__}"
+            self.store.fail_timeline(timeline.id, message)
+            self.store.record_build_attempt(timeline.id, 0, "failed", _cause(error))
 
     def _query_frames_patiently(self, patch: Patch, timeline: Timeline) -> list[irsa.FrameRecord]:
         """Query IRSA, waiting out short outages so the visitor never has to press Retry.
@@ -510,6 +518,7 @@ class TimelineService:
                     raise
                 waited += wait
                 log.warning("IRSA down for timeline %s (attempt %d): %s; retrying in %.0f s", timeline.id, attempt, error, wait)
+                self.store.record_build_attempt(timeline.id, attempt, "querying", _cause(error))
                 self.store.update_progress(timeline.id, "waiting_for_archive", attempt, 0)
                 self._sleep(wait)
                 self.store.update_progress(timeline.id, "querying", 0, 0)

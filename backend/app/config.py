@@ -70,8 +70,9 @@ STALE_BUILD_S = 15 * 60
 # A failed timeline can be retried after this long.
 FAILED_RETRY_S = 60
 # How long a build keeps retrying when IRSA itself is down before it reports the outage.
-# Must stay well below STALE_BUILD_S, or a waiting build would be taken for a dead one.
-ARCHIVE_WAIT_S = float(os.environ.get("NEBO_ARCHIVE_WAIT_S", "300"))
+# Must stay well below STALE_BUILD_S, or a waiting build would be taken for a dead one, and
+# below the viewer's 3-minute wait limit so the visitor sees the real cause.
+ARCHIVE_WAIT_S = float(os.environ.get("NEBO_ARCHIVE_WAIT_S", "150"))
 
 # Native SPHEREx pixel scale, used for the common output grid.
 PIXEL_SCALE_ARCSEC = 6.15
