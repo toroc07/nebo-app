@@ -17,14 +17,13 @@ Contents:
 [4. Imaging and display](#4-imaging-and-display) ·
 [5. Photometry](#5-photometry) ·
 [6. Change detection and catalogue matching](#6-change-detection-and-catalogue-matching) ·
-[7. Science models (simulated)](#7-science-models-simulated) ·
+[7. Science models](#7-science-models) ·
 [8. Backend operations](#8-backend-operations) ·
 [9. Frontend techniques](#9-frontend-techniques) ·
 [10. Known inconsistencies](#10-known-inconsistencies)
 
-**Real vs simulated.** Rows marked *(sim)* come from demo profiles that the API labels as
-simulated (`models.SIMULATED_NOTE`). Everything else is computed from real SPHEREx, Gaia DR3 or
-CatWISE2020 data. The full split is in [architecture §9](architecture.md#9-real-vs-simulated-data).
+**Real vs simulated.** Everything is computed from real SPHEREx, Gaia DR3 or CatWISE2020 data;
+the demo profiles (`models.SIMULATED_NOTE`) only answer an explicit `scenario` request. The full split is in [architecture §9](architecture.md#9-real-vs-simulated-data).
 
 ---
 
@@ -106,7 +105,7 @@ CatWISE2020 data. The full split is in [architecture §9](architecture.md#9-real
 | Saturation | OVERFLOW or SUR_ERROR inside the 5×5 box (`saturated_near`, r = 2) | `imaging.py`, `service.py`, `main.py` | Saturated epochs report flux as a lower limit (≥), no σ/SNR |
 | PSF quality | `q_fit`, χ²_psf (dof n−3), `C_PSF`, `C80/20 = 5·log10(r80/r20)`, elongation | `metrics.py` | Features for the event classifier: point source vs artefact |
 | Colour indices | NSDI `(FA−FB)/(FA+FB)` with propagated σ; ratios | `science_catalogs.py` | Compare bands with honest errors |
-| Spectral indices *(sim)* | 17 indices, significant if SNR ≥ 3; equivalent width `Σ(1 − F/Fcont)·Δλ` | `metrics.py`, `science_catalogs.py` | Molecular absorption (CH₄, H₂O, CO₂) |
+| Spectral indices | 17 indices, significant if SNR ≥ 3; equivalent width `Σ(1 − F/Fcont)·Δλ` | `metrics.py`, `science_catalogs.py` | Molecular absorption (CH₄, H₂O, CO₂) |
 
 ## 6. Change detection and catalogue matching
 
@@ -130,11 +129,21 @@ CatWISE2020 data. The full split is in [architecture §9](architecture.md#9-real
 | Suggestions | Gaia `pm > 500 mas/yr OR parallax > 50 mas`, `G < 14`, r = 30°, plus curated Barnard, Proxima, Kapteyn, Ross 154 | `gaia.py`, `main.py` (`/explore/suggested`) | Nearby, fast stars where change is visible |
 | Gaia fast mover (lab) | 100 mas/yr | `frontend/lib/lab/gaia.ts` | Highlight stars that move visibly between epochs |
 
-## 7. Science models (simulated)
+## 7. Science models
 
-These run on demo profiles; real catalogue values (Gaia distance, pm, W1−W2) overwrite the
-synthetic ones when available. Shown in `ModelsAndMetricsPanel` as "candidate signal", never as
-a discovery.
+These run on each patch's measurements (`real_science.py`); a part that cannot be measured says
+why. The models themselves are hand-tuned estimators, shown in `ModelsAndMetricsPanel` as "model
+estimate, not a detection", never as a discovery.
+
+| Measurement | Value / formula | Where |
+| --- | --- | --- |
+| 102-channel spectrum | median per channel of the measured spectrum (sky-subtracted, unblended, unsaturated), mJy; ≥ 20 channels | `real_science.spectrum_102` |
+| Light curve | `f = SED_channel · g_visit`, log-space least squares (alternating means, 4σ clip); visits > 10 d apart, ≥ 3 exposures each, ≥ 3 visits; error ⊕ 1.5 % calibration | `real_science.light_curve` |
+| Epoch difference for Model 1 | flux-scaled, PSF-matched, smoothed (as `/candidates`); σ² = noise² + (0.15·local brightness)²; 21×21 px box on the object | `real_science.model1_features` |
+| Centroid shift | P1-6 Gaussian centroids, first and last epochs where detected; σ = max(0.1 px (0.2 saturated), 0.7/SNR) per epoch; used if ≥ 0.4 px, ≥ 3σ and above the dipole | `real_science._astrometric_motion` |
+| PSF-shape features | width (moments), c₈₀/₂₀ and background gradient relative to ≥ 3 field stars (SNR > 20), mapped onto the model's point-source values (q = w, χ² = 1.05·w²) | `real_science._field_star_shapes` |
+| Event gate | dipole/centroid ≥ 3σ, or brightness change ≥ 4σ not on a saturated core | `real_science.analyze` |
+| Model 2 fit verdict | `poor` when χ²ᵣ > 5 (least-bad template, not an identification) | `real_science.fit_quality` |
 
 | Concept | Value / formula | Where |
 | --- | --- | --- |

@@ -84,7 +84,7 @@ const STEPS: Step[] = [
       { x: 64.3, y: 17.3, lx: 66, ly: 5, label: "Copy link", text: "The address bar always holds this exact view (object or coordinates, detector, size, epoch). Copy it to share." },
       { x: 80.9, y: 36.1, lx: 92, ly: 22, label: "Layers", text: "Gaia DR3 stars, CatWISE infrared sources and detected changes, each with its own switch." },
       { x: 44, y: 52, lx: 28, ly: 40, label: "Catalogue rings", text: "Gaia stars moved to the date of each epoch. Click one for its distance and motion." },
-      { x: 38.2, y: 27.7, lx: 22, ly: 12, label: "Analysis", text: "Spectrum, RGB and models. Parts built from demonstration profiles say \"simulated\"." },
+      { x: 38.2, y: 27.7, lx: 22, ly: 12, label: "Analysis", text: "Spectrum, RGB and models, all measured on this field. A part it cannot give (e.g. a saturated star) says why." },
       { x: 55.5, y: 31.3, lx: 46, ly: 5, label: "Alignment", text: "Checks that the epochs line up with Gaia before you trust a change." },
       { x: 18.5, y: 71.7, lx: 12, ly: 92, label: "3D model", text: "An illustration of the object, from its type and temperature. Not SPHEREx data." },
     ],

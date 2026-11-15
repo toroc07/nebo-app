@@ -1183,7 +1183,7 @@ export default function Field({
                     [
                       ["diff", "Compare (3-Panel)"],
                       ["rgb", "RGB Composite"],
-                      ["spectrum", "Spectrum (model)"],
+                      ["spectrum", "Spectrum"],
                       ["models", "Models & Metrics"],
                     ] as const
                   ).map(([id, label]) => (
@@ -1225,7 +1225,7 @@ export default function Field({
                 )}
                 {scienceTab === "spectrum" && (
                   <>
-                    {/* Measured first (P1-1); the model below stays labelled as illustrative. */}
+                    {/* Measured points first (P1-1), then the 102-channel medians with the Model 2 fit. */}
                     <MeasuredSpectrum patchId={data.patch.id} />
                     <SpectrumChart patchId={data.patch.id} />
                   </>

@@ -33,8 +33,15 @@ from . import (
     irsa,
     metrics,
     models,
+    real_science,
     science_catalogs,
     wise,
+)
+from .real_science import (  # noqa: F401  (re-exported: the API's measured-spectrum contract)
+    BLENDED_PEAK_OFFSET_PX,
+    MEASURED_SPECTRUM_NOTE,
+    MEASURED_SPECTRUM_NOTE_RAW,
+    measured_spectrum,
 )
 from .service import (
     ARCHIVE_UNAVAILABLE,
@@ -1335,6 +1342,36 @@ def _simulated(row: dict) -> dict:
     return row | {"simulated": True, "data_note": models.SIMULATED_NOTE}
 
 
+def _science_part(bundle: dict, key: str) -> dict:
+    """One part of a science bundle with its provenance: measured, simulated (only for an explicit
+    scenario), or unavailable with the reason it could not be measured on this patch."""
+    row = bundle.get(key)
+    if row is None:
+        return {
+            "available": False,
+            "simulated": False,
+            "reason": (bundle.get("unavailable") or {}).get(key, "Not measured on this patch."),
+            "data_note": bundle["data_note"],
+        }
+    return dict(row) | {
+        "available": True,
+        "simulated": bool(bundle.get("simulated")),
+        "data_note": bundle["data_note"],
+    }
+
+
+def _patch_science(store: Store, patch: Patch) -> dict:
+    """The measured science bundle of a patch. The Gaia/CatWISE cross-match (a network query, then
+    cached) is only resolved when Model 1 has not been computed for the patch yet."""
+    cached = store.get_model1_attribution(patch.id, -1, real_science.MEASURED_VERSION)
+    gaia_info, wise_info = (None, None) if cached else _resolve_patch_crossmatch(store, patch)
+    if gaia_info is not None or wise_info is not None:
+        store.save_patch_crossmatch(patch.id, gaia_info, wise_info)
+    return models.analyze_patch_science(
+        store, patch, force_recompute=False, gaia_info=gaia_info, wise_info=wise_info
+    )
+
+
 def _from_user_input(row: dict) -> dict:
     """A result computed from data the caller sent. It is returned, never stored on a patch:
     anyone can call these endpoints, and a stored row would replace the patch's own result."""
@@ -1397,120 +1434,6 @@ def spectrum_channels(spec: dict) -> list[dict]:
     return out
 
 
-MEASURED_SPECTRUM_NOTE = (
-    "Measured: one point per SPHEREx exposure, a 3x3-pixel aperture at the object's position on "
-    "that date (proper motion applied), minus the local sky level from an annulus 4-9 pixels "
-    "around it; no aperture correction, so the flux is a lower bound of the total (roughly 70-90 "
-    "%). Points where the light peaks on a neighbour (1.2 px or more from the object) are drawn "
-    "apart and left out of the median. A neighbour closer than that cannot be told apart at "
-    "6.15\" per pixel and stays in: for a faint object the short wavelengths may be its light "
-    "(e.g. WISE 0855 is only its own source above ~4 µm). Exposures with saturated pixels near "
-    "the object are left out (lower limits). Points come from all epochs, so a variable object "
-    "scatters."
-)
-
-MEASURED_SPECTRUM_NOTE_RAW = (
-    "Measured: one point per SPHEREx exposure, a 3x3-pixel aperture at the object's position on "
-    "that date (proper motion applied), without aperture correction or local background "
-    "subtraction (this field has not been processed for it yet). Reliable for bright sources; "
-    "for faint ones the sky background dominates. Exposures with saturated pixels near the "
-    "object are left out (their flux is only a lower limit). Points come from all epochs, so a "
-    "variable object scatters."
-)
-
-# The light in the aperture peaking this far (pixels) from the object means a neighbour
-# dominates it: a source on the object peaks within half a pixel diagonal (~0.7 px).
-BLENDED_PEAK_OFFSET_PX = 1.2
-
-
-def _finite(value: Any) -> bool:
-    return value is not None and math.isfinite(float(value))
-
-
-def measured_spectrum(exposures: list[dict]) -> dict:
-    """The spectrum measured from the stored exposures (P1-1): every usable exposure as a point
-    (wavelength, flux, sigma) and, per SPHEREx channel, the median flux with a robust error.
-
-    Once the patch has local-background values (new builds, or ``app.backfill_background``),
-    each flux has 9x the annulus sky level subtracted and rows without one are left out, so the
-    curve never mixes subtracted and raw points. Points whose light peaks on a neighbour are
-    marked ``blended`` and kept out of the per-channel median.
-    """
-    usable = [
-        e for e in exposures
-        if not e.get("saturated_near_target")
-        and _finite(e.get("aperture_flux_ujy")) and _finite(e.get("wavelength_um"))
-    ]
-    subtract = any(_finite(e.get("local_background_mjy_sr")) for e in usable)
-    scale = imaging.pixel_to_ujy()
-    points, saturated, missing, no_background = [], 0, 0, 0
-    for e in exposures:
-        if e.get("saturated_near_target"):
-            saturated += 1
-            continue
-        flux, lam = e.get("aperture_flux_ujy"), e.get("wavelength_um")
-        if not (_finite(flux) and _finite(lam)):
-            missing += 1
-            continue
-        sigma = e.get("aperture_sigma_reported_ujy") or e.get("aperture_sigma_stat_ujy")
-        sigma = float(sigma) if _finite(sigma) else None
-        background_ujy = None
-        if subtract:
-            if not _finite(e.get("local_background_mjy_sr")):
-                no_background += 1
-                continue
-            background_ujy = 9 * float(e["local_background_mjy_sr"]) * scale
-            flux = float(flux) - background_ujy
-            if sigma is not None and _finite(e.get("local_background_sigma_mjy_sr")):
-                sigma = math.hypot(sigma, 9 * float(e["local_background_sigma_mjy_sr"]) * scale)
-        offset = e.get("aperture_peak_offset_px")
-        points.append({
-            "wavelength_um": round(float(lam), 5),
-            "flux_ujy": float(flux),
-            "sigma_ujy": sigma,
-            "background_ujy": background_ujy,
-            "blended": _finite(offset) and float(offset) >= BLENDED_PEAK_OFFSET_PX,
-            "detector": e.get("detector"),
-            "channel_id": e.get("channel_id"),
-            "epoch_index": e.get("epoch_index"),
-            "mjd": e.get("mid_mjd"),
-        })
-    points.sort(key=lambda p: p["wavelength_um"])
-    by_channel: dict[int, list[dict]] = {}
-    for p in points:
-        if p["channel_id"] is not None and not p["blended"]:
-            by_channel.setdefault(int(p["channel_id"]), []).append(p)
-    channels = []
-    for channel_id, group in sorted(by_channel.items()):
-        fluxes = np.array([p["flux_ujy"] for p in group])
-        median = float(np.median(fluxes))
-        # Robust error of the median: 1.4826·MAD/√n; a single point keeps its own sigma.
-        if len(group) > 1:
-            sigma = float(1.4826 * np.median(np.abs(fluxes - median)) / math.sqrt(len(group)))
-        else:
-            sigma = group[0]["sigma_ujy"]
-        channels.append({
-            "channel_id": channel_id,
-            "wavelength_um": round(float(np.median([p["wavelength_um"] for p in group])), 5),
-            "flux_ujy": median,
-            "sigma_ujy": sigma,
-            "n": len(group),
-        })
-    return {
-        "measured": True,
-        "source": DATA_SOURCE,
-        "unit": "uJy",
-        "background_subtracted": subtract,
-        "note": MEASURED_SPECTRUM_NOTE if subtract else MEASURED_SPECTRUM_NOTE_RAW,
-        "points": points,
-        "channels": channels,
-        "blended_points": sum(1 for p in points if p["blended"]),
-        "excluded_saturated": saturated,
-        "excluded_missing": missing,
-        "excluded_no_background": no_background,
-    }
-
-
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/spectrum/measured")
 def get_measured_spectrum(
     patch_id: int = Path(..., ge=1),
@@ -1528,15 +1451,35 @@ def get_patch_spectrum(
     auto_compute: bool = Query(True),
     store: Store = Depends(get_store),
 ) -> dict:
-    """102-channel SPHEREx spectrum (BLANKCH 51-52 preserved as null) and 17 spectral indices."""
-    patch = _patch_or_404(store, patch_id)
-    spec = store.get_patch_spectrum(patch_id, epoch_index=epoch_index)
-    if spec is None and auto_compute:
-        bundle = models.analyze_patch_science(store, patch, force_recompute=False)
-        spec = bundle["spectrum"]
+    """102-channel SPHEREx spectrum (BLANKCH 51-52 null) and 17 indices, measured on this patch:
+    the per-channel medians of /spectrum/measured, in mJy. ``available: false`` with a ``reason``
+    when it cannot be measured (e.g. the object saturates SPHEREx)."""
+    _patch_or_404(store, patch_id)
+    if epoch_index != -1:
+        return {
+            "available": False,
+            "simulated": False,
+            "reason": "Spectra are measured over all epochs together (epoch_index=-1).",
+            "data_note": real_science.MEASURED_NOTE,
+        }
+    exposures = store.list_nasa_sector_exposures(patch_id)
+    spec, reason = real_science.spectrum_102(measured_spectrum(exposures))
     if spec is None:
-        raise HTTPException(status_code=404, detail="Patch spectrum not found.")
-    return _simulated(spec | {"channels": spectrum_channels(spec)})
+        return {
+            "available": False,
+            "simulated": False,
+            "reason": reason,
+            "data_note": real_science.MEASURED_NOTE,
+        }
+    spec["indices"] = metrics.compute_all_17_spectral_indices(spec)
+    return spec | {
+        "patch_id": patch_id,
+        "epoch_index": -1,
+        "channels": spectrum_channels(spec),
+        "available": True,
+        "simulated": False,
+        "data_note": real_science.MEASURED_NOTE,
+    }
 
 
 def _epoch_saturation(exposures: list[dict[str, Any]], image: Any) -> dict[str, Any]:
@@ -1565,7 +1508,7 @@ def get_patch_metrics(
 ) -> dict:
     """Full scientific metrics bundle (photometry, variability, confidence, 17 spectral indices)."""
     patch = _patch_or_404(store, patch_id)
-    bundle = models.analyze_patch_science(store, patch, force_recompute=False)
+    bundle = _patch_science(store, patch)
     image_photometry: list[dict[str, Any]] = []
     if detector is not None:
         tl = store.get_timeline(patch_id, detector)
@@ -1596,15 +1539,15 @@ def get_patch_metrics(
                 )
     return {
         "patch": bundle["patch"],
-        # Confidence, variability and indices are simulated; image_photometry is measured on
-        # this patch's SPHEREx images.
-        "simulated": True,
-        "data_note": models.SIMULATED_NOTE
-        + " image_photometry is measured on this patch's SPHEREx images.",
+        "simulated": False,
+        "data_note": bundle["data_note"],
+        # None (with the reason in `unavailable`) when this patch cannot give them.
         "confidence": bundle["confidence"],
         "variability": bundle["variability"],
-        "spectral_indices": bundle["spectrum"].get("indices", []),
+        "light_curve": bundle["light_curve"],
+        "spectral_indices": (bundle["spectrum"] or {}).get("indices", []),
         "image_photometry": image_photometry,
+        "unavailable": bundle["unavailable"],
     }
 
 
@@ -1684,24 +1627,11 @@ def classify_event(
     patch = _resolve_optional_patch(service, body.patch_id, body.target)
     if body.feature_vector is not None:
         fv = body.feature_vector
-    elif patch is not None:
-        profile_key = patch.target_slug or "barnards-star"
-        if profile_key not in models.DEMO_PROFILE_SPECS:
-            profile_key = "barnards-star"
-        gaia_info, wise_info = _resolve_patch_crossmatch(store, patch)
-        fv = models.enrich_features_from_catalogs(
-            models.DEMO_PROFILE_SPECS[profile_key]["features"], gaia_info, wise_info
-        )
-        if gaia_info is not None or wise_info is not None:
-            store.save_patch_crossmatch(patch.id, gaia_info, wise_info)
-    else:
-        raise HTTPException(status_code=422, detail="Provide feature_vector, patch_id, or target.")
-
-    result = models.run_model1_event_classifier(fv, temperature_t=body.temperature_t)
-    if body.feature_vector is not None:
-        return _from_user_input(result)
-    assert patch is not None
-    return _simulated(store.save_model1_attribution(patch.id, -1, result))
+        return _from_user_input(models.run_model1_event_classifier(fv, temperature_t=body.temperature_t))
+    if patch is not None:
+        # The patch's own measured features (stored Model 1 result, computed if missing).
+        return _science_part(_patch_science(store, patch), "model1_event")
+    raise HTTPException(status_code=422, detail="Provide feature_vector, patch_id, or target.")
 
 
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/models/event")
@@ -1709,12 +1639,9 @@ def get_patch_event_model(
     patch_id: int = Path(..., ge=1),
     store: Store = Depends(get_store),
 ) -> dict:
-    """Retrieve stored Model 1 event attribution for a patch (computes if missing)."""
+    """Model 1 event attribution from this patch's measured features (computed if missing)."""
     patch = _patch_or_404(store, patch_id)
-    row = store.get_model1_attribution(patch_id, epoch_index=-1)
-    if row is None:
-        row = models.analyze_patch_science(store, patch, force_recompute=False)["model1_event"]
-    return _simulated(row)
+    return _science_part(_patch_science(store, patch), "model1_event")
 
 
 @app.post(f"{API_PREFIX}/models/classify-spectrum")
@@ -1741,13 +1668,13 @@ def classify_spectrum(
             raise HTTPException(status_code=422, detail=f"Invalid spectrum: {error}") from None
         return _from_user_input(result)
 
+    if patch is not None and not body.scenario:
+        return _science_part(_patch_science(store, patch), "model2_spectrum")
     if patch is not None:
-        bundle = models.analyze_patch_science(
-            store, patch, scenario=body.scenario, force_recompute=bool(body.scenario)
-        )
+        bundle = models.analyze_patch_science(store, patch, scenario=body.scenario, force_recompute=True)
         return _simulated(bundle["model2_spectrum"])
 
-    scenario = body.scenario or body.target
+    scenario = body.scenario
     if scenario and scenario in models.DEMO_PROFILE_SPECS:
         spec = models.build_demo_spectrum_payload(scenario)
         return _simulated(models.run_model2_spectral_classifier(spec))
@@ -1759,12 +1686,9 @@ def get_patch_spectrum_model(
     patch_id: int = Path(..., ge=1),
     store: Store = Depends(get_store),
 ) -> dict:
-    """Retrieve stored Model 2 spectral classification for a patch (computes if missing)."""
+    """Model 2 classification of this patch's measured spectrum (computed if missing)."""
     patch = _patch_or_404(store, patch_id)
-    row = store.get_model2_classification(patch_id)
-    if row is None:
-        row = models.analyze_patch_science(store, patch, force_recompute=False)["model2_spectrum"]
-    return _simulated(row)
+    return _science_part(_patch_science(store, patch), "model2_spectrum")
 
 
 @app.post(f"{API_PREFIX}/models/forecast-temporal")
@@ -1783,7 +1707,11 @@ def forecast_temporal(
         sigmas = body.sigmas_mjy or [
             science_catalogs.compute_reported_sigma(f, 0.015 * abs(f)) for f in body.fluxes_mjy
         ]
-        m1_row = store.get_model1_attribution(patch.id, -1) if patch is not None else None
+        m1_row = (
+            store.get_model1_attribution(patch.id, -1, real_science.MEASURED_VERSION)
+            if patch is not None
+            else None
+        )
         ra = patch.ra if patch is not None else 0.0
         dec = patch.dec if patch is not None else 0.0
         result = models.run_model3_temporal_forecast(
@@ -1799,10 +1727,10 @@ def forecast_temporal(
         )
         return _from_user_input(result)
 
+    if patch is not None and not body.scenario:
+        return _science_part(_patch_science(store, patch), "model3_forecast")
     if patch is not None:
-        bundle = models.analyze_patch_science(
-            store, patch, scenario=body.scenario, force_recompute=bool(body.scenario)
-        )
+        bundle = models.analyze_patch_science(store, patch, scenario=body.scenario, force_recompute=True)
         return _simulated(bundle["model3_forecast"])
 
     raise HTTPException(status_code=422, detail="Provide times_mjd + fluxes_mjy, patch_id, or target.")
@@ -1813,12 +1741,9 @@ def get_patch_forecast_model(
     patch_id: int = Path(..., ge=1),
     store: Store = Depends(get_store),
 ) -> dict:
-    """Retrieve stored Model 3 temporal forecast for a patch (computes if missing)."""
+    """Model 3 forecast from this patch's measured light curve (computed if missing)."""
     patch = _patch_or_404(store, patch_id)
-    row = store.get_model3_forecast(patch_id)
-    if row is None:
-        row = models.analyze_patch_science(store, patch, force_recompute=False)["model3_forecast"]
-    return _simulated(row)
+    return _science_part(_patch_science(store, patch), "model3_forecast")
 
 
 @app.post(f"{API_PREFIX}/patches/{{patch_id}}/votes")

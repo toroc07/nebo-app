@@ -349,34 +349,16 @@ def test_models_1_2_3_and_artifact_veto_handshake():
 
 
 def test_api_end_to_end_science_pipeline_and_votes():
-    store = MemoryStore()
-    store.upsert_targets(
-        [
-            {
-                "slug": "wise-0855",
-                "name": "WISE 0855-0714",
-                "ra": 133.75931,
-                "dec": -7.242145,
-                "kind": "brown_dwarf",
-                "note": "Coldest known brown dwarf.",
-                "pm_ra_mas_yr": -8123.7,
-                "pm_dec_mas_yr": 673.2,
-                "recommended_detector": 6,
-            }
-        ]
-    )
-    patch = store.create_patch(133.75931, -7.242145, "wise-0855")
-    main.app.dependency_overrides[main.get_store] = lambda: store
-    try:
-        client = TestClient(main.app)
+    from tests.test_real_science import measured_client
 
+    client, _, patch = measured_client()
+    try:
         r_an = client.post(f"/api/v1/patches/{patch.id}/analyze", json={"force_recompute": True})
         assert r_an.status_code == 200
         body = r_an.json()
-        assert body["model1_event"]["predicted_class"] == "MOVING_OBJECT"
-        assert body["model2_spectrum"]["predicted_class"] == "ULTRACOLD_Y_DWARF"
-        assert body["spectrum"]["blankch_51_is_null"] is True
-        assert body["spectrum"]["blankch_52_is_null"] is True
+        assert body["simulated"] is False and body["model1_event"]["predicted_class"]
+        assert body["model2_spectrum"]["predicted_class"]
+        assert body["spectrum"]["flux_mjy"][50] is None and body["spectrum"]["flux_mjy"][51] is None
 
         r_spec = client.get(f"/api/v1/patches/{patch.id}/spectrum")
         assert r_spec.status_code == 200
@@ -394,8 +376,7 @@ def test_api_end_to_end_science_pipeline_and_votes():
         assert r_m1.json()["predicted_class"] == "MOVING_OBJECT"
 
         r_m2 = client.post("/api/v1/models/classify-spectrum", json={"patch_id": patch.id})
-        assert r_m2.status_code == 200
-        assert r_m2.json()["predicted_class"] == "ULTRACOLD_Y_DWARF"
+        assert r_m2.status_code == 200 and r_m2.json()["available"] is True
 
         r_m3 = client.post("/api/v1/models/forecast-temporal", json={"patch_id": patch.id})
         assert r_m3.status_code == 200
@@ -437,32 +418,17 @@ def _science_client():
     return TestClient(main.app), store, patch
 
 
-def test_science_results_from_demo_profiles_are_labelled_simulated():
-    client, _, patch = _science_client()
+def test_data_sent_by_the_caller_is_labelled_and_not_stored_on_the_patch():
+    from tests.test_real_science import measured_client
+
+    client, _, patch = measured_client()
     try:
-        for path in ("spectrum", "metrics", "models/event", "models/spectrum", "models/forecast"):
-            body = client.get(f"/api/v1/patches/{patch.id}/{path}").json()
-            assert body["simulated"] is True, path
-            assert "Simulated" in body["data_note"], path
-        # Data the caller sends is labelled as such and not stored on the patch.
+        stored = client.get(f"/api/v1/patches/{patch.id}/models/event").json()
         fv = models.DEMO_PROFILE_SPECS["artifact_injection"]["features"]
         sent = client.post("/api/v1/models/classify-event", json={"patch_id": patch.id, "feature_vector": fv})
-        assert sent.json()["simulated"] is False
-        stored = client.get(f"/api/v1/patches/{patch.id}/models/event").json()
-        assert stored["predicted_class"] == "MOVING_OBJECT"
-    finally:
-        main.app.dependency_overrides.clear()
-
-
-def test_reads_reuse_stored_model_results():
-    client, _, patch = _science_client()
-    try:
-        first = client.get(f"/api/v1/patches/{patch.id}/metrics")
-        assert first.status_code == 200
-        ids = [client.get(f"/api/v1/patches/{patch.id}/models/{m}").json()["id"] for m in ("event", "spectrum", "forecast")]
-        client.get(f"/api/v1/patches/{patch.id}/metrics")
-        again = [client.get(f"/api/v1/patches/{patch.id}/models/{m}").json()["id"] for m in ("event", "spectrum", "forecast")]
-        assert again == ids
+        assert sent.json()["simulated"] is False and "sent in the request" in sent.json()["data_note"]
+        again = client.get(f"/api/v1/patches/{patch.id}/models/event").json()
+        assert again["id"] == stored["id"] and again["predicted_class"] == stored["predicted_class"]
     finally:
         main.app.dependency_overrides.clear()
 

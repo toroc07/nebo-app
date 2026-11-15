@@ -64,6 +64,20 @@ export default function SpectrumChart({ patchId }: { patchId: number }) {
       </section>
     );
   }
+  // Nothing to draw: say why (a saturated star, too few clean channels) instead of a stand-in.
+  if (spectrum.available === false) {
+    return (
+      <section className={s.panel} aria-label="102-channel SPHEREx spectrum">
+        <div className={s.panelHeader}>
+          <h2 className={s.panelTitle}>102-Channel SPHEREx Spectrum &amp; Model 2</h2>
+          <div className={s.badgeRow}>
+            <span className={s.badgeMeasured}>Not measurable here</span>
+          </div>
+        </div>
+        <p className={s.note}>{spectrum.reason}</p>
+      </section>
+    );
+  }
 
   const wMin = bandFilter === "mwir" ? 2.4 : 0.74;
   const wMax = 5.02;
@@ -101,9 +115,11 @@ export default function SpectrumChart({ patchId }: { patchId: number }) {
   }
   if (currentPts.length) segments.push(currentPts.join(" "));
 
-  // Until the spectrum is measured from SPHEREx exposures, it is a model curve: say so plainly
+  // A simulated spectrum (only for an explicit demo scenario) is a model curve: say so plainly
   // and hide the fit statistic, since a χ² of a model fitted to itself means nothing.
   const illustrative = Boolean(spectrum.simulated || model2?.simulated);
+  const model2Ready = model2 && model2.available !== false;
+  const poorFit = model2Ready && model2.citizen_level1?.fit_quality === "poor";
 
   return (
     <section
@@ -117,8 +133,10 @@ export default function SpectrumChart({ patchId }: { patchId: number }) {
             : "102-Channel SPHEREx Spectrum & Molecular Indices"}
         </h2>
         <div className={s.badgeRow}>
-          {illustrative && (
+          {illustrative ? (
             <span className={s.badgeSimulated}>Illustrative model · not SPHEREx data</span>
+          ) : (
+            <span className={s.badgeMeasured}>Measured · median per channel</span>
           )}
         </div>
       </div>
@@ -141,7 +159,7 @@ export default function SpectrumChart({ patchId }: { patchId: number }) {
             <option value="mwir">MWIR Ice &amp; Gas (2.40–5.00 µm · Bands 4–6)</option>
           </select>
         </label>
-        {model2 && (
+        {model2Ready && (
           <span className={s.mono}>
             {illustrative ? (
               <>
@@ -149,13 +167,22 @@ export default function SpectrumChart({ patchId }: { patchId: number }) {
               </>
             ) : (
               <>
-                Model 2: <strong>{model2.predicted_class}</strong> · {model2.best_template_name} (χ²
+                Model 2{poorFit ? " (closest template, poor fit)" : ""}:{" "}
+                <strong>{model2.predicted_class}</strong> · {model2.best_template_name} (χ²
                 <sub>red</sub> = {model2.chi2_reduced.toFixed(2)})
               </>
             )}
           </span>
         )}
       </div>
+      {!illustrative && poorFit && model2.citizen_level1?.fit_note && (
+        <p className={s.note} role="note">
+          {model2.citizen_level1.fit_note}
+        </p>
+      )}
+      {model2 && model2.available === false && (
+        <p className={s.note}>Model 2 not run: {model2.reason}</p>
+      )}
 
       <div className={s.chartWrap}>
         <svg className={s.chartSvg} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="SPHEREx flux vs wavelength">

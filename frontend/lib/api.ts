@@ -92,7 +92,14 @@ export type SpectralIndexValue = {
   is_valid?: boolean;
 };
 
-export type PatchSpectrumResponse = {
+/**
+ * Provenance of a science result: measured on this patch, simulated (only for an explicit demo
+ * scenario), or unavailable with the reason it cannot be measured here (e.g. a saturated star).
+ * When `available` is false the other fields of the result are absent.
+ */
+export type Availability = { available?: boolean; reason?: string };
+
+export type PatchSpectrumResponse = Availability & {
   patch_id: number;
   epoch_index: number;
   simulated?: boolean;
@@ -121,18 +128,30 @@ export type ImagePhotometryPoint = {
   f_artifact_flags: number;
 };
 
+export type MeasuredLightCurve = {
+  times_mjd: number[];
+  fluxes_mjy: number[];
+  sigmas_mjy: number[];
+  exposures_per_visit?: number[];
+  method?: string;
+};
+
 export type PatchMetricsResponse = {
   patch: { id: number; ra: number; dec: number; target?: string | null };
   simulated?: boolean;
   data_note?: string;
+  /** Parts this patch cannot give, with the reason (keys: confidence, light_curve, spectrum…). */
+  unavailable?: Record<string, string>;
+  light_curve?: MeasuredLightCurve | null;
   // Names as the backend sends them (metrics.compute_global_confidence_score and friends).
+  // null when there is no measured change to score.
   confidence: {
     c_global: number;
     s_snr?: number;
     s_dipole?: number;
     s_flags?: number;
     s_psf?: number;
-  };
+  } | null;
   variability: {
     n_epochs?: number;
     weighted_mean_mjy?: number;
@@ -142,12 +161,12 @@ export type PatchMetricsResponse = {
     lomb_scargle_power?: number;
     lomb_scargle_period_days?: number | null;
     is_variable?: boolean;
-  };
+  } | null;
   spectral_indices: SpectralIndexValue[];
   image_photometry: ImagePhotometryPoint[];
 };
 
-export type Model1EventResponse = {
+export type Model1EventResponse = Availability & {
   predicted_class: string;
   probabilities: Record<string, number>;
   temperature_t?: number;
@@ -170,7 +189,7 @@ export type Model1EventResponse = {
   data_note?: string;
 };
 
-export type Model2SpectrumResponse = {
+export type Model2SpectrumResponse = Availability & {
   predicted_class: string;
   best_template_name: string;
   chi2_reduced: number;
@@ -180,12 +199,15 @@ export type Model2SpectrumResponse = {
     confidence_pct: number;
     chemical_fingerprints: string[];
     fit_quality: string;
+    /** Plain-words verdict on how well the best template matches the measured spectrum. */
+    fit_note?: string;
   };
   simulated?: boolean;
   data_note?: string;
 };
 
-export type Model3ForecastResponse = {
+export type Model3ForecastResponse = Availability & {
+  researcher_level2?: { light_curve?: MeasuredLightCurve };
   forecast_series?: Array<{
     mjd: number;
     flux_mean_mjy: number;

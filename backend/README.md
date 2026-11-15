@@ -326,8 +326,32 @@ Gaia TAP is unavailable.
 
 ### `GET /patches/{id}/spectrum?epoch_index=-1` and `GET /patches/{id}/metrics?detector=3`
 
-Simulated science profiles (`simulated: true`). Fields the web client reads (keep them stable;
-`frontend/tests/fixtures/science-responses.json` holds a real answer):
+Measured on the patch's own data (`app/real_science.py`, `simulated: false`). A part that cannot
+be measured here answers `available: false` with a `reason` (e.g. the object saturates SPHEREx,
+fewer than 20 clean channels, fewer than 3 visits, no significant change to classify) and none of
+the fields below; it is never filled with a demo profile. Demo profiles are only used when a POST
+asks for a `scenario`, and then say `simulated: true`. Model results are stored under
+`model_version = "v2-measured"` (older simulated rows, `v1`, are ignored).
+
+- **Spectrum**: the per-channel medians of `/spectrum/measured` (local sky subtracted, blended
+  and saturated exposures left out), in mJy; at least 20 measured channels.
+- **Light curve** (`/metrics` `light_curve`): every exposure = channel flux x visit factor,
+  fitted in log space (alternating means, 4σ clipping), so the filter's wavelength sweep cancels;
+  visits are > 10 days apart; each visit's error adds 1.5 % calibration repeatability; ≥ 3 visits.
+- **Model 1 features**: first-vs-last epoch difference around the object after the same flux
+  scaling and PSF matching as `/candidates`, judged against its noise plus 15 % of the local
+  brightness (a still star's residual from the wavelength sweep); the object's centroid shift
+  between the first and last epochs where it is detected (P1-6 centroids), used when it beats
+  the dipole; PSF width, concentration and background gradient relative to the field's stars;
+  flag fractions of the exposures; Gaia DR3 / CatWISE when the cross-match answers (else
+  neutral and listed in `researcher_level2.measurement.features_unavailable`). Model 1 only runs
+  when there is an event (dipole or centroid shift ≥ 3σ, or a brightness change ≥ 4σ that is not
+  on a saturated core).
+- **Model 2**: `citizen_level1.fit_quality` is `poor` (with `fit_note`) when χ²ᵣ > 5: the class is
+  then the least-bad template, not an identification.
+
+Fields the web client reads (keep them stable; `frontend/tests/fixtures/science-responses.json`
+holds an answer):
 - `/spectrum`: `channels[]` of `{channel_id, band, lambda_c_um, flux_mjy, sigma_mjy, is_blankch}`
   (102 entries, derived from the stored columnar arrays; BLANKCH 51-52 and invalid channels have
   `flux_mjy: null`, never 0), plus `indices[]` (`index_code, value, uncertainty, snr,

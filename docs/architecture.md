@@ -163,7 +163,7 @@ flowchart TB
 | `db.py` | Process-wide store; `python -m app.db init` applies the schema and seeds targets, 102 channels and 17 indices |
 | `gaia.py` | ESA Gaia DR3 cone search (CSV), position propagation from J2016.0 |
 | `ephemeris.py` | Expected position from proper motion (catalogue epoch 2026.2) |
-| `models.py`, `metrics.py`, `science_catalogs.py` | Science layer: photometry, spectral indices, Models 1–3. **Mostly simulated**, see [section 9](#9-real-vs-simulated-data) |
+| `real_science.py`, `models.py`, `metrics.py`, `science_catalogs.py` | Science layer: measured spectrum, light curve and Model 1 features (`real_science`), photometry, spectral indices, Models 1–3. Measured on each patch; see [section 9](#9-real-vs-simulated-data) |
 | `etl.py`, `preload.py` | Batch builds (`run`) and the queue worker (`worker`) |
 | `export.py` | Exports ready timelines as static JSON + PNG with the same shape as the API |
 | `targets.py` | Seed catalogue: Barnard's Star, ε Indi B, WISE 0855, RW Aurigae, R Draconis |
@@ -175,8 +175,8 @@ flowchart TB
 | Health and catalogue | `GET /health`, `GET /targets`, `GET /patches`, `GET /catalogs/channels`, `GET /catalogs/spectral-indices` |
 | Images and timelines | `GET /timeline`, `GET /timeline/diff`, `GET /timeline/stack`, `GET /timeline/rgb`, `GET /images/{id}.png`, `GET /images/{id}.npz`, `GET /images/{id}/mask.png`, `GET /patches/{id}/sectors` |
 | Gaia | `GET /patches/{id}/gaia` |
-| Science (simulated) | `GET /patches/{id}/spectrum`, `GET /patches/{id}/metrics`, `POST /patches/{id}/analyze` |
-| Models (simulated) | `POST /models/classify-event`, `POST /models/classify-spectrum`, `POST /models/forecast-temporal`, `GET /patches/{id}/models/{event,spectrum,forecast}` |
+| Science (measured) | `GET /patches/{id}/spectrum`, `GET /patches/{id}/metrics`, `POST /patches/{id}/analyze` |
+| Models (on measured data; demo only for a `scenario`) | `POST /models/classify-event`, `POST /models/classify-spectrum`, `POST /models/forecast-temporal`, `GET /patches/{id}/models/{event,spectrum,forecast}` |
 | Citizen votes | `POST /patches/{id}/votes`, `GET /patches/{id}/votes` |
 | Public chat | `GET /chat/{room}/messages?after=`, `POST /chat/{room}/messages` (room = target slug or `general`) |
 
@@ -393,8 +393,8 @@ erDiagram
 | `nasa_sector_exposures` | Every IRSA exposure used: uri, release, times, WCS, photometry, cutout URL | builds | epoch `releases`, `coverage`, `quality` and `warnings`, `/sectors` |
 | `api_query_cache` | IRSA TAP frame lists (`irsa_spherex_tap`) and Gaia cones (`gaia_dr3_tap`) | builds, `/gaia` | builds, `/gaia` |
 | `spherex_channels`, `spectral_index_definitions` | 102 channels and 17 spectral indices | `db init` | `/catalogs/*`, science |
-| `patch_spectra`, `patch_spectral_indices` | Per-patch spectra and indices (simulated) | science endpoints | science endpoints |
-| `ml_model1_attributions`, `ml_model2_classifications`, `ml_model3_forecasts` | Model outputs (simulated) | model endpoints | model endpoints |
+| `patch_spectra`, `patch_spectral_indices` | Per-patch spectra and indices of the old simulated path (the measured spectrum is recomputed from the exposures, not stored) | `scenario` analyses | nothing on the default path |
+| `ml_model1_attributions`, `ml_model2_classifications`, `ml_model3_forecasts` | Model outputs: `v2-measured` (measured) and `v1` (old simulated rows, ignored) | model endpoints | model endpoints |
 | `citizen_votes` | Votes per epoch (`REAL_CHANGE`, `ARTIFACT`, `MOVER`, `UNSURE`) | `POST /votes` | `GET /votes` (token hidden) |
 | `gcs_media_assets` | Planned registry of GCS objects | **never written** | **never read** |
 | `chat_messages` | Public chat, one room per target plus `general`; no foreign keys, rows older than 24 h are deleted | `POST /chat/{room}/messages` (also purges) | `GET /chat/{room}/messages` |
@@ -524,7 +524,8 @@ signal", never "Planet X found".
 | Exposure photometry, `image_photometry` in `/metrics` | **Real**: measured on the real images |
 | Gaia overlay | **Real**: ESA Gaia DR3 |
 | Background sky map | **Real**: IRSA SPHEREx HiPS |
-| Spectrum, spectral indices, confidence, variability, Models 1–3 | **Simulated** from demo profiles (`models.SIMULATED_NOTE`), labelled as such in the API |
+| Spectrum, spectral indices, light curve, variability, confidence, Models 1–3 | **Measured** on each patch (`real_science.py`); a part that cannot be measured says why (`available: false`). Demo profiles only for an explicit `scenario` (`simulated: true`) |
+| Model 1–3 logic | Hand-tuned estimators (not trained), shown as "model estimate, not a detection"; Model 2's templates rarely fit real spectra, so a poor fit is said |
 | `shared/demo*` | **Synthetic** (fake cutouts), kept as data; no route serves it now |
 | Cockpit decorative stars, landscape art | Decorative, separate from detections |
 | 3D model on the field room's tablet (`StarHologram`) | **Illustration** built from the object's type and temperature, captioned "Illustration" |
@@ -551,6 +552,16 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Real data for the science layer: new `app/real_science.py`. `/spectrum`,
+  `/metrics`, `/models/{event,spectrum,forecast}` and the patch forms of the POST model endpoints
+  now use the patch's own measurements (102-channel medians of the measured spectrum; a light
+  curve fitted as channel flux x visit factor; Model 1 features from the normalised epoch
+  difference, the P1-6 centroids and field-relative PSF shape) and answer `available: false` with
+  a reason when a part cannot be measured. Model rows are stored as `v2-measured`; no schema
+  change. Coordinate searches no longer borrow Barnard's Star's demo profile. Demo profiles only
+  answer an explicit `scenario`. Validated on production data: Barnard, Eps Indi B and WISE 0855
+  come out as movers (centroid shifts 1.73, 0.90 and 0.77 px), empty fields as "no event", and
+  saturated stars without motion as not measurable.
 - **2026-11-15** — `frontend/tests/browser.mjs` rewritten for the current journey (tutorial with 7
   steps, START → cockpit, Objects → View images → field with a 202, Back); it no longer expects the
   removed Observe menu.

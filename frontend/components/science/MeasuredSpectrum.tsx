@@ -1,6 +1,6 @@
 "use client";
 // Spectrum measured from this field's SPHEREx exposures (GET /patches/{id}/spectrum/measured):
-// one point per usable exposure and the median per channel. Shown above the illustrative model
+// one point per usable exposure and the median per channel. Shown above the 102-channel medians
 // and labelled MEASURED; when the object saturates the detector there is nothing honest to plot,
 // and the panel says so instead of drawing lower limits.
 import { useEffect, useState } from "react";
@@ -55,7 +55,7 @@ export default function MeasuredSpectrum({ patchId }: { patchId: number }) {
       <h2 className={s.panelTitle}>Measured SPHEREx Spectrum</h2>
       <div className={s.badgeRow}>
         <span className={s.badgeMeasured}>Measured · SPHEREx exposures</span>
-        {data && (
+        {data && data.points.length > 0 && (
           <span className={s.badgeMeasured}>
             {data.background_subtracted ? "Local sky subtracted" : "Sky not subtracted"}
           </span>
@@ -84,7 +84,7 @@ export default function MeasuredSpectrum({ patchId }: { patchId: number }) {
         <p className={s.note}>
           Not enough clean exposures to measure a spectrum ({data.points.length} usable,{" "}
           {data.excluded_saturated} saturated near the object). A saturated star only gives lower
-          limits, so nothing is plotted; the model below is illustrative only.
+          limits, so nothing is plotted.
         </p>
       </section>
     );

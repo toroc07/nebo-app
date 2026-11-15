@@ -217,7 +217,7 @@ test("science responses carry the fields the panels read", async () => {
     assert.ok(c.flux_mjy === null || typeof c.flux_mjy === "number");
   }
   assert.deepEqual(spectrum.channels.filter((c) => c.is_blankch).map((c) => c.flux_mjy), [null, null]);
-  assert.equal(typeof metrics.confidence.c_global, "number");
+  assert.equal(typeof metrics.confidence?.c_global, "number");
   assert.ok(model1.treeshap_values!.top_drivers!.every((d) => typeof d.phi === "number"));
 });
 

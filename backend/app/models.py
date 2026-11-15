@@ -989,10 +989,19 @@ def analyze_patch_science(
     gaia_info: dict[str, Any] | None = None,
     wise_info: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Compute/seed spectrum, 17 indices, metrics, and Models 1-3 for a patch and persist all."""
-    profile_key = scenario or patch.target_slug or "barnards-star"
-    if profile_key not in DEMO_PROFILE_SPECS:
-        profile_key = "barnards-star"
+    """Spectrum, 17 indices, metrics and Models 1-3 for a patch.
+
+    By default everything is measured on the patch's own SPHEREx data (``real_science``); a part
+    that cannot be measured is reported as unavailable. Only an explicit ``scenario`` (a named
+    demonstration profile, for testing the models) uses the built-in simulated profiles.
+    """
+    if scenario is None:
+        from . import real_science
+
+        return real_science.analyze(
+            store, patch, force_recompute=force_recompute, gaia_info=gaia_info, wise_info=wise_info
+        )
+    profile_key = scenario if scenario in DEMO_PROFILE_SPECS else "barnards-star"
     spec_cfg = DEMO_PROFILE_SPECS[profile_key]
 
     # 1. Spectrum & 17 spectral indices

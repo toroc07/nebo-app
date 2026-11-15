@@ -56,10 +56,14 @@ Earlier, the public found hundreds of such objects in NASA WISE data with tools 
 - **Compare (3-panel).** Two epochs and their difference image.
 - **RGB composite.** Any three detectors as colour channels, with presets (cold dust and brown
   dwarfs, ices and gas, near-IR stars).
-- **Spectrum.** The spectrum measured from the field's exposures, over an illustrative model
-  with molecular lines (H₂O, CH₄, CO₂, CO…).
-- **Models and metrics.** Event and spectrum classifiers, a temporal forecast, saturation
-  checks and community votes (real change, moving object, artifact, uncertain).
+- **Spectrum.** The spectrum measured from the field's exposures (local sky subtracted, blends
+  and saturated exposures set apart), and its 102 SPHEREx channels with molecular lines (H₂O,
+  CH₄, CO₂, CO…) and a template fit that says when no template matches.
+- **Models and metrics.** Event and spectrum classifiers and a temporal forecast, all run on the
+  field's own measurements: the epoch difference and centroid shift, a light curve corrected for
+  the filter's wavelength sweep, the measured spectrum. A part that cannot be measured (e.g. a
+  saturated star) says why. Plus saturation checks and community votes (real change, moving
+  object, artifact, uncertain).
 
 ### Community
 
@@ -69,7 +73,8 @@ Earlier, the public found hundreds of such objects in NASA WISE data with tools 
 ### Honest by design
 
 - **Honest labels.** Observation dates and data releases (e.g. DR1, QR3) come from the archive;
-  science-model outputs that are still simulated say so.
+  model outputs are computed from the field's own data and say "model estimate, not a
+  detection"; what cannot be measured is said, never filled in.
 
 Featured targets: Barnard's Star, ε Indi B, WISE 0855−0714 (visible only in detector 6),
 RW Aurigae and R Draconis.
@@ -116,9 +121,9 @@ criteria. This is how Nebo answers each one.
 - **Catalogued vs uncatalogued:** Gaia DR3 stars propagated to each epoch and CatWISE sources
   separate known objects from uncatalogued movements; the bad-pixel mask, saturation and
   alignment checks flag artifacts.
-- **Honest output:** observation dates and data releases come from the archive, simulated model
-  outputs are labelled as such, and Nebo only ever speaks of *observed changes* and *candidate
-  signals*.
+- **Honest output:** observation dates and data releases come from the archive, model outputs
+  are computed from each field's measurements (or say why they cannot be), and Nebo only ever
+  speaks of *observed changes* and *candidate signals*.
 - **Solid engineering:** a FastAPI + PostgreSQL backend that builds fields in stages (`202` with
   progress, then `200`), deployed on Google Cloud Run and Vercel, and covered by 300+ automated
   tests (204 backend, 112 frontend).

@@ -8,6 +8,7 @@ import {
   submitCitizenVote,
   type CitizenVote,
   type ImagePhotometryPoint,
+  type MeasuredLightCurve,
   type Model1EventResponse,
   type Model3ForecastResponse,
   type PatchMetricsResponse,
@@ -29,7 +30,9 @@ function saturationTitle(row: ImagePhotometryPoint): string {
 }
 
 function modelEstimateLabel(simulated: boolean | undefined): string {
-  return `Model estimate, not a detection${simulated ? " · simulated demo profile" : ""}.`;
+  return simulated
+    ? "Model estimate, not a detection · simulated demo profile."
+    : "Model estimate on this patch's SPHEREx measurements, not a detection.";
 }
 
 // Uncalibrated scores read as a coarse level, never as an exact percentage.
@@ -115,7 +118,11 @@ export default function ModelsAndMetricsPanel({
     0.01,
     ...shapDrivers.map((d) => Math.abs(d.phi ?? 0)),
   );
-  const forecast = model3.forecast_series ?? [];
+  const m1Ready = model1.available !== false;
+  const m3Ready = model3.available !== false;
+  const forecast = m3Ready ? (model3.forecast_series ?? []) : [];
+  const observed = m3Ready ? model3.researcher_level2?.light_curve : undefined;
+  const confidence = metricsData.confidence;
 
   return (
     <section className={s.panel} aria-label="Metrics and coupled ML models">
@@ -125,8 +132,10 @@ export default function ModelsAndMetricsPanel({
           {metricsData.image_photometry.length > 0 && (
             <span className={s.badgeMeasured}>Measured ePSF photometry</span>
           )}
-          {(metricsData.simulated || model1.simulated || model3.simulated) && (
+          {metricsData.simulated || model1.simulated || model3.simulated ? (
             <span className={s.badgeSimulated}>Simulated model profile</span>
+          ) : (
+            <span className={s.badgeMeasured}>Models on measured data</span>
           )}
         </div>
       </div>
@@ -135,9 +144,9 @@ export default function ModelsAndMetricsPanel({
       <div className={s.statRow}>
         <div className={s.stat}>
           <span className={s.statLabel}>Event class</span>
-          <span className={s.statValue}>{model1.predicted_class}</span>
+          <span className={s.statValue}>{m1Ready ? model1.predicted_class : "no event"}</span>
         </div>
-        {model1.citizen_level1?.confidence_score_pct !== undefined && (
+        {m1Ready && model1.citizen_level1?.confidence_score_pct !== undefined && (
           <div className={s.stat}>
             <span className={s.statLabel}>Likelihood</span>
             <span className={s.statValue}>
@@ -145,15 +154,17 @@ export default function ModelsAndMetricsPanel({
             </span>
           </div>
         )}
-        <div className={s.stat}>
-          <span className={s.statLabel}>Global confidence</span>
-          <span className={s.statValue}>
-            {metricsData.confidence.c_global.toFixed(1)}
-            <small>/ 100</small>
-          </span>
-        </div>
+        {confidence && (
+          <div className={s.stat}>
+            <span className={s.statLabel}>Global confidence</span>
+            <span className={s.statValue}>
+              {confidence.c_global.toFixed(1)}
+              <small>/ 100</small>
+            </span>
+          </div>
+        )}
         {/* A simulated light curve says nothing about this patch: no alert status for it. */}
-        {!model3.simulated && (
+        {!model3.simulated && m3Ready && (
           <div className={s.stat}>
             <span className={s.statLabel}>Alert status</span>
             <span className={s.statValue}>{model3.citizen_level1?.alert_status ?? "n/a"}</span>
@@ -164,6 +175,10 @@ export default function ModelsAndMetricsPanel({
       <div className={s.gridTwo}>
         <div className={s.subCard}>
           <h3>Model 1 · Event Attribution</h3>
+          {!m1Ready ? (
+            <p className={s.note}>{model1.reason}</p>
+          ) : (
+          <>
           <p className={s.note}>{modelEstimateLabel(model1.simulated)}</p>
           <p className={s.mono} style={{ margin: "0 0 0.4rem" }}>
             Class: <strong>{model1.predicted_class}</strong>
@@ -208,10 +223,16 @@ export default function ModelsAndMetricsPanel({
               </div>
             </>
           )}
+          </>
+          )}
         </div>
 
         <div className={s.subCard}>
           <h3>Model 3 · GP Forecast &amp; Astrometric Cone</h3>
+          {!m3Ready ? (
+            <p className={s.note}>{model3.reason}</p>
+          ) : (
+          <>
           <p className={s.note}>{modelEstimateLabel(model3.simulated)}</p>
           {/* A simulated light curve says nothing about this patch: no alert status for it. */}
           {model3.simulated ? (
@@ -224,7 +245,14 @@ export default function ModelsAndMetricsPanel({
               {model3.z_alert !== undefined && ` · Z_alert = ${model3.z_alert.toFixed(2)}σ`}
             </p>
           )}
-          {forecast.length > 1 && <GpForecastSparkline series={forecast} />}
+          {forecast.length > 1 && <GpForecastSparkline series={forecast} observed={observed} />}
+          {observed && (
+            <p className={s.note}>
+              Dots: measured flux per visit ({observed.times_mjd.length} visits, relative to the
+              object&apos;s own spectrum so the filter&apos;s wavelength sweep cancels; 1.5 %
+              calibration error included). Line and band: the GP forecast.
+            </p>
+          )}
           {model3.predicted_cone && (
             <p className={s.note}>
               Search cone (+{model3.predicted_cone.horizon_days} d): RA{" "}
@@ -235,6 +263,8 @@ export default function ModelsAndMetricsPanel({
           )}
           {!model3.simulated && model3.citizen_level1?.summary && (
             <p className={s.note}>{model3.citizen_level1.summary}</p>
+          )}
+          </>
           )}
         </div>
       </div>
@@ -289,7 +319,10 @@ export default function ModelsAndMetricsPanel({
         <div className={s.subCard}>
           <h3>Global Confidence &amp; Citizen Classification</h3>
           <p className={s.mono} style={{ margin: "0 0 0.4rem" }}>
-            C_global: <strong>{metricsData.confidence.c_global.toFixed(1)} / 100</strong>
+            C_global:{" "}
+            <strong>
+              {confidence ? `${confidence.c_global.toFixed(1)} / 100` : "n/a (no measured change)"}
+            </strong>
           </p>
           <p className={s.note}>Classify this observed change ({votes.length} recorded):</p>
           <div className={s.voteRow}>
@@ -313,15 +346,23 @@ export default function ModelsAndMetricsPanel({
 
 function GpForecastSparkline({
   series,
+  observed,
 }: {
   series: Array<{ mjd: number; flux_mean_mjy: number; flux_std_mjy: number }>;
+  /** The measured visits the forecast was fitted to, drawn as dots with their error bars. */
+  observed?: MeasuredLightCurve;
 }) {
-  const tMin = Math.min(...series.map((p) => p.mjd));
-  const tMax = Math.max(...series.map((p) => p.mjd));
+  const obsT = observed?.times_mjd ?? [];
+  const obsF = observed?.fluxes_mjy ?? [];
+  const obsS = observed?.sigmas_mjy ?? [];
+  const obsLo = obsT.map((_, i) => obsF[i] - obsS[i]);
+  const obsHi = obsT.map((_, i) => obsF[i] + obsS[i]);
+  const tMin = Math.min(...series.map((p) => p.mjd), ...obsT);
+  const tMax = Math.max(...series.map((p) => p.mjd), ...obsT);
   const loVals = series.map((p) => p.flux_mean_mjy - 2 * p.flux_std_mjy);
   const hiVals = series.map((p) => p.flux_mean_mjy + 2 * p.flux_std_mjy);
-  const fMin = Math.min(...loVals);
-  const fMax = Math.max(...hiVals);
+  const fMin = Math.min(...loVals, ...obsLo);
+  const fMax = Math.max(...hiVals, ...obsHi);
 
   const W = 360;
   const H = 120;
@@ -344,6 +385,12 @@ function GpForecastSparkline({
         fill="rgba(63, 210, 255, 0.16)"
       />
       <polyline fill="none" stroke="#3fd2ff" strokeWidth="1.75" points={meanPts} />
+      {obsT.map((t, i) => (
+        <g key={t}>
+          <line x1={xOf(t)} x2={xOf(t)} y1={yOf(obsLo[i])} y2={yOf(obsHi[i])} stroke="#ffb347" strokeWidth="1" />
+          <circle cx={xOf(t)} cy={yOf(obsF[i])} r="2.6" fill="#ffb347" />
+        </g>
+      ))}
     </svg>
   );
 }
