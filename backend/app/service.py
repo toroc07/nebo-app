@@ -348,6 +348,7 @@ class TimelineService:
     ) -> None:
         self.store = store
         self._query_frames = query_frames
+        self._sleep = time.sleep  # Tests replace it to skip the waits.
         self._fetch_cutout = fetch_cutout
         self._patch_lock = threading.Lock()
         self._pending = 0
@@ -464,6 +465,29 @@ class TimelineService:
             log.exception("Timeline build failed: patch %s detector %s", patch.id, timeline.detector)
             self.store.fail_timeline(timeline.id, f"Build failed: {type(error).__name__}")
 
+    def _query_frames_patiently(self, patch: Patch, timeline: Timeline) -> list[irsa.FrameRecord]:
+        """Query IRSA, waiting out short outages so the visitor never has to press Retry.
+
+        While waiting, the build holds one of the MAX_CONCURRENT_BUILDS threads; the stage
+        `waiting_for_archive` (done = attempt) tells the client what is going on.
+        """
+        # Both the waits and the wall clock count: a failing IRSA query itself can take minutes.
+        attempt, waited, start = 0, 0.0, time.monotonic()
+        while True:
+            try:
+                return self._query_frames(patch.ra, patch.dec, timeline.detector)
+            except requests.RequestException as error:
+                attempt += 1
+                wait = 15.0 * 2 ** min(attempt - 1, 2)  # 15, 30, then 60 s
+                elapsed = max(waited, time.monotonic() - start)
+                if elapsed + wait > config.ARCHIVE_WAIT_S:
+                    raise
+                waited += wait
+                log.warning("IRSA down for timeline %s (attempt %d): %s; retrying in %.0f s", timeline.id, attempt, error, wait)
+                self.store.update_progress(timeline.id, "waiting_for_archive", attempt, 0)
+                self._sleep(wait)
+                self.store.update_progress(timeline.id, "querying", 0, 0)
+
     def _build(self, patch: Patch, timeline: Timeline, refresh_frames: bool = False) -> None:
         store, timeline_id = self.store, timeline.id
         t0 = time.monotonic()
@@ -478,7 +502,7 @@ class TimelineService:
                 records = [irsa.FrameRecord(**item) for item in cached["response_json"]]
 
         if records is None:
-            records = self._query_frames(patch.ra, patch.dec, timeline.detector)
+            records = self._query_frames_patiently(patch, timeline)
             if records:
                 store.set_cached_api(
                     tap_cache_key,

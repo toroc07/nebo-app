@@ -267,7 +267,10 @@ stateDiagram-v2
   [*] --> queued: claim_timeline
   queued --> querying: build starts / dequeue_timeline
   querying --> downloading: frames found
-  querying --> failed: no frames or IRSA error
+  querying --> waiting_for_archive: IRSA error
+  waiting_for_archive --> querying: backoff 15/30/60 s
+  waiting_for_archive --> failed: archive_unavailable after NEBO_ARCHIVE_WAIT_S
+  querying --> failed: no frames
   downloading --> first_light: progressive only
   first_light --> preview_ready
   preview_ready --> refining
@@ -543,6 +546,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — IRSA outages: the build waits in `waiting_for_archive` (backoff, up to
+  `NEBO_ARCHIVE_WAIT_S` = 300 s) instead of failing; a final outage is `502`
+  `code: "archive_unavailable"`, which the Field retries automatically.
 - **2026-11-15** — Field renders the partial epochs of `202` timeline answers while the build
   refines (no `wait_for`), so coordinate searches show images from first light.
 - **2026-11-15** — Journey: the cockpit destination can be cleared (× on the title screen),

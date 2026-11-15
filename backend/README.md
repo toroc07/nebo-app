@@ -194,6 +194,9 @@ Give either `target` or both `ra` and `dec`.
 `epochs[]` of a `202` already lists the epochs rendered so far (it grows during the build).
 `Retry-After` is 2 s in the early stages (up to `first_light`) and 5 s afterwards; use it
 instead of a fixed interval.
+When IRSA itself is down, the build goes `querying` → `waiting_for_archive` (`progress.done` =
+attempt) → `querying` and retries with a 15 → 30 → 60 s backoff for up to `NEBO_ARCHIVE_WAIT_S`
+(default 300 s). Only then does it fail with `502` `code: "archive_unavailable"`.
 
 **Early preview (`wait_for`)**: `GET /timeline?...&wait_for=first_light` (or `preview`) does not
 wait; it answers `200` with `"is_partial": true, "refining": true` as soon as a preview image
