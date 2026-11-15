@@ -65,7 +65,7 @@ const MOTES: [number, number, number, number][] = [
 const CREW = [
   {
     name: "Jasen Mihovil Yukopila Escobar",
-    role: "Frontend Developer",
+    role: "Fullstack Developer & Data",
     photo: "/crew/jasen.webp",
     github: "Jmyukopila",
   },
