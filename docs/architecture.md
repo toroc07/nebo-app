@@ -420,6 +420,7 @@ graph TD
   Nebo --> Field["Field (blink comparator)"]
   Nebo --> ChatPanel["ChatPanel (public chat, sky view only)"]
   Field --> ConsoleSelect
+  Field --> StarHologram["StarHologram (r3f, wall tablet)"]
   Cockpit --> CoordinatePanel
   Cockpit --> CockpitScreens
   CockpitScreens --> EarthGlobe & SkyLocator & FovGauge & Tools
@@ -436,6 +437,7 @@ graph TD
 | `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
 | `ObservationLab`, `ImageViewport` | Lab viewer: nested 3′/6′/15′ levels, pan/zoom, Gaia rings, expected-position marker |
 | `Flight` | Short WebGL2 star burst (desktop only) |
+| `StarHologram` | Spinning 3D model of the observed object on the field room's wall tablet (procedural shader; colours from each object's temperature; wide screens only) |
 | `ChatPanel` | Public chat key (top-left) and panel in the sky explorer: room = selected target or `general`, polls every 3 s while open, generated nickname in `localStorage` |
 
 ### User journey
@@ -510,6 +512,7 @@ signal", never "Planet X found".
 | Spectrum, spectral indices, confidence, variability, Models 1–3 | **Simulated** from demo profiles (`models.SIMULATED_NOTE`), labelled as such in the API |
 | `shared/demo*` and the lab's "Simulated demo" | **Synthetic** (fake cutouts), for offline demos only |
 | Cockpit decorative stars, landscape art | Decorative, separate from detections |
+| 3D model on the field room's tablet (`StarHologram`) | **Illustration** built from the object's type and temperature, captioned "Illustration" |
 
 ## 10. Known gaps and doc drift
 
@@ -533,13 +536,18 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Field room: the tablet's painted globe is covered by `StarHologram`, a
+  spinning 3D illustration of the observed object (red dwarf, T-dwarf pair, Y dwarf, young star
+  with disk, Mira giant; wireframe for custom fields). Cockpit art: the SKY MAP key repainted
+  unlit, like the other three keys.
 - **2026-11-15** — Public chat: `chat_messages` table, `GET/POST /chat/{room}/messages` with
   server-side filters (banned words, links and personal data, 3 s anti-flood, 24 h retention)
   and the `ChatPanel` in the sky explorer.
 - **2026-11-15** — Frontend: removed the legacy menu UI (Observe, Featured objects, coordinate
   form, Settings, site header/footer, landscape background and their assets); the tutorial now
   lives on the home wall screen; journey is Home ⇄ Explore ⇄ Field. Logo recoloured to the ship
-  palette (cyan + amber) and used as favicon (`app/icon.png`).
+  palette (cyan + amber) for the home screen; the browser tab keeps the purple logo
+  (`app/icon.png`).
 - **2026-11-15** — First version of this document (deployment, backend, build pipeline, DB,
   frontend, data sources).
 - **2026-11-15** — Faster coordinate searches (PR #15): stage-based `Retry-After` (2/5 s), all

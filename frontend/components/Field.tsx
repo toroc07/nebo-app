@@ -27,8 +27,12 @@ import {
 } from "@/lib/api";
 import { decToParts, raToParts } from "@/lib/coordinates";
 import { pixelToSky } from "@/lib/lab/sky";
+import dynamic from "next/dynamic";
 import ConsoleSelect from "./ConsoleSelect";
 import s from "./field.module.css";
+
+// WebGL only exists in the browser: the wall tablet's 3D model is loaded on the client.
+const StarHologram = dynamic(() => import("./StarHologram"), { ssr: false });
 
 const stages: Record<string, string> = {
   queued: "Waiting for a turn",
@@ -243,6 +247,8 @@ export default function Field({
     <section className={s.scene} data-console="field" aria-labelledby="field-title">
       <div className={s.stage}>
         <img className={s.room} src="/panels/console-bg.webp" alt="" aria-hidden="true" draggable={false} />
+        {/* The wall tablet shows the observed object as a spinning 3D model (an illustration). */}
+        <StarHologram target={target} reduced={reduced} />
         <div className={s.screen} data-phase={phase}>
           <svg className={s.frame} viewBox="0 0 1083 678" preserveAspectRatio="none" aria-hidden="true">
             {/* Chamfered outline from the reference; the gap at top-left holds the Back tab. */}

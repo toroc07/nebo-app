@@ -21,6 +21,8 @@ npm run build
 
 The sky explorer has a public chat (top-left key): one room per catalogue object, or a general room when nothing is selected. Nobody signs in; the browser keeps a generated nickname (`nebo.chat.nickname` in localStorage). The backend filters every message and deletes it after 24 hours (contract in `backend/README.md`).
 
+In the observation room, the wall tablet shows the observed object as a spinning 3D model (`components/StarHologram.tsx`). It is an illustration from the object's type and temperature, not SPHEREx data, and it says so on screen.
+
 Playback starts paused and stops when the tab is hidden; the blink speed is chosen in the field console. The system reduced-motion setting turns off every animation. Searches use ICRS degrees, and the viewer keeps the detector across epochs.
 
 The landscape is a decorative image generated for Nebo. The Barlow Condensed and IBM Plex fonts are served locally; their OFL licenses are included in `public/fonts`.
