@@ -1,4 +1,6 @@
 import io
+import threading
+import time
 
 import pytest
 from PIL import Image
@@ -153,3 +155,89 @@ def test_timeline_diff(client):
     side = http.get("/api/v1/timeline", params=params).json()["size"]["width_px"]
     assert Image.open(io.BytesIO(diff.content)).size == (side, side)
     assert http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 9}).status_code == 404
+
+
+def test_coordinate_timeline_202_includes_first_light_static_image_and_sector(client, monkeypatch):
+    from app import config
+
+    http, service = client
+    records = make_records([60914.0, 60915.0, 61110.0, 61111.0])
+    release_rest = threading.Event()
+
+    def gated_fetch(uri, ra, dec, size):
+        if uri != records[0].uri:
+            release_rest.wait(10)
+        return make_cutout_bytes(ra, dec, shape=(211, 211))
+
+    service._query_frames = lambda *args: records
+    service._fetch_cutout = gated_fetch
+    params = {"ra": RA, "dec": DEC, "size": "small", "detector": 3}
+
+    first = http.get("/api/v1/timeline", params=params)
+    assert first.status_code == 202
+    first_body = first.json()
+    assert set(first_body["sector"]["corners"]) == {"NW", "NE", "SE", "SW"}
+    assert first_body["size"]["name"] == "small"
+
+    deadline = time.monotonic() + 10.0
+    partial_resp = first
+    while time.monotonic() < deadline:
+        partial_resp = http.get("/api/v1/timeline", params=params)
+        if partial_resp.json()["progress"]["stage"] == "first_light":
+            break
+        time.sleep(0.02)
+
+    assert partial_resp.status_code == 202
+    partial = partial_resp.json()
+    assert partial["is_partial"] is True
+    assert partial["progress"]["stage"] == "first_light"
+    assert partial["progress"]["epochs_ready"] == 1
+    assert partial["preview_image_url"].startswith("/api/v1/images/")
+    assert len(partial["epochs"]) == 1 and partial["epochs"][0]["frames_used"] == 1
+
+    img_resp = http.get(partial["preview_image_url"])
+    assert img_resp.status_code == 200 and img_resp.headers["content-type"] == "image/png"
+    assert Image.open(io.BytesIO(img_resp.content)).size == (31, 31)
+
+    # Optional early-ready mode returns 200 as soon as the static first-light image exists.
+    early = http.get("/api/v1/timeline", params=params | {"wait_for": "first_light"})
+    assert early.status_code == 200
+    early_body = early.json()
+    assert early_body["status"] == "ready"
+    assert early_body["is_partial"] is True and early_body["refining"] is True
+    assert early_body["data"]["source"]
+    assert len(early_body["epochs"]) == 1
+
+    # Waiting for full preview stays 202 while only epoch 0 has landed.
+    assert http.get("/api/v1/timeline", params=params | {"wait_for": "preview"}).status_code == 202
+
+    # Env flag enables early-ready 200 for coordinate searches without changing Featured Objects.
+    monkeypatch.setattr(config, "PROGRESSIVE_EARLY_READY", True)
+    assert http.get("/api/v1/timeline", params=params).status_code == 200
+
+    release_rest.set()
+    wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC), size="small")
+    final = http.get("/api/v1/timeline", params=params)
+    assert final.status_code == 200
+    final_body = final.json()
+    assert len(final_body["epochs"]) == 2
+    assert final_body["frames_found"] == 4 and final_body["frames_used"] == 4
+    assert all(e["frames_used"] == 2 for e in final_body["epochs"])
+
+
+def test_featured_object_ignores_early_ready_toggle(client, monkeypatch):
+    from app import config
+
+    http, service = client
+    records = make_records([60914.0, 61110.0])
+    release = threading.Event()
+    service._query_frames = lambda *args: records
+    service._fetch_cutout = lambda uri, ra, dec, size: (
+        release.wait(10) or make_cutout_bytes(ra, dec, shape=(211, 211))
+    )
+    monkeypatch.setattr(config, "PROGRESSIVE_EARLY_READY", True)
+    resp = http.get("/api/v1/timeline", params={"target": "barnards-star", "wait_for": "first_light"})
+    assert resp.status_code == 202
+    assert resp.json()["epochs"] == []
+    release.set()
+    wait_until_settled(service, service.resolve_patch(target_slug="barnards-star"))

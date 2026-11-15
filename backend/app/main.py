@@ -132,29 +132,35 @@ def _detector_payload(detector: int) -> dict:
     }
 
 
-def timeline_payload(view: TimelineView, size: str, store: Store) -> dict:
-    base = {
-        "status": view.status,
-        "patch": _patch_payload(view.patch),
-        "detector": _detector_payload(view.detector),
-    }
-    timeline = view.timeline
-    if view.status == "building":
-        return base | {
-            "progress": {
-                "stage": timeline.stage,
-                "done": timeline.progress_done,
-                "total": timeline.progress_total,
-            },
-            "retry_after_s": RETRY_AFTER_S,
-        }
-    if view.status == "failed":
-        return base | {"error": timeline.error}
-
-    side_px = view.images[0].width_px if view.images else None
+def _epochs_payload(view: TimelineView, size: str, store: Store) -> list[dict]:
+    if not view.images:
+        return []
     exposures = store.list_nasa_sector_exposures(view.patch.id, detector=view.detector)
     target = store.get_target(view.patch.target_slug) if view.patch.target_slug else None
-    return base | {
+    return [
+        {
+            "index": image.epoch_index,
+            "start_utc": image.start_utc.isoformat(),
+            "end_utc": image.end_utc.isoformat(),
+            "mid_mjd": round(image.mid_mjd, 5),
+            "frames_available": image.frames_available,
+            "frames_used": image.frames_used,
+            "display_min": image.display_min,
+            "display_max": image.display_max,
+            "releases": _epoch_releases(exposures, image),
+            "expected_position": _expected_position(view.patch, target, image.mid_mjd, size),
+            "image_url": f"{API_PREFIX}/images/{image.id}.png",
+            **({"npz_url": f"{API_PREFIX}/images/{image.id}.npz"} if image.has_npz else {}),
+        }
+        for image in view.images
+    ]
+
+
+def _timeline_meta_payload(
+    view: TimelineView, size: str, side_px: int | None, epochs: list[dict]
+) -> dict:
+    timeline = view.timeline
+    return {
         "size": {
             "name": size,
             "side_deg": config.SIZES_DEG[size],
@@ -165,32 +171,53 @@ def timeline_payload(view: TimelineView, size: str, store: Store) -> dict:
         },
         "orientation": "north_up_east_left",
         "sector": _sector_payload(view.patch, size),
-        "data": {"source": DATA_SOURCE, "processed_at": timeline.updated_at.isoformat()},
         "display": {
             "stretch": "asinh",
             "unit": "MJy/sr",
             "note": "Zodiacal light subtracted; pixels without data are transparent.",
         },
-        "epochs": [
-            {
-                "index": image.epoch_index,
-                "start_utc": image.start_utc.isoformat(),
-                "end_utc": image.end_utc.isoformat(),
-                "mid_mjd": round(image.mid_mjd, 5),
-                "frames_available": image.frames_available,
-                "frames_used": image.frames_used,
-                "display_min": image.display_min,
-                "display_max": image.display_max,
-                "releases": _epoch_releases(exposures, image),
-                "expected_position": _expected_position(view.patch, target, image.mid_mjd, size),
-                "image_url": f"{API_PREFIX}/images/{image.id}.png",
-                **({"npz_url": f"{API_PREFIX}/images/{image.id}.npz"} if image.has_npz else {}),
-            }
-            for image in view.images
-        ],
+        "epochs": epochs,
         "frames_found": timeline.frames_found,
         "frames_used": timeline.frames_used,
         "updated_at": timeline.updated_at.isoformat(),
+    }
+
+
+def timeline_payload(view: TimelineView, size: str, store: Store) -> dict:
+    base = {
+        "status": view.status,
+        "patch": _patch_payload(view.patch),
+        "detector": _detector_payload(view.detector),
+    }
+    timeline = view.timeline
+    if view.status == "failed":
+        return base | {"error": timeline.error}
+
+    epochs = _epochs_payload(view, size, store)
+    if view.status == "building":
+        side_px = (
+            view.images[0].width_px
+            if view.images
+            else imaging.grid_pixels(config.SIZES_DEG[size])
+        )
+        return base | {
+            **_timeline_meta_payload(view, size, side_px, epochs),
+            "is_partial": True,
+            "preview_image_url": epochs[0]["image_url"] if epochs else None,
+            "progress": {
+                "stage": timeline.stage,
+                "done": timeline.progress_done,
+                "total": timeline.progress_total,
+                "epochs_ready": len(epochs),
+                "is_partial": True,
+            },
+            "retry_after_s": RETRY_AFTER_S,
+        }
+
+    side_px = view.images[0].width_px if view.images else None
+    return base | {
+        **_timeline_meta_payload(view, size, side_px, epochs),
+        "data": {"source": DATA_SOURCE, "processed_at": timeline.updated_at.isoformat()},
     }
 
 
@@ -252,6 +279,14 @@ def get_timeline(
     detector: int | None = Query(
         None, ge=1, le=6, description="SPHEREx detector 1-6. Default: the target's recommended one, else 3."
     ),
+    wait_for: Literal["complete", "first_light", "preview"] = Query(
+        "complete",
+        description=(
+            "For coordinate searches: 'first_light' answers 200 as soon as the 1st static "
+            "image is rendered; 'preview' answers 200 once 1 frame per epoch is rendered; "
+            "'complete' waits for full co-add."
+        ),
+    ),
     service: TimelineService = Depends(get_service),
 ):
     """Image timeline of a patch: one image per SPHEREx epoch.
@@ -266,6 +301,23 @@ def get_timeline(
         return payload
     if view.status == "failed":
         return JSONResponse(status_code=502, content=payload)
+    early_ready = (
+        view.status == "building"
+        and view.patch.target_slug is None
+        and len(view.images) > 0
+        and (
+            config.PROGRESSIVE_EARLY_READY
+            or wait_for == "first_light"
+            or (wait_for == "preview" and view.timeline.stage in ("preview_ready", "refining"))
+        )
+    )
+    if early_ready:
+        return payload | {
+            "status": "ready",
+            "is_partial": True,
+            "refining": True,
+            "data": {"source": DATA_SOURCE, "processed_at": view.timeline.updated_at.isoformat()},
+        }
     return JSONResponse(
         status_code=202, content=payload, headers={"Retry-After": str(RETRY_AFTER_S)}
     )

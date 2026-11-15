@@ -107,6 +107,17 @@ class Store(Protocol):
         ...
 
     def update_progress(self, timeline_id: int, stage: str, done: int, total: int) -> None: ...
+    def save_partial_timeline(
+        self,
+        timeline_id: int,
+        images: list[EpochImage],
+        *,
+        stage: str,
+        done: int,
+        total: int,
+        frames_found: int,
+        frames_used: int,
+    ) -> None: ...
     def complete_timeline(
         self, timeline_id: int, images: list[EpochImage], frames_found: int, frames_used: int
     ) -> None: ...
@@ -509,30 +520,58 @@ class PostgresStore:
                 (stage, done, total, timeline_id),
             )
 
+    @staticmethod
+    def _replace_timeline_images_conn(conn: Any, timeline_id: int, images: list[EpochImage]) -> None:
+        conn.execute("DELETE FROM timeline_images WHERE timeline_id = %s", (timeline_id,))
+        if not images:
+            return
+        with conn.cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO timeline_images (
+                    timeline_id, epoch_index, size, start_utc, end_utc, mid_mjd,
+                    frames_available, frames_used, width_px, height_px,
+                    display_min, display_max, png, npz)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    (
+                        timeline_id, i.epoch_index, i.size, i.start_utc, i.end_utc,
+                        i.mid_mjd, i.frames_available, i.frames_used, i.width_px,
+                        i.height_px, i.display_min, i.display_max, i.png, i.npz,
+                    )
+                    for i in images
+                ],
+            )
+
+    def save_partial_timeline(
+        self,
+        timeline_id: int,
+        images: list[EpochImage],
+        *,
+        stage: str,
+        done: int,
+        total: int,
+        frames_found: int,
+        frames_used: int,
+    ) -> None:
+        """Persist intermediate rendered images while keeping the timeline in 'building' state."""
+        with self.pool.connection() as conn:
+            with conn.transaction():
+                self._replace_timeline_images_conn(conn, timeline_id, images)
+                conn.execute(
+                    "UPDATE timelines SET status = 'building', stage = %s, progress_done = %s, "
+                    "progress_total = %s, error = NULL, frames_found = %s, frames_used = %s, "
+                    "updated_at = now() WHERE id = %s",
+                    (stage, done, total, frames_found, frames_used, timeline_id),
+                )
+
     def complete_timeline(
         self, timeline_id: int, images: list[EpochImage], frames_found: int, frames_used: int
     ) -> None:
         with self.pool.connection() as conn:
             with conn.transaction():
-                conn.execute("DELETE FROM timeline_images WHERE timeline_id = %s", (timeline_id,))
-                with conn.cursor() as cur:
-                    cur.executemany(
-                        """
-                        INSERT INTO timeline_images (
-                            timeline_id, epoch_index, size, start_utc, end_utc, mid_mjd,
-                            frames_available, frames_used, width_px, height_px,
-                            display_min, display_max, png, npz)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        [
-                            (
-                                timeline_id, i.epoch_index, i.size, i.start_utc, i.end_utc,
-                                i.mid_mjd, i.frames_available, i.frames_used, i.width_px,
-                                i.height_px, i.display_min, i.display_max, i.png, i.npz,
-                            )
-                            for i in images
-                        ],
-                    )
+                self._replace_timeline_images_conn(conn, timeline_id, images)
                 conn.execute(
                     "UPDATE timelines SET status = 'ready', stage = 'done', error = NULL, "
                     "frames_found = %s, frames_used = %s, updated_at = now() WHERE id = %s",

@@ -12,6 +12,7 @@ from app.service import (
     TargetNotFound,
     TimelineService,
     group_into_epochs,
+    plan_progressive_waves,
     select_evenly,
     split_into_epochs,
 )
@@ -257,6 +258,95 @@ def test_failed_rebuild_keeps_the_old_images():
     after = store.get_timeline(patch.id, 3)
     assert after is not None and after.status == "ready"
     assert [i.id for i in store.list_images(timeline.id, "medium")] == before
+
+
+def test_plan_progressive_waves_orders_first_light_then_breadth_first():
+    waves = plan_progressive_waves([[0, 1, 2], [3, 4, 5], [6, 7, 8]], limit=3)
+    assert waves[0] == ("first_light", [(0, 0)])
+    assert waves[1] == ("preview_ready", [(1, 3), (2, 6)])
+    assert waves[2] == ("refining", [(0, 1), (1, 4), (2, 7)])
+    assert waves[3] == ("refining", [(0, 2), (1, 5), (2, 8)])
+
+
+def test_coordinate_search_renders_partial_images_progressively_while_building():
+    records = make_records([60914.0, 60915.0, 61110.0, 61111.0, 61300.0, 61301.0])
+    release_wave1 = threading.Event()
+    release_wave2 = threading.Event()
+    wave1_uris = {records[2].uri, records[4].uri}
+    wave2_uris = {records[1].uri, records[3].uri, records[5].uri}
+
+    def gated_fetch(uri, ra, dec, size):
+        if uri in wave1_uris:
+            release_wave1.wait(10)
+        elif uri in wave2_uris:
+            release_wave2.wait(10)
+        return make_cutout_bytes(ra, dec, shape=(211, 211))
+
+    service, store = make_service(records, fetch=gated_fetch)
+    patch = service.resolve_patch(ra=RA, dec=DEC)
+    initial = service.timeline(patch, 3, "medium")
+    assert initial.status == "building"
+
+    deadline = time.monotonic() + 10.0
+    view = initial
+    while time.monotonic() < deadline:
+        view = service.timeline(patch, 3, "medium")
+        if view.timeline.stage == "first_light":
+            break
+        time.sleep(0.02)
+
+    assert view.status == "building" and view.timeline.stage == "first_light"
+    assert len(view.images) == 1
+    assert view.images[0].epoch_index == 0 and view.images[0].frames_used == 1
+    png_bytes = store.get_png(view.images[0].id)
+    assert png_bytes is not None and Image.open(io.BytesIO(png_bytes)).size == (59, 59)
+
+    release_wave1.set()
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        view = service.timeline(patch, 3, "medium")
+        if view.timeline.stage == "preview_ready":
+            break
+        time.sleep(0.02)
+
+    assert view.status == "building" and view.timeline.stage == "preview_ready"
+    assert [img.epoch_index for img in view.images] == [0, 1, 2]
+    assert [img.frames_used for img in view.images] == [1, 1, 1]
+
+    release_wave2.set()
+    final = wait_until_settled(service, patch)
+    assert final.status == "ready"
+    assert [img.epoch_index for img in final.images] == [0, 1, 2]
+    assert [img.frames_used for img in final.images] == [2, 2, 2]
+    assert final.timeline.frames_found == 6 and final.timeline.frames_used == 6
+
+
+def test_featured_object_build_does_not_use_partial_waves():
+    records = make_records([60914.0, 60915.0, 61110.0, 61111.0])
+    release = threading.Event()
+    first_done = threading.Event()
+
+    def gated_fetch(uri, ra, dec, size):
+        if uri == records[0].uri:
+            first_done.set()
+            return make_cutout_bytes(ra, dec, shape=(211, 211))
+        release.wait(10)
+        return make_cutout_bytes(ra, dec, shape=(211, 211))
+
+    service, _ = make_service(records, fetch=gated_fetch)
+    patch = service.resolve_patch(target_slug="barnards-star")
+    service.timeline(patch, 3, "medium")
+    assert first_done.wait(5)
+    time.sleep(0.1)
+
+    mid = service.timeline(patch, 3, "medium")
+    assert mid.status == "building"
+    assert mid.timeline.stage == "downloading"
+    assert mid.images == []
+
+    release.set()
+    final = wait_until_settled(service, patch)
+    assert final.status == "ready" and len(final.images) == 2
 
 
 # ----- per-exposure quick-look photometry -------------------------------------------------

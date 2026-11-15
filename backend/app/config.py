@@ -68,3 +68,18 @@ FAILED_RETRY_S = 60
 
 # Native SPHEREx pixel scale, used for the common output grid.
 PIXEL_SCALE_ARCSEC = 6.15
+
+# Progressive wave-by-wave build for coordinate searches (patch.target_slug is None).
+PROGRESSIVE_COORDINATE_BUILD = os.environ.get("NEBO_PROGRESSIVE_COORDINATE_BUILD", "1").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+)
+# When true, GET /timeline for coordinate searches answers 200 as soon as the first static image is ready
+# while continuing co-add refinement in the background.
+PROGRESSIVE_EARLY_READY = os.environ.get("NEBO_PROGRESSIVE_EARLY_READY", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+

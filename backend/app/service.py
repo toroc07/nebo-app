@@ -110,6 +110,48 @@ def select_evenly(indices: list[int], limit: int) -> list[int]:
     return [indices[p] for p in positions]
 
 
+def plan_progressive_waves(
+    epochs: list[list[int]], limit: int = config.MAX_FRAMES_PER_EPOCH
+) -> list[tuple[str, list[tuple[int, int]]]]:
+    """Order frame downloads from lightest to complete for coordinate searches.
+
+    - Wave 0 ('first_light'): 1 single frame from the first non-empty epoch so a static
+      preview image can be rendered and stored within a few seconds.
+    - Wave 1 ('preview_ready'): 1 frame from each remaining epoch (breadth-first) so all
+      epochs can be blinked quickly.
+    - Waves 2..K ('refining'): round-robin across epochs for frames 2..limit, progressively
+      improving SNR via inverse-variance co-addition.
+    """
+    selected = [select_evenly(indices, limit) for indices in epochs]
+    waves: list[tuple[str, list[tuple[int, int]]]] = []
+
+    first_epoch = next((e for e, idxs in enumerate(selected) if idxs), None)
+    if first_epoch is None:
+        return waves
+
+    waves.append(("first_light", [(first_epoch, selected[first_epoch][0])]))
+
+    wave1 = [
+        (epoch, idxs[0])
+        for epoch, idxs in enumerate(selected)
+        if epoch != first_epoch and idxs
+    ]
+    if wave1:
+        waves.append(("preview_ready", wave1))
+
+    max_depth = max((len(idxs) for idxs in selected), default=0)
+    for depth in range(1, max_depth):
+        wave_r = [
+            (epoch, idxs[depth])
+            for epoch, idxs in enumerate(selected)
+            if depth < len(idxs)
+        ]
+        if wave_r:
+            waves.append(("refining", wave_r))
+
+    return waves
+
+
 def mjd_to_datetime(mjd: float) -> datetime:
     return Time(mjd, format="mjd").to_datetime(timezone=timezone.utc)
 
@@ -340,7 +382,11 @@ class TimelineService:
             else:
                 current = self.store.get_timeline(patch.id, detector)
         assert current is not None
-        images = self.store.list_images(current.id, size) if current.status == "ready" else []
+        images = (
+            self.store.list_images(current.id, size)
+            if current.status == "ready" or current.stage not in ("queued", "querying")
+            else []
+        )
         return TimelineView(current.status, patch, detector, current, images)
 
     def work_one(self) -> bool:
@@ -433,17 +479,30 @@ class TimelineService:
             raise NoDataError("No SPHEREx images cover this position with this detector yet.")
 
         epochs = split_into_epochs([record.mjd_start for record in records])
-        work = [
-            (epoch, records[i])
-            for epoch, indices in enumerate(epochs)
-            for i in select_evenly(indices, config.MAX_FRAMES_PER_EPOCH)
-        ]
-        store.update_progress(timeline_id, "downloading", 0, len(work))
+        is_progressive = (
+            patch.target_slug is None
+            and config.PROGRESSIVE_COORDINATE_BUILD
+            and not refresh_frames
+        )
+        if is_progressive:
+            waves = plan_progressive_waves(epochs, config.MAX_FRAMES_PER_EPOCH)
+            total_work = sum(len(w) for _, w in waves)
+        else:
+            work = [
+                (epoch, records[i])
+                for epoch, indices in enumerate(epochs)
+                for i in select_evenly(indices, config.MAX_FRAMES_PER_EPOCH)
+            ]
+            waves = []
+            total_work = len(work)
+
+        store.update_progress(timeline_id, "downloading", 0, total_work)
         grid_wcs, grid_shape = imaging.make_target_grid(
             patch.ra, patch.dec, config.SIZES_DEG["large"]
         )
 
         done = 0
+        current_stage = "downloading"
         progress_lock = threading.Lock()
 
         # Catalogue objects move: measure each exposure where the object is at that time.
@@ -485,19 +544,44 @@ class TimelineService:
             finally:
                 with progress_lock:
                     done += 1
-                    store.update_progress(timeline_id, "downloading", done, len(work))
+                    store.update_progress(timeline_id, current_stage, done, total_work)
 
-        processed = [p for p in self._downloads.map(process, work) if p is not None]
-        if not processed:
-            raise NoDataError("SPHEREx images were found but none could be downloaded.")
+        if is_progressive:
+            store.delete_timeline_exposures(timeline_id)
+            processed: list[_Processed] = []
+            for wave_idx, (wave_stage, wave_items) in enumerate(waves):
+                wave_work = [(epoch, records[i]) for epoch, i in wave_items]
+                wave_processed = [p for p in self._downloads.map(process, wave_work) if p is not None]
+                processed.extend(wave_processed)
+                wave_exposures = [p.exposure_row for p in wave_processed if p.exposure_row is not None]
+                if wave_exposures:
+                    store.save_nasa_sector_exposures(wave_exposures)
+                if processed and wave_idx < len(waves) - 1:
+                    current_stage = wave_stage
+                    partial_images = render_epoch_images(records, epochs, processed)
+                    store.save_partial_timeline(
+                        timeline_id,
+                        partial_images,
+                        stage=wave_stage,
+                        done=done,
+                        total=total_work,
+                        frames_found=len(records),
+                        frames_used=len(processed),
+                    )
+            if not processed:
+                raise NoDataError("SPHEREx images were found but none could be downloaded.")
+        else:
+            processed = [p for p in self._downloads.map(process, work) if p is not None]
+            if not processed:
+                raise NoDataError("SPHEREx images were found but none could be downloaded.")
 
-        exposure_rows = [p.exposure_row for p in processed if p.exposure_row is not None]
-        # A rebuild can regroup the epochs: drop the rows of the previous build first.
-        store.delete_timeline_exposures(timeline_id)
-        if exposure_rows:
-            store.save_nasa_sector_exposures(exposure_rows)
+            exposure_rows = [p.exposure_row for p in processed if p.exposure_row is not None]
+            # A rebuild can regroup the epochs: drop the rows of the previous build first.
+            store.delete_timeline_exposures(timeline_id)
+            if exposure_rows:
+                store.save_nasa_sector_exposures(exposure_rows)
 
-        store.update_progress(timeline_id, "rendering", len(work), len(work))
+        store.update_progress(timeline_id, "rendering", total_work, total_work)
         images = render_epoch_images(records, epochs, processed)
         store.complete_timeline(
             timeline_id, images, frames_found=len(records), frames_used=len(processed)

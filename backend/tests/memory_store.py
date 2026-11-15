@@ -161,27 +161,57 @@ class MemoryStore:
             self.timelines[timeline.id] = timeline
             return self.patches[timeline.patch_id], timeline
 
+    def _update_locked(self, timeline_id: int, **changes) -> None:
+        self.timelines[timeline_id] = replace(
+            self.timelines[timeline_id], updated_at=_now(), **changes
+        )
+
     def _update(self, timeline_id: int, **changes) -> None:
         with self._lock:
-            self.timelines[timeline_id] = replace(
-                self.timelines[timeline_id], updated_at=_now(), **changes
-            )
+            self._update_locked(timeline_id, **changes)
+
+    def _replace_images_locked(self, timeline_id: int, images: list[EpochImage]) -> None:
+        for image_id in [i for i, (t, _) in self.images.items() if t == timeline_id]:
+            del self.images[image_id]
+        for image in images:
+            self.images[self._next("image")] = (timeline_id, image)
 
     def update_progress(self, timeline_id: int, stage: str, done: int, total: int) -> None:
         self._update(timeline_id, stage=stage, progress_done=done, progress_total=total)
+
+    def save_partial_timeline(
+        self,
+        timeline_id: int,
+        images: list[EpochImage],
+        *,
+        stage: str,
+        done: int,
+        total: int,
+        frames_found: int,
+        frames_used: int,
+    ) -> None:
+        with self._lock:
+            self._replace_images_locked(timeline_id, images)
+            self._update_locked(
+                timeline_id,
+                status="building",
+                stage=stage,
+                progress_done=done,
+                progress_total=total,
+                error=None,
+                frames_found=frames_found,
+                frames_used=frames_used,
+            )
 
     def complete_timeline(
         self, timeline_id: int, images: list[EpochImage], frames_found: int, frames_used: int
     ) -> None:
         with self._lock:
-            for image_id in [i for i, (t, _) in self.images.items() if t == timeline_id]:
-                del self.images[image_id]
-            for image in images:
-                self.images[self._next("image")] = (timeline_id, image)
-        self._update(
-            timeline_id, status="ready", stage="done", error=None,
-            frames_found=frames_found, frames_used=frames_used,
-        )
+            self._replace_images_locked(timeline_id, images)
+            self._update_locked(
+                timeline_id, status="ready", stage="done", error=None,
+                frames_found=frames_found, frames_used=frames_used,
+            )
 
     def fail_timeline(self, timeline_id: int, error: str) -> None:
         self._update(timeline_id, status="failed", error=error)
@@ -197,26 +227,29 @@ class MemoryStore:
     # ----- images -----------------------------------------------------------------------
 
     def list_images(self, timeline_id: int, size: str) -> list[ImageInfo]:
-        infos = [
-            ImageInfo(
-                id=image_id, epoch_index=i.epoch_index, size=i.size, start_utc=i.start_utc,
-                end_utc=i.end_utc, mid_mjd=i.mid_mjd, frames_available=i.frames_available,
-                frames_used=i.frames_used, width_px=i.width_px, height_px=i.height_px,
-                display_min=i.display_min, display_max=i.display_max,
-                has_npz=(i.npz is not None),
-            )
-            for image_id, (t, i) in self.images.items()
-            if t == timeline_id and i.size == size
-        ]
+        with self._lock:
+            infos = [
+                ImageInfo(
+                    id=image_id, epoch_index=i.epoch_index, size=i.size, start_utc=i.start_utc,
+                    end_utc=i.end_utc, mid_mjd=i.mid_mjd, frames_available=i.frames_available,
+                    frames_used=i.frames_used, width_px=i.width_px, height_px=i.height_px,
+                    display_min=i.display_min, display_max=i.display_max,
+                    has_npz=(i.npz is not None),
+                )
+                for image_id, (t, i) in self.images.items()
+                if t == timeline_id and i.size == size
+            ]
         return sorted(infos, key=lambda info: info.epoch_index)
 
     def get_png(self, image_id: int) -> bytes | None:
-        entry = self.images.get(image_id)
-        return entry[1].png if entry else None
+        with self._lock:
+            entry = self.images.get(image_id)
+            return entry[1].png if entry else None
 
     def get_npz(self, image_id: int) -> bytes | None:
-        entry = self.images.get(image_id)
-        return entry[1].npz if entry else None
+        with self._lock:
+            entry = self.images.get(image_id)
+            return entry[1].npz if entry else None
 
     # ----- sector_coordinates & nasa_sector_exposures -----------------------------------
 
