@@ -43,6 +43,9 @@ texts describe the viewer. The sky map code (`Sky.tsx`, the "Explore" view) is u
 reachable through Featured objects → field → Back. The backend was not touched.
 
 ## Pixel ↔ sky math
+
+The constants used here (6.15″ pixels, 31/59/147 px levels, zoom limits) and the rest of the
+app's numbers are collected in [`science-and-techniques.md`](science-and-techniques.md).
 `lib/lab/sky.ts` needs no WCS library: the images are on a tangent-plane grid centred on the patch
 position, which is the central pixel `((w-1)/2, (h-1)/2)`, at `pixel_scale_arcsec` per pixel, north
 up and east left. It reproduces the API's own `expected_position` and `sector.corners` (unit tests

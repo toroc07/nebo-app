@@ -63,6 +63,7 @@ Code is not done until the docs describe it. In every PR, check:
 | An external data source (URL, table, collection, release, query, limits) | `docs/data-sources.md` and `docs/architecture.md` §1 |
 | Deployment, Dockerfile, environment variables | `docs/architecture.md` §2 and the README quick start |
 | Routes, components, the user journey or frontend data flow | `docs/architecture.md` §8 and `frontend/README.md` |
+| A constant, threshold, formula or technique (pixel scale, stretch, photometry, change detection, models, retries, zoom, animation) | `docs/science-and-techniques.md` |
 | What is real vs simulated | `docs/architecture.md` §9 |
 | You find docs that no longer match the code | Fix them, or list them in `docs/architecture.md` §10 |
 

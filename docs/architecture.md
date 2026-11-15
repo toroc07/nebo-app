@@ -7,7 +7,9 @@ external data it uses. Every diagram is Mermaid, so GitHub renders it in place.
 > source, a deploy setting, an environment variable or the user journey, update the matching
 > section and diagram here and add a line to the [changelog](#architecture-changelog). The
 > checklist is in [`AGENTS.md`](../AGENTS.md#keeping-docs-in-sync). External data sources are
-> detailed in [`data-sources.md`](data-sources.md).
+> detailed in [`data-sources.md`](data-sources.md). The numbers, formulas and techniques behind
+> each step (pixel scale, stretch, photometry, change thresholds, retries, zoom) are in
+> [`science-and-techniques.md`](science-and-techniques.md).
 
 Contents:
 [1. System context](#1-system-context) ·
@@ -20,6 +22,7 @@ Contents:
 [8. Frontend](#8-frontend) ·
 [9. Real vs simulated data](#9-real-vs-simulated-data) ·
 [10. Known gaps and doc drift](#10-known-gaps-and-doc-drift) ·
+[Science and techniques](science-and-techniques.md) ·
 [Changelog](#architecture-changelog)
 
 ---
@@ -552,11 +555,17 @@ Found while writing this document (2026-11-15); fix them and strike them here.
   non-`queued` stage that the worker does not pick up again (only a new request after 15 min
   re-claims it).
 - Partial saves change image ids (delete + insert).
+- `metrics.py` comments disagree with the code (annulus r = 6 vs 6.5 px, variance floor 0.02 vs
+  0.015 px²); `frontend/lib/overlays.ts` hard-codes 6.15″; `SpectrumChart.tsx` band edges differ
+  slightly from `irsa.py`. See [science-and-techniques §10](science-and-techniques.md#10-known-inconsistencies).
 
 ## Architecture changelog
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Docs: new [`science-and-techniques.md`](science-and-techniques.md) lists every
+  constant, threshold, formula and technique with its purpose; linked from this file, the docs
+  index, `data-sources.md`, `observation-lab.md`, the README and the `AGENTS.md` checklist.
 - **2026-11-15** — Journey (P1-2): the field viewer overlays Gaia DR3, CatWISE2020 and detected
   changes (Known vs New badges), shows a detail card for the clicked source, an alignment check
   with a labelled simulated offset, and suggested destinations. Frontend only; it reuses
