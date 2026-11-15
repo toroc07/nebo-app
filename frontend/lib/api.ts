@@ -198,6 +198,8 @@ export type Building = {
   status: "building";
   progress: { stage: string; done: number; total: number };
   retry_after_s: number;
+  // Progressive builds already carry the epochs rendered so far (fewer frames per epoch).
+  epochs?: Epoch[];
 };
 export const origin = (
   process.env.NEXT_PUBLIC_API_ORIGIN || "http://127.0.0.1:8000"

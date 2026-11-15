@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type PointerEvent, type Ref } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type Ref } from "react";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -41,6 +41,9 @@ const StarHologram = dynamic(() => import("./StarHologram"), { ssr: false });
 
 const stages: Record<string, string> = {
   queued: "Waiting for a turn",
+  first_light: "First images ready",
+  preview_ready: "Preview ready",
+  refining: "Adding more frames",
   querying: "Searching for observations",
   downloading: "Downloading images",
   rendering: "Preparing images",
@@ -117,7 +120,17 @@ export default function Field({
     setPlaying(false);
     setEpoch(0);
     setRetryAt(0);
-    timeline(query, size, detector, abort.signal, setProgress)
+    buildStart.current = 0;
+    timeline(query, size, detector, abort.signal, (b) => {
+      setProgress(b);
+      // Show the partial epochs as soon as they exist; only swap when the images changed.
+      if (b.epochs?.length)
+        setData((prev) =>
+          prev && prev.epochs.map((e) => e.image_url).join() === b.epochs!.map((e) => e.image_url).join()
+            ? prev
+            : ({ ...b, status: "ready" } as unknown as Timeline),
+        );
+    })
       .then((d) => {
         if (!abort.signal.aborted) {
           setData(d);
@@ -140,6 +153,14 @@ export default function Field({
       });
     return () => abort.abort();
   }, [query, size, detector, reload]);
+  // Clock for the "Elapsed" readout while a new field is being built.
+  const buildStart = useRef(0);
+  useEffect(() => {
+    if (!progress) return;
+    if (!buildStart.current) buildStart.current = Date.now();
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [!!progress]);
   useEffect(() => {
     if (!error) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -215,7 +236,14 @@ export default function Field({
   }, [powered, reduced]);
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
   const count = data?.epochs.length ?? 0;
-  const canCompare = count > 1 && !imageError;
+  // A refined timeline can have a different number of epochs than its preview.
+  useEffect(() => {
+    if (count && epoch >= count) setEpoch(count - 1);
+  }, [count, epoch]);
+  // Epochs are compared only once every image is downloaded; partial ones are a preview.
+  const building = !!progress;
+  const canCompare = count > 1 && !imageError && !building;
+  const elapsed = buildStart.current ? Math.max(0, Math.floor((now - buildStart.current) / 1000)) : 0;
 
   function stepEpoch(direction: 1 | -1) {
     setPlaying(false);
@@ -338,26 +366,15 @@ export default function Field({
                   </div>
                 ) : !data ? (
                   <div className={s.message} role="status">
-                    <strong>
-                      {progress
-                        ? stages[progress.progress.stage] || "Preparing the field"
-                        : "Checking images"}
-                    </strong>
-                    <p>A new field can take a few minutes. You can go back to the menu.</p>
-                    {progress && (
-                      <>
-                        <progress
-                          max={progress.progress.total || 1}
-                          value={progress.progress.total ? progress.progress.done : undefined}
-                          aria-label="Field preparation"
-                        />
-                        <p>
-                          {progress.progress.total > 0
-                            ? `${progress.progress.done} of ${progress.progress.total}`
-                            : "Looking for available data…"}
-                        </p>
-                      </>
-                    )}
+                    <strong>Fetching real SPHEREx images</strong>
+                    <p>
+                      Nebo asks NASA/IPAC IRSA for every SPHEREx exposure of this point, downloads them and
+                      stacks them into one image per epoch. A new field usually takes 1–3 minutes; after that
+                      it opens instantly. You can go back to the menu meanwhile.
+                    </p>
+                    <BuildSteps progress={progress} />
+                    <BuildBar progress={progress} />
+                    {progress && <p className={s.elapsed}>Elapsed {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}</p>}
                   </div>
                 ) : !current ? (
                   <p className={s.message}>
@@ -402,13 +419,14 @@ export default function Field({
                         Loading epoch…
                       </span>
                     )}
+                    {building && <span className={s.previewTag}>Preview</span>}
                     {/* The patch centre is the central pixel, which is where the target sits. */}
                     <span className={s.reticle} aria-hidden="true" />
                     <button
                       type="button"
                       className={s.diffToggle}
                       aria-pressed={difference}
-                      disabled={count < 2}
+                      disabled={!canCompare}
                       title="Show what changed since the first epoch"
                       onClick={() => setDifference((d) => !d)}
                     >
@@ -501,10 +519,22 @@ export default function Field({
                   : "Observed: —"}
                 {count === 1 && " · Only one epoch is available; comparing needs at least two."}
               </p>
-              <p className={s.honest}>
-                <strong>Observed change.</strong> A change between images does not confirm a new
-                object. Transparent areas have no data.
-              </p>
+              {building && data ? (
+                <div className={`${s.honest} ${s.buildStatus}`} role="status">
+                  <p>
+                    <strong>Still downloading images</strong>
+                    {progress!.progress.total > 0 &&
+                      ` · ${progress!.progress.done} of ${progress!.progress.total} exposures`}
+                    . You can look at the preview; comparing epochs unlocks when every image is ready.
+                  </p>
+                  <BuildBar progress={progress} />
+                </div>
+              ) : (
+                <p className={s.honest}>
+                  <strong>Observed change.</strong> A change between images does not confirm a new
+                  object. Transparent areas have no data.
+                </p>
+              )}
               <button
                 type="button"
                 className={s.compare}
@@ -514,7 +544,9 @@ export default function Field({
                 {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
                 {playing
                   ? "Pause"
-                  : !data || allPreloaded
+                  : building && data
+                    ? "Downloading…"
+                    : !data || allPreloaded
                     ? "Compare epochs"
                     : `Loading epochs ${preloaded}/${count}`}
               </button>
@@ -537,6 +569,7 @@ export default function Field({
                     epochs={data!.epochs}
                     current={epoch}
                     onPick={(i) => {
+                      if (building) return;
                       setPlaying(false);
                       setEpoch(i);
                     }}
@@ -613,6 +646,45 @@ export default function Field({
         </div>
       </div>
     </section>
+  );
+}
+
+// The backend build stages, grouped into the steps a visitor can follow.
+const buildSteps: { label: string; stages: string[] }[] = [
+  { label: "Search the SPHEREx archive (IRSA)", stages: ["queued", "querying"] },
+  { label: "Download the exposures", stages: ["downloading"] },
+  { label: "First image", stages: ["first_light"] },
+  { label: "One image per epoch", stages: ["preview_ready"] },
+  { label: "Add more exposures for a sharper image", stages: ["refining", "rendering"] },
+];
+
+function BuildSteps({ progress }: { progress: Building | null }) {
+  const stage = progress?.progress.stage ?? "queued";
+  const current = Math.max(0, buildSteps.findIndex((step) => step.stages.includes(stage)));
+  const { done, total } = progress?.progress ?? { done: 0, total: 0 };
+  return (
+    <ol className={s.buildSteps}>
+      {buildSteps.map((step, i) => (
+        <li key={step.label} data-state={i < current ? "done" : i === current ? "current" : "pending"} aria-current={i === current ? "step" : undefined}>
+          <span aria-hidden="true">{i < current ? "✓" : i === current ? "●" : "○"}</span>
+          {step.label}
+          {i === current && i === 1 && total > 0 && ` · ${done} of ${total}`}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Determinate once the number of exposures is known; a moving stripe before that. */
+function BuildBar({ progress }: { progress: Building | null }) {
+  const total = progress?.progress.total ?? 0;
+  return (
+    <progress
+      className={s.buildBar}
+      max={total || 1}
+      value={total ? progress!.progress.done : undefined}
+      aria-label="Field preparation"
+    />
   );
 }
 
