@@ -1,7 +1,9 @@
 # External data sources
 
 Every external service Nebo reads, what it asks for and where in the code. How these pieces fit
-together is in [`architecture.md`](architecture.md).
+together is in [`architecture.md`](architecture.md); the numbers derived from them (bands, pixel
+scale, epochs, catalogue limits and match radii) are in
+[`science-and-techniques.md`](science-and-techniques.md).
 
 > **Keep this file true.** Adding, removing or changing a source (URL, table, collection,
 > release, query, cache or limit) means updating this file, the diagram in

@@ -51,7 +51,9 @@ flowchart LR
 
 The full picture (deployment, build pipeline, database ER diagram, component tree, user
 journey, request sequence) is in **[docs/architecture.md](docs/architecture.md)**. Every
-external data source is listed in **[docs/data-sources.md](docs/data-sources.md)**.
+external data source is listed in **[docs/data-sources.md](docs/data-sources.md)**. The physics,
+constants, metrics and techniques are in
+**[docs/science-and-techniques.md](docs/science-and-techniques.md)**.
 
 ## Repository layout
 
@@ -60,7 +62,7 @@ external data source is listed in **[docs/data-sources.md](docs/data-sources.md)
 | [`backend/`](backend/) | FastAPI + PostgreSQL API and ETL. API contract in [`backend/README.md`](backend/README.md) |
 | [`frontend/`](frontend/) | Next.js app: menu, sky explorer, field viewer, observation lab. See [`frontend/README.md`](frontend/README.md) |
 | [`shared/`](shared/) | Synthetic static demo export with the same shape as the API |
-| [`docs/`](docs/) | Architecture, data sources, frontend plan, lab notes |
+| [`docs/`](docs/) | Architecture, data sources, science and techniques, frontend plan, lab notes |
 | `data/` | Placeholder; raw data is never committed |
 | `artifacts/` | Design and verification artifacts |
 
