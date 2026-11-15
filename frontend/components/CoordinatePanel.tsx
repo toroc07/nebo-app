@@ -12,6 +12,7 @@ import {
   type RaParts,
 } from "@/lib/coordinates";
 import { validCoordinates } from "@/lib/api";
+import ConsoleSelect from "./ConsoleSelect";
 import s from "./cockpit.module.css";
 
 type Position = { ra: number; dec: number };
@@ -193,14 +194,19 @@ export default function CoordinatePanel({
             </div>
           </fieldset>
           <div className={s.holoFormat}>
-            <label htmlFor={`${id}-format`}>Format:</label>
-            <span className={s.holoSelect}>
-              <select id={`${id}-format`} value={format} onChange={(e) => changeFormat(e.target.value as Format)}>
-                <option value="sexagesimal">HMS / DMS</option>
-                <option value="degrees">Degrees</option>
-              </select>
-              <ChevronDown aria-hidden="true" />
-            </span>
+            <span aria-hidden="true">Format:</span>
+            {/* Not a native <select>: its grey system list clashes with the holographic panel. */}
+            <ConsoleSelect
+              label="Format"
+              hideLabel
+              value={format}
+              onChange={(v) => changeFormat(v as Format)}
+              options={[
+                { value: "sexagesimal", label: "HMS / DMS" },
+                { value: "degrees", label: "Degrees" },
+              ]}
+              styles={{ control: s.holoPick, select: s.holoPickWrap, selectButton: s.holoPickButton, listbox: s.holoPickList }}
+            />
             <span className={s.holoInfo}>
               <button type="button" aria-describedby={`${id}-info`} aria-label="About these coordinates">
                 <Info aria-hidden="true" />

@@ -847,10 +847,12 @@
     /*
      * --S scales the room so it always covers the viewport (no side bands). The screen
      * uses --s, which is --S capped so the whole console fits on screen, and it is
-     * centred on the room's screen bay (art pixel 1030, 448) wherever the crop falls.
+     * centred on the room's screen bay (art pixel 1075, 411.5: the dark glass spans art
+     * x 579-1571, y 69-754) wherever the crop falls. The console is 1083 reference
+     * pixels wide, so 0.9 × --S leaves it a margin inside the bay's metal frame.
      */
     --S: max(calc(100vw / 1672), calc(100dvh / 941));
-    --s: min(var(--S), calc((100dvh - 96px) / 678), calc((100vw - 48px) / 1083));
+    --s: min(calc(var(--S) * 0.9), calc((100dvh - 96px) / 678), calc((100vw - 48px) / 1083));
     position: fixed;
     inset: 0;
     min-height: 0;
@@ -864,8 +866,8 @@
     position: absolute;
     width: calc(1083 * var(--s));
     height: calc(678 * var(--s));
-    left: clamp(24px, 50vw + 194 * var(--S) - 541.5 * var(--s), 100vw - 24px - 1083 * var(--s));
-    top: clamp(28px, 50dvh - 22.5 * var(--S) - 339 * var(--s), 100dvh - 12px - 678 * var(--s));
+    left: clamp(24px, 50vw + 239 * var(--S) - 541.5 * var(--s), 100vw - 24px - 1083 * var(--s));
+    top: clamp(28px, 50dvh - 59 * var(--S) - 339 * var(--s), 100dvh - 12px - 678 * var(--s));
     padding: 0;
     font-size: max(13px, calc(17 * var(--s)));
   }

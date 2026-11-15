@@ -1,8 +1,8 @@
 /*
- * 3D model on the wall tablet of the observation room (console-bg.webp, 1672 × 941). The globe
- * panel of the tablet covers art pixels (295, 616)-(430, 734); this layer sits exactly on it
- * with the same cover-fit maths as the room (--S, set by .stage on wide screens), so it hides
- * the painted globe and keeps the painted frame and data columns around it.
+ * 3D model on the wall tablet of the observation room (console-bg.webp, 1672 × 941). The
+ * tablet's glass is painted switched off and covers art pixels (368, 586)-(541, 730); this
+ * layer sits exactly on it with the same cover-fit maths as the room (--S, set by .stage on
+ * wide screens) and keeps the painted metal frame around it.
  */
 .hologram {
   display: none;
@@ -13,12 +13,12 @@
     --S: max(calc(100vw / 1672), calc(100dvh / 941));
     position: absolute;
     display: block;
-    left: calc(50vw + (295 - 836) * var(--S));
-    top: calc(50dvh + (616 - 470.5) * var(--S));
-    width: calc(135 * var(--S));
-    height: calc(118 * var(--S));
-    /* The panel's left edge leans in the art. */
-    clip-path: polygon(15.5% 2.5%, 98.5% 1.7%, 97% 97.5%, 1.5% 98.3%);
+    left: calc(50vw + (368 - 836) * var(--S));
+    top: calc(50dvh + (586 - 470.5) * var(--S));
+    width: calc(173 * var(--S));
+    height: calc(144 * var(--S));
+    /* The glass has chamfered corners and its left edge leans in the art. */
+    clip-path: polygon(18.5% 1%, 95% 1%, 98.8% 6%, 92% 93%, 87% 98.6%, 7% 98.3%, 1% 88%, 13% 7%);
     background:
       repeating-linear-gradient(
         0deg,

@@ -333,17 +333,20 @@ export default function Nebo() {
         setScreenPowered(true);
       }
     };
-    if (!leftWall || !rightWall || !corner) return finish();
+    // Only the start screen → cockpit turn has a painted join. Cockpit ⇄ analysis screen pans
+    // straight between the two live walls: a painted panel would have to be repainted every time
+    // the analysis wall art changes, and a stale one shows the old wall in the middle of the pan.
+    if (!leftWall || !rightWall || (turn === "launch" && !corner)) return finish();
     /*
-     * The turn is a camera pan across one continuous strip. The middle panel was painted to join
-     * the two views (turn-corner.webp, home-corner.webp), so the pan never shows a seam or the
+     * The turn is a camera pan across one continuous strip. For the launch the middle panel was
+     * painted to join the two views (home-corner.webp), so the pan never shows a seam or the
      * space behind the walls. Flat translations only: no 3D, which clipped the walls.
      */
     const vw = window.innerWidth;
-    // Both corner images are 1536 × 1024: the left 600 px repeat the left wall's right edge,
-    // the right 600 px the right wall's left edge (at their on-screen scale for 16:9), and the
+    // The corner image is 1536 × 1024: the left 600 px repeat the left wall's right edge, the
+    // right 600 px the right wall's left edge (at their on-screen scale for 16:9), and the
     // 336 px between were painted to join them. They overlay the live views where they match.
-    const scale = corner.offsetHeight / 1024;
+    const scale = corner ? corner.offsetHeight / 1024 : 0;
     const overlap = 600 * scale;
     const gap = 336 * scale;
     const towardRight = turn !== "left";
@@ -351,10 +354,8 @@ export default function Nebo() {
     const start = towardRight ? 0 : -(vw + gap);
     const end = towardRight ? -(vw + gap) : 0;
     const timeline = gsap.timeline({ onComplete: finish, defaults: { duration: 1.25, ease: "power2.inOut" } });
-    timeline
-      .fromTo(leftWall, { x: start }, { x: end }, 0)
-      .fromTo(corner, { x: start + vw - overlap }, { x: end + vw - overlap }, 0)
-      .fromTo(rightWall, { x: start + vw + gap }, { x: end + vw + gap }, 0);
+    timeline.fromTo(leftWall, { x: start }, { x: end }, 0).fromTo(rightWall, { x: start + vw + gap }, { x: end + vw + gap }, 0);
+    if (corner) timeline.fromTo(corner, { x: start + vw - overlap }, { x: end + vw - overlap }, 0);
     return () => {
       timeline.kill();
     };
@@ -445,7 +446,7 @@ export default function Nebo() {
             )}
           </>
         )}
-        {turn && <div className="turn-corner" data-kind={turn === "launch" ? "launch" : "turn"} aria-hidden="true" />}
+        {turn === "launch" && <div className="turn-corner" data-kind="launch" aria-hidden="true" />}
         {skyMounted && (
           <div
             hidden={!["Explore", "Field", "Home"].includes(view) && !turn}

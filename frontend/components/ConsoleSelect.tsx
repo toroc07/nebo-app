@@ -1,10 +1,13 @@
 "use client";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import s from "./field.module.css";
+import fieldStyles from "./field.module.css";
 
 /** `short` is shown in the closed control when the full label would not fit; the list shows `label`. */
 export type Option = { value: string; label: string; short?: string };
+
+/** The classes the drop-down needs, so another console (the coordinate panel) can restyle it. */
+export type SelectStyles = Record<"control" | "select" | "selectButton" | "listbox", string>;
 
 /**
  * Drop-down styled as part of the ship console. A native <select> opens the operating
@@ -17,12 +20,19 @@ export default function ConsoleSelect({
   options,
   onChange,
   className = "",
+  // A CSS module's type is an open index signature; field.module.css does define all four classes.
+  styles: s = fieldStyles as SelectStyles,
+  hideLabel = false,
 }: {
   label: string;
   value: string;
   options: Option[];
   onChange: (value: string) => void;
   className?: string;
+  /** Class names for the control; defaults to the observation console's. */
+  styles?: SelectStyles;
+  /** The caller draws its own visible label; this one then stays for screen readers only. */
+  hideLabel?: boolean;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -92,7 +102,9 @@ export default function ConsoleSelect({
 
   return (
     <div className={`${s.control} ${className}`} ref={root}>
-      <span id={`${id}-label`}>{label}</span>
+      <span id={`${id}-label`} className={hideLabel ? "sr-only" : undefined}>
+        {label}
+      </span>
       <div className={s.select}>
         <button
           ref={button}
