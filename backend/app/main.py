@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import io
+from contextlib import asynccontextmanager
 import logging
 import time
 from typing import Any, Literal
@@ -40,7 +41,18 @@ BUSY_RETRY_AFTER_S = 30
 DEFAULT_DETECTOR = 3
 SizeName = Literal["small", "medium", "large"]
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Create the service (and open the DB pool) at startup so the first search is not slower."""
+    try:
+        get_service(get_store())
+    except Exception as error:  # No DB yet: the endpoints answer 503 on their own.
+        logging.getLogger(__name__).info("Warm-up skipped: %s", error)
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Nebo API",
     version="0.2.0",
     description=(

@@ -330,6 +330,9 @@ def render_epoch_images(
     return images
 
 
+PROGRESS_WRITE_MIN_S = 0.5
+
+
 class TimelineService:
     def __init__(
         self,
@@ -510,6 +513,7 @@ class TimelineService:
 
         grid_world = imaging.target_world(grid_wcs, grid_shape)
         done = 0
+        last_write = [0.0]
         current_stage = "downloading"
         progress_lock = threading.Lock()
 
@@ -555,7 +559,11 @@ class TimelineService:
             finally:
                 with progress_lock:
                     done += 1
-                    store.update_progress(timeline_id, current_stage, done, total_work)
+                    now = time.monotonic()
+                    # One DB write per frame is wasteful; the client polls every 2-5 s anyway.
+                    if done == total_work or now - last_write[0] >= PROGRESS_WRITE_MIN_S:
+                        last_write[0] = now
+                        store.update_progress(timeline_id, current_stage, done, total_work)
 
         if is_progressive:
             store.delete_timeline_exposures(timeline_id)

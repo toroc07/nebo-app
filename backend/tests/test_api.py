@@ -246,3 +246,11 @@ def test_featured_object_ignores_early_ready(client):
     assert resp.json()["epochs"] == []
     release.set()
     wait_until_settled(service, service.resolve_patch(target_slug="barnards-star"))
+
+
+def test_startup_without_database_does_not_crash(monkeypatch):
+    from app import config as cfg
+
+    monkeypatch.setattr(cfg, "DATABASE_URL", "")
+    with TestClient(app):  # runs the lifespan warm-up
+        pass
