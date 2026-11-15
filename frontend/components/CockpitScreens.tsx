@@ -4,6 +4,7 @@ import { geoContains, geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { feature } from "topojson-client";
 import type { Topology } from "topojson-specification";
+import { X } from "lucide-react";
 import type { Target } from "@/lib/api";
 import {
   angularDistance,
@@ -109,6 +110,7 @@ export default function CockpitScreens({
   onTab,
   onLayers,
   onSelect,
+  onClear,
   onGoto,
   onFov,
 }: {
@@ -122,6 +124,7 @@ export default function CockpitScreens({
   onTab: (t: Tab) => void;
   onLayers: (l: SkyLayers) => void;
   onSelect: (t: Target) => void;
+  onClear: () => void;
   onGoto: (p: Position) => void;
   onFov: (fov: number) => void;
 }) {
@@ -155,8 +158,13 @@ export default function CockpitScreens({
             ? humanKind(selected.kind)
             : position
               ? "Typed coordinates"
-              : "Drag the sky to explore"}
+              : "View images uses the map centre"}
         </span>
+        {position && (
+          <button type="button" className={s.clearDestination} aria-label="Clear destination" title="Clear destination" onClick={onClear}>
+            <X aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <div
