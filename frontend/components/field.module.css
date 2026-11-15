@@ -502,6 +502,42 @@
     background-position: 50% 0;
   }
 }
+.reassure {
+  max-width: 34em;
+  color: var(--ink);
+  font-size: 0.95em;
+}
+.stop {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--cyan-soft);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.stop:hover,
+.stop:focus-visible {
+  border-color: var(--cyan);
+  color: var(--ink);
+}
+.stop svg {
+  width: 0.9em;
+  height: 0.9em;
+}
+/* Own line, and allowed to wrap: on wide screens the date line above does not wrap. */
+.oneEpoch {
+  display: block;
+  white-space: normal;
+  font-style: normal;
+  font-size: 0.85em;
+  color: var(--muted);
+}
 .buildStatus {
   display: grid;
   gap: 6px;

@@ -12,6 +12,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Square,
 } from "lucide-react";
 import {
   timeline,
@@ -101,6 +102,8 @@ export default function Field({
     [retryAt, setRetryAt] = useState(0),
     [now, setNow] = useState(Date.now()),
     [autoRetry, setAutoRetry] = useState(false),
+    // The visitor stopped waiting for this field (the server keeps building it).
+    [stopped, setStopped] = useState(false),
     [reload, setReload] = useState(0),
     [epoch, setEpoch] = useState(0),
     [playing, setPlaying] = useState(false),
@@ -114,8 +117,11 @@ export default function Field({
   useEffect(() => {
     setIntervalMs(speed);
   }, [speed]);
+  const polling = useRef<AbortController | null>(null);
   useEffect(() => {
     const abort = new AbortController();
+    polling.current = abort;
+    setStopped(false);
     setData(null);
     setProgress(null);
     setError("");
@@ -240,6 +246,16 @@ export default function Field({
     return () => clearTimeout(id);
   }, [powered, reduced]);
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  /** Stop waiting: polling ends here; the backend build is not cancelled and is cached. */
+  function stopWaiting() {
+    polling.current?.abort();
+    setProgress(null);
+    setData(null);
+    setPlaying(false);
+    setError("");
+    setAutoRetry(false);
+    setStopped(true);
+  }
   useEffect(() => {
     if (error && autoRetry && retryAt && now >= retryAt) setReload((n) => n + 1);
   }, [error, autoRetry, retryAt, now]);
@@ -358,7 +374,18 @@ export default function Field({
                 }}
               >
                 <span className={s.brackets} aria-hidden="true" />
-                {error ? (
+                {stopped ? (
+                  <div className={s.message} role="status">
+                    <strong>Stopped</strong>
+                    <p>
+                      Nebo stopped waiting for this field. Its server keeps preparing the images in the
+                      background, so opening it again later can be much faster.
+                    </p>
+                    <button type="button" className={s.retry} onClick={() => setReload((x) => x + 1)}>
+                      <RotateCcw aria-hidden="true" /> Try again
+                    </button>
+                  </div>
+                ) : error ? (
                   <div className={s.message} role="alert">
                     <strong>We could not open this field</strong>
                     <p>{error}</p>
@@ -375,6 +402,11 @@ export default function Field({
                           : `Retry in ${remaining} s`
                         : "Retry"}
                     </button>
+                    {autoRetry && remaining > 0 && (
+                      <button type="button" className={s.stop} onClick={stopWaiting}>
+                        <Square aria-hidden="true" /> Stop retrying
+                      </button>
+                    )}
                   </div>
                 ) : !data ? (
                   <div className={s.message} role="status">
@@ -385,8 +417,20 @@ export default function Field({
                       it opens instantly. You can go back to the menu meanwhile.
                     </p>
                     <BuildSteps progress={progress} />
+                    {progress?.progress.stage === "waiting_for_archive" && (
+                      <p className={s.reassure}>
+                        This is normal: NASA&apos;s archive is very busy at times and can need 2, 3 or even 4
+                        attempts. Nebo keeps trying on its own for up to 5 minutes; you don&apos;t need to do
+                        anything.
+                      </p>
+                    )}
                     <BuildBar progress={progress} />
                     {progress && <p className={s.elapsed}>Elapsed {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}</p>}
+                    {progress && (
+                      <button type="button" className={s.stop} onClick={stopWaiting}>
+                        <Square aria-hidden="true" /> Stop
+                      </button>
+                    )}
                   </div>
                 ) : !current ? (
                   <p className={s.message}>
@@ -529,7 +573,9 @@ export default function Field({
                 {current
                   ? `Observed: ${epochDateRange(current.start_utc, current.end_utc)} UTC`
                   : "Observed: —"}
-                {count === 1 && " · Only one epoch is available; comparing needs at least two."}
+                {count === 1 && !building && (
+                  <span className={s.oneEpoch}>Only one epoch is available; comparing needs at least two.</span>
+                )}
               </p>
               {building && data ? (
                 <div className={`${s.honest} ${s.buildStatus}`} role="status">
@@ -540,6 +586,9 @@ export default function Field({
                     . You can look at the preview; comparing epochs unlocks when every image is ready.
                   </p>
                   <BuildBar progress={progress} />
+                  <button type="button" className={s.stop} onClick={stopWaiting}>
+                    <Square aria-hidden="true" /> Stop loading
+                  </button>
                 </div>
               ) : (
                 <p className={s.honest}>
