@@ -191,7 +191,7 @@ the first call claims a build and returns `202`, the client polls.
 ```mermaid
 sequenceDiagram
   autonumber
-  participant B as Browser (Field / lab)
+  participant B as Browser (Field)
   participant A as API main.py
   participant S as TimelineService
   participant DB as PostgreSQL
@@ -366,6 +366,8 @@ erDiagram
     float mjd_start
     float aperture_flux_ujy
     bool saturated_near_target
+    float local_background_mjy_sr
+    float aperture_peak_offset_px
   }
   api_query_cache {
     text cache_key PK
@@ -419,10 +421,10 @@ modules + Tailwind 4. Setup in [`frontend/README.md`](../frontend/README.md).
 | Route | File | What it is |
 | --- | --- | --- |
 | `/` | `app/page.tsx` → `components/Nebo.tsx` | The whole app: menu, sky explorer, field viewer, switched by state |
-| `/lab/observation` | `app/lab/observation/page.tsx` | Full-screen observation lab (pan/zoom, Gaia overlay, demo source). Reached by URL only |
-| `/lab/demo/[...path]` | `app/lab/demo/[...path]/route.ts` | Read-only server of `shared/demo*` JSON/PNG for the lab's simulated demo |
 
-`app/layout.tsx` keeps `WarpOverlay` mounted across routes.
+`app/layout.tsx` keeps `WarpOverlay` mounted for the whole session. `lib/lab/` keeps only
+`gaia.ts`, `sky.ts`, `fov.ts` and `viewport.ts`, used by the field viewer (the lab route that
+once owned them was removed).
 
 ### Component tree
 
@@ -430,7 +432,6 @@ modules + Tailwind 4. Setup in [`frontend/README.md`](../frontend/README.md).
 graph TD
   Layout["app/layout.tsx"] --> Page["/ page.tsx"] --> Nebo
   Layout --> WarpOverlay --> Scene["Scene (canvas tunnel)"]
-  Layout --> LabPage["/lab/observation"] --> ObservationLab --> ImageViewport
   Nebo --> HomeScene
   Nebo --> NeboBoot["NeboBoot (power-on in the glass)"]
   Nebo --> Sky["Sky (Aladin Lite, SPHEREx HiPS)"]
@@ -455,7 +456,6 @@ graph TD
 | `Cockpit`, `CockpitScreens`, `CoordinatePanel` | Console over the sky: destinations, RA/Dec entry, zoom, layers, Earth sub-point globe, clock |
 | `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view, epoch stack (`/timeline/stack`) |
 | `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
-| `ObservationLab`, `ImageViewport` | Lab viewer: nested 3′/6′/15′ levels, pan/zoom, Gaia rings, expected-position marker |
 | `Flight` | Short WebGL2 star burst (desktop only) |
 | `NeboBoot` | Nebo power-on played in the cockpit glass after START (3.2 s), before the approach tunnel; the app is `inert` from START until the tunnel ends |
 | `StarHologram` | Spinning 3D model of the observed object on the field room's wall tablet (procedural shader; colours from each object's temperature; wide screens only) |
@@ -477,10 +477,6 @@ stateDiagram-v2
   Field --> Explore: Back
   Field --> Home: Back (opened from a link)
   Explore --> Home: Back
-  note right of Explore
-    /lab/observation is a separate route,
-    opened by URL; its back link goes to /
-  end note
 ```
 
 Reduced motion (`prefers-reduced-motion`) skips every animation, including the leaves. The blink
@@ -494,15 +490,10 @@ removed.
 flowchart LR
   subgraph browser["Browser"]
     nebo["Nebo / Field"]
-    lab["ObservationLab"]
     api_ts["lib/api.ts<br/>timeline() polling:<br/>Retry-After or retry_after_s"]
-    contract["lib/lab/contract.ts<br/>loadTargets, loadTimeline"]
     aladin["Aladin Lite"]
   end
   nebo --> api_ts
-  lab --> contract
-  contract -- "source = api" --> api_ts
-  contract -- "source = demo" --> demo["/lab/demo/* route<br/>shared/demo*"]
   api_ts -- "/targets, /patches, /timeline,<br/>/images (+ mask.png), /patches/{id}/gaia,<br/>/chat/{room}/messages" --> api["Nebo API"]
   aladin -- "HiPS tiles" --> hips["IRSA SPHEREx HiPS"]
 ```
@@ -510,7 +501,8 @@ flowchart LR
 - One environment variable: `NEXT_PUBLIC_API_ORIGIN`.
 - `timeline()` handles `202` by waiting `Retry-After` (or `retry_after_s`, default 5 s) and
   shows `progress.stage`; errors carry their own retry countdown.
-- The main app has no demo fallback; only the lab can switch to the synthetic demo.
+- The app has no demo fallback: without the API it shows an error (the lab that could switch to
+  the synthetic demo was removed).
 - Gaia is never queried from the browser; it goes through `/patches/{id}/gaia`.
 
 ### Tests
@@ -533,7 +525,7 @@ signal", never "Planet X found".
 | Gaia overlay | **Real**: ESA Gaia DR3 |
 | Background sky map | **Real**: IRSA SPHEREx HiPS |
 | Spectrum, spectral indices, confidence, variability, Models 1–3 | **Simulated** from demo profiles (`models.SIMULATED_NOTE`), labelled as such in the API |
-| `shared/demo*` and the lab's "Simulated demo" | **Synthetic** (fake cutouts), for offline demos only |
+| `shared/demo*` | **Synthetic** (fake cutouts), kept as data; no route serves it now |
 | Cockpit decorative stars, landscape art | Decorative, separate from detections |
 | 3D model on the field room's tablet (`StarHologram`) | **Illustration** built from the object's type and temperature, captioned "Illustration" |
 
@@ -544,10 +536,8 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 - `Field.tsx` maps only `queued`, `querying`, `downloading`, `rendering`; the stages
   `first_light`, `preview_ready`, `refining` fall back to a generic label, and the frontend does
   not use `wait_for` yet, so users wait for the full build before seeing an image.
-- `docs/observation-lab.md` says "Begin exploring" opens the lab and that the demo is the default
-  source; today the lab is URL-only and defaults to the API.
-- `frontend/tests/browser.mjs` no longer covers the field console or the lab: they were reached
-  through the removed coordinate form; a new path through the cockpit is needed.
+- `frontend/tests/browser.mjs` no longer covers the field console: it was reached through the
+  removed coordinate form; a new path through the cockpit is needed.
 - `gcs_media_assets` and `timeline_images.gcs_uri` are never written (`targets.gaia_*`,
   `targets.wise_*`, `patches.gaia_crossmatch_json`, and `patches.wise_crossmatch_json` are now
   populated by `app.db sync-catalogs` and `analyze_patch_science` / `classify_event`).
@@ -563,6 +553,18 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Removed the URL-only observation lab: routes `/lab/observation` and
+  `/lab/demo/[...path]`, `ObservationLab`, `ImageViewport`, `lib/lab/contract.ts` and
+  `lib/lab/levels.ts`, and the warp's `viewer` destination. The field viewer's helpers in
+  `lib/lab/` (Gaia, pixel↔sky, levels, viewport) stay. `shared/demo*` is kept as data.
+- **2026-11-15** — P1-1 finished: `nasa_sector_exposures` gains `local_background_mjy_sr`,
+  `local_background_sigma_mjy_sr`, `local_background_pixels` and `aperture_peak_offset_px`
+  (`ADD COLUMN IF NOT EXISTS`, applied by `db init`). Builds fill them (clipped median of a 4–9 px
+  annulus; where the light peaks in a 5×5 box); older rows by `python -m app.backfill_background`
+  (re-reads the cutouts, batched, resumable). `/spectrum/measured` subtracts the sky, adds
+  `background_subtracted`, `blended` points (≥ 1.2 px peak offset, left out of the median) and
+  `excluded_no_background`. On real cutouts Eps Indi B now reaches ~0 at 0.76 µm (was ~1.2 mJy of
+  sky); WISE 0855 is its own source only above ~4 µm (a neighbour ~1 px away below).
 - **2026-11-15** — P1-5: `GET /timeline/stack?epochs=0,2` co-adds the chosen epochs (inverse
   variance, float32 arrays) into a PNG with the timeline's shared stretch; the field viewer has a
   "Stack" toggle with epoch chips. `/patches/{id}/candidates` now scales epoch B to A, matches the

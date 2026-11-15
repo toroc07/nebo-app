@@ -228,6 +228,15 @@ CREATE INDEX IF NOT EXISTS idx_nasa_sector_exposures_patch_det
 ALTER TABLE nasa_sector_exposures
     ADD COLUMN IF NOT EXISTS saturated_near_target boolean;
 
+-- Local sky level around the object (clipped median of an annulus, MJy/sr per pixel), its error,
+-- the pixels used, and how far from the object the aperture's light peaks (pixels; >= 1.2 means
+-- a neighbour dominates). Filled by new builds; older rows by `python -m app.backfill_background`.
+ALTER TABLE nasa_sector_exposures
+    ADD COLUMN IF NOT EXISTS local_background_mjy_sr double precision,
+    ADD COLUMN IF NOT EXISTS local_background_sigma_mjy_sr double precision,
+    ADD COLUMN IF NOT EXISTS local_background_pixels integer,
+    ADD COLUMN IF NOT EXISTS aperture_peak_offset_px double precision;
+
 CREATE INDEX IF NOT EXISTS idx_nasa_sector_exposures_channel
     ON nasa_sector_exposures (patch_id, channel_id);
 

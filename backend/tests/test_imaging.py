@@ -186,3 +186,38 @@ def test_saturation_counts_only_near_the_object():
     assert imaging.saturated_near(saturated, float("nan"), 10.0) is None
     assert imaging.saturated_near(saturated, None, 10.0) is None
     assert imaging.saturated_near(saturated, 40.0, 10.0) is None
+
+
+# ----- local background and where the light peaks (measured spectrum, P1-1) ----------------
+
+
+def _sky(level=2.0, noise=0.1, shape=(41, 41), seed=1):
+    rng = np.random.default_rng(seed)
+    return level + rng.normal(0.0, noise, shape), np.zeros(shape, dtype=bool)
+
+
+def test_local_background_is_the_sky_level_even_with_a_star_in_the_annulus():
+    image, bad = _sky()
+    image[20, 26] += 50.0  # a neighbour 6 px away, inside the 4-9 px annulus
+    level, error, pixels, sigma = imaging.local_background(image, bad, 20.0, 20.0)
+    assert abs(level - 2.0) < 3 * error and error < 0.02
+    assert pixels > 150 and abs(sigma - 0.1) < 0.02
+
+
+def test_local_background_needs_enough_valid_pixels():
+    image, bad = _sky()
+    bad[:] = True
+    assert imaging.local_background(image, bad, 20.0, 20.0) is None
+    assert imaging.local_background(image, np.zeros_like(bad), float("nan"), 20.0) is None
+
+
+def test_peak_offset_tells_the_object_from_a_neighbour():
+    image, _ = _sky()
+    on_object = image.copy()
+    on_object[20, 20] += 5.0
+    assert imaging.peak_offset(on_object, 20.3, 19.8, 2.0, 0.1) < 0.7
+    neighbour = image.copy()
+    neighbour[18, 22] += 5.0  # 2 px east, 2 px north of the object
+    assert imaging.peak_offset(neighbour, 20.0, 20.0, 2.0, 0.1) >= 1.2
+    # Nothing significant near the object: there is no light to locate.
+    assert imaging.peak_offset(image, 20.0, 20.0, 2.0, 0.1) is None

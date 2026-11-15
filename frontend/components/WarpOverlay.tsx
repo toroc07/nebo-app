@@ -1,7 +1,6 @@
 "use client";
-// Full-screen hyperspace tunnel, shown while "Begin exploring" loads the observation viewer. It
-// lives in the root layout, so it stays on screen across the route change from the menu to the
-// viewer (the animation never restarts), and it takes itself down once the viewer has data.
+// Full-screen hyperspace tunnel, shown while the sky globe loads. It lives in the root layout, so
+// the animation never restarts, and it takes itself down once the globe has something to show.
 // The timing is in lib/warp.ts and the star field in lib/warp-render.ts; this file only draws.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -138,17 +137,10 @@ function Scene() {
       const timeline = warp.timeline();
       if (!timeline) return;
 
-      // Ask the page, ten times a second, whether the viewer has something to show.
+      // Ask the page, ten times a second, whether the destination has something to show.
       if (!warp.isReady() && now >= nextProbe) {
         nextProbe = now + 0.1;
-        if (
-          isDestinationReady(
-            timeline.target,
-            document,
-            window.location.pathname,
-          )
-        )
-          warp.markReady(now);
+        if (isDestinationReady(timeline.target, document)) warp.markReady(now);
         const text = viewerStatus(document);
         if (text !== shownStatus) {
           shownStatus = text;
@@ -159,10 +151,10 @@ function Scene() {
       const frame = frameAt(warp.timeline() ?? timeline, now, timing);
       if (frame.phase === "done") {
         warp.finish();
-        // Hand the keyboard to where the user has arrived: the viewer's image surface, or else
-        // the heading of the screen (focusable, as the menu already does on every change).
+        // Hand the keyboard to where the user has arrived: the heading of the screen (focusable,
+        // as the menu already does on every change).
         document
-          .querySelector<HTMLElement>('[role="application"], main h1')
+          .querySelector<HTMLElement>("main h1")
           ?.focus({ preventScroll: true });
         return;
       }

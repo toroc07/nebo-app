@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ArrowLeft } from "lucide-react";
@@ -23,12 +22,10 @@ const Sky = dynamic(() => import("./Sky"), {
 const Flight = dynamic(() => import("./Flight"), { ssr: false });
 gsap.registerPlugin(useGSAP);
 type View = "Home" | "Explore" | "Field";
-type Destination = View | "/lab/observation";
 // Saved by the old settings screen; still honoured if present (the field has its own speed control).
 type Prefs = { reduced: boolean; speed: number };
 const defaults: Prefs = { reduced: false, speed: 800 };
 export default function Nebo() {
-  const router = useRouter();
   const [view, setView] = useState<View>("Home"),
     [prefs, setPrefs] = useState(defaults),
     [loaded, setLoaded] = useState(false),
@@ -63,7 +60,7 @@ export default function Nebo() {
     first = useRef(true);
   const entrance = useRef<gsap.core.Timeline | null>(null),
     departing = useRef(false),
-    pending = useRef<Destination | null>(null);
+    pending = useRef<View | null>(null);
   const reduced = prefs.reduced || systemReduced;
   useEffect(() => {
     if (loaded && view === "Home") setSkyMounted(true);
@@ -205,10 +202,6 @@ export default function Nebo() {
     const destination = pending.current;
     pending.current = null;
     if (!destination) return;
-    if (destination === "/lab/observation") {
-      router.push(destination);
-      return;
-    }
     departing.current = false;
     setView(destination);
     if (destination === "Explore") {
@@ -216,7 +209,7 @@ export default function Nebo() {
       setFlight((x) => x + 1);
     }
   }
-  const go = contextSafe((destination: Destination) => {
+  const go = contextSafe((destination: View) => {
     if (departing.current || destination === view || turn) return;
     const motion =
       loaded && !reduced && !matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -233,10 +226,9 @@ export default function Nebo() {
       setTimeout(() => setTurn("left"), 320);
       return;
     }
-    // The tunnel starts right away and runs as the loading screen of the destination (the sky
-    // globe, or the observation viewer across the route change): components/WarpOverlay.tsx.
+    // The tunnel starts right away and runs as the loading screen of the sky globe:
+    // components/WarpOverlay.tsx.
     if (destination === "Explore") launchWarp("explore");
-    else if (destination === "/lab/observation") launchWarp("viewer");
     pending.current = destination;
     const main = root.current?.querySelector<HTMLElement>(".view-content");
     if (

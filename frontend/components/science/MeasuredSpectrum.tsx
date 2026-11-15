@@ -7,15 +7,29 @@ import { useEffect, useState } from "react";
 import { read } from "@/lib/api";
 import s from "./science.module.css";
 
-type Point = { wavelength_um: number; flux_ujy: number; sigma_ujy: number | null; detector: number };
+type Point = {
+  wavelength_um: number;
+  flux_ujy: number;
+  sigma_ujy: number | null;
+  detector: number;
+  /** The light in the aperture peaks on a neighbour, not on the object (older APIs: absent). */
+  blended?: boolean;
+};
 type Channel = { channel_id: number; wavelength_um: number; flux_ujy: number; sigma_ujy: number | null; n: number };
 type Measured = {
   points: Point[];
   channels: Channel[];
   excluded_saturated: number;
   excluded_missing: number;
+  /** Local sky level subtracted (older APIs: absent, i.e. not subtracted). */
+  background_subtracted?: boolean;
+  blended_points?: number;
   note: string;
 };
+
+const POINT = "rgb(63 210 255 / 0.7)";
+/** Grey, as the field viewer greys out likely systematics: drawn, but not the object's light. */
+const BLENDED = "rgb(170 180 190 / 0.85)";
 
 /** Fewer usable exposures than this is not a spectrum. */
 const MIN_POINTS = 8;
@@ -41,6 +55,11 @@ export default function MeasuredSpectrum({ patchId }: { patchId: number }) {
       <h2 className={s.panelTitle}>Measured SPHEREx Spectrum</h2>
       <div className={s.badgeRow}>
         <span className={s.badgeMeasured}>Measured · SPHEREx exposures</span>
+        {data && (
+          <span className={s.badgeMeasured}>
+            {data.background_subtracted ? "Local sky subtracted" : "Sky not subtracted"}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -119,15 +138,18 @@ export default function MeasuredSpectrum({ patchId }: { patchId: number }) {
             cx={x(p.wavelength_um)}
             cy={y(p.flux_ujy)}
             r={2.2}
-            fill={out(p.flux_ujy) ? "none" : "rgb(63 210 255 / 0.45)"}
-            stroke="rgb(63 210 255 / 0.7)"
-            strokeWidth={out(p.flux_ujy) ? 1 : 0}
+            fill={out(p.flux_ujy) || p.blended ? "none" : "rgb(63 210 255 / 0.45)"}
+            stroke={p.blended ? BLENDED : POINT}
+            strokeWidth={out(p.flux_ujy) || p.blended ? 1 : 0}
           />
         ))}
         <polyline points={line} fill="none" stroke="#ffb347" strokeWidth={1.6} />
       </svg>
       <p className={s.note}>
         {data.points.length} exposures measured ({data.channels.length} channels; amber line = median per channel)
+        {data.blended_points
+          ? ` · ${data.blended_points} hollow grey point${data.blended_points === 1 ? "" : "s"}: the light peaks on a neighbour, not on the object, so ${data.blended_points === 1 ? "it is" : "they are"} left out of the line`
+          : ""}
         {data.excluded_saturated ? ` · ${data.excluded_saturated} saturated near the object left out` : ""}.{" "}
         {data.note}
       </p>

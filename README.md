@@ -29,8 +29,6 @@ Earlier, the public found hundreds of such objects in NASA WISE data with tools 
   all epochs soon after, refined images when the build ends.
 - **Gaia overlay.** ESA Gaia DR3 stars, propagated to each epoch, to tell catalogued stars
   from uncatalogued movers.
-- **Observation lab** (`/lab/observation`). Pan/zoom across 3′/6′/15′ fields, expected-position
-  marker for known movers, Gaia rings, and an offline simulated demo.
 - **Honest labels.** Observation dates and data releases (e.g. DR1, QR3) come from the archive;
   science-model outputs that are still simulated say so.
 

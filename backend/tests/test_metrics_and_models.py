@@ -536,3 +536,39 @@ def test_measured_spectrum_uses_real_exposures_and_leaves_out_saturated_ones():
     assert ch10["n"] == 2 and ch10["flux_ujy"] == 105.0
     ch95 = next(c for c in spec["channels"] if c["channel_id"] == 95)
     assert ch95["n"] == 1 and ch95["sigma_ujy"] == 9.0
+
+
+def test_measured_spectrum_subtracts_the_local_sky_and_sets_blended_points_apart():
+    from app import imaging
+
+    nine_px = 9 * imaging.pixel_to_ujy()  # µJy of 1 MJy/sr over the 3x3 aperture
+    base = {"wavelength_um": 1.2, "channel_id": 10, "detector": 2, "epoch_index": 0,
+            "mid_mjd": 61000.0, "aperture_sigma_stat_ujy": 3.0}
+    exposures = [
+        base | {"aperture_flux_ujy": 100.0 + nine_px, "local_background_mjy_sr": 1.0,
+                "local_background_sigma_mjy_sr": 0.0, "aperture_peak_offset_px": 0.3},
+        base | {"aperture_flux_ujy": 110.0 + nine_px, "local_background_mjy_sr": 1.0,
+                "local_background_sigma_mjy_sr": 0.0, "aperture_peak_offset_px": None},
+        # Light peaks on a neighbour: drawn, but kept out of the channel median.
+        base | {"aperture_flux_ujy": 900.0 + nine_px, "local_background_mjy_sr": 1.0,
+                "aperture_peak_offset_px": 1.6},
+        # Not processed for the background yet: never mixed with subtracted points.
+        base | {"aperture_flux_ujy": 5000.0},
+    ]
+    spec = main.measured_spectrum(exposures)
+    assert spec["background_subtracted"] is True
+    assert spec["excluded_no_background"] == 1 and spec["blended_points"] == 1
+    assert sorted(round(p["flux_ujy"], 6) for p in spec["points"]) == [100.0, 110.0, 900.0]
+    assert [p["blended"] for p in sorted(spec["points"], key=lambda p: p["flux_ujy"])] == [False, False, True]
+    (channel,) = spec["channels"]
+    assert channel["n"] == 2 and round(channel["flux_ujy"], 6) == 105.0
+    assert spec["note"] == main.MEASURED_SPECTRUM_NOTE
+
+
+def test_measured_spectrum_without_any_background_stays_raw_and_says_so():
+    spec = main.measured_spectrum([
+        {"aperture_flux_ujy": 100.0, "wavelength_um": 1.2, "channel_id": 10},
+    ])
+    assert spec["background_subtracted"] is False and spec["excluded_no_background"] == 0
+    assert spec["points"][0]["flux_ujy"] == 100.0 and spec["points"][0]["background_ujy"] is None
+    assert spec["note"] == main.MEASURED_SPECTRUM_NOTE_RAW

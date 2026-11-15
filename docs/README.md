@@ -7,7 +7,7 @@
 | [science-and-techniques.md](science-and-techniques.md) | Every physical quantity, constant, threshold, metric and technique the app uses (pixel scale, bands, epochs, stretch, photometry, change detection, models, retries, zoom, warp) and why |
 | [position-validation.md](position-validation.md) | Generated report: measured vs expected (proper-motion) position of the 5 catalogue targets in every epoch, from `python -m app.position_report` |
 | [frontend-plan.md](frontend-plan.md) | Early UX plan and art direction for the frontend |
-| [observation-lab.md](observation-lab.md) | Notes on the `/lab/observation` viewer (some navigation details are out of date, see architecture §10) |
+| [observation-lab.md](observation-lab.md) | Findings of the removed `/lab/observation` viewer; its pixel↔sky math still drives `lib/lab/sky.ts` |
 
 Backend API contract: [`backend/README.md`](../backend/README.md). Frontend setup:
 [`frontend/README.md`](../frontend/README.md). Rules for keeping these docs in sync:

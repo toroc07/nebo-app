@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { demoBase } from "../lib/lab/contract";
 
 // The viewer swaps between image sets in place, keeping zoom, pan, pin and epoch. That is only
 // honest if the sets are the same data painted differently, so this pins that premise down.
@@ -77,13 +76,6 @@ test("every epoch image exists in its own folder and is a PNG", () => {
       }
     }
   }
-});
-
-test("demo URL prefixes match the folders served by the lab route", () => {
-  assert.equal(demoBase(), "/lab/demo/");
-  assert.equal(demoBase("gray"), "/lab/demo/");
-  assert.equal(demoBase("amber"), "/lab/demo/amber/");
-  assert.equal(demoBase("inferno"), "/lab/demo/inferno/");
 });
 
 // The viewer shows the smallest of the three sizes that covers the screen and switches between

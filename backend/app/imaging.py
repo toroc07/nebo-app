@@ -95,6 +95,85 @@ def saturated_near(
     return bool(saturated[max(0, iy - radius) : iy + radius + 1, max(0, ix - radius) : ix + radius + 1].any())
 
 
+def pixel_to_ujy() -> float:
+    """MJy/sr in one native pixel -> µJy."""
+    return math.radians(config.PIXEL_SCALE_ARCSEC / 3600.0) ** 2 * 1e12
+
+
+def local_background(
+    image: np.ndarray,
+    bad: np.ndarray,
+    x: float,
+    y: float,
+    radii: tuple[float, float] | None = None,
+    min_pixels: int | None = None,
+) -> tuple[float, float, int, float] | None:
+    """Sky level around (x, y): clipped median of the valid annulus pixels, in the image's units.
+
+    Returns (level per pixel, error of that level, pixels used, pixel noise σ), or None when the
+    position is not finite or too few pixels remain. Neighbouring stars in the annulus are removed
+    by iterative 3-sigma clipping (MAD-based); the level's error is 1.2533·σ/√n, that of a median.
+    """
+    r_in, r_out = radii or config.LOCAL_BACKGROUND_ANNULUS_PX
+    need = config.LOCAL_BACKGROUND_MIN_PIXELS if min_pixels is None else min_pixels
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    ny, nx = image.shape
+    reach = int(math.ceil(r_out)) + 1
+    x0, x1 = max(0, int(x) - reach), min(nx, int(x) + reach + 1)
+    y0, y1 = max(0, int(y) - reach), min(ny, int(y) + reach + 1)
+    if x0 >= x1 or y0 >= y1:
+        return None
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    r = np.hypot(xx - x, yy - y)
+    box = image[y0:y1, x0:x1]
+    values = box[(r >= r_in) & (r <= r_out) & ~bad[y0:y1, x0:x1] & np.isfinite(box)]
+    for _ in range(5):
+        if values.size < need:
+            return None
+        median = np.median(values)
+        sigma = 1.4826 * np.median(np.abs(values - median))
+        if sigma <= 0:
+            break
+        keep = np.abs(values - median) <= 3.0 * sigma
+        if keep.all():
+            break
+        values = values[keep]
+    if values.size < need:
+        return None
+    median = float(np.median(values))
+    sigma = float(1.4826 * np.median(np.abs(values - median)))
+    return median, 1.2533 * sigma / math.sqrt(values.size), int(values.size), sigma
+
+
+# A peak this many pixel-noise σ above the sky counts as a real source when locating the light.
+PEAK_MIN_SNR = 5.0
+
+
+def peak_offset(
+    image: np.ndarray, x: float, y: float, level: float, pixel_sigma: float, reach: int = 2
+) -> float | None:
+    """Distance in pixels from (x, y) to the brightest pixel in the (2·reach+1)² box around it.
+
+    None when that pixel is not a significant source (< PEAK_MIN_SNR·σ above the sky ``level``):
+    then there is no light to locate. A source on the object gives at most ~0.7 px (half a pixel
+    diagonal); ≥ 1.2 px means the light in the aperture peaks on a neighbour, not on the object.
+    """
+    if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(level)) or pixel_sigma <= 0:
+        return None
+    ix, iy = int(np.rint(x)), int(np.rint(y))
+    ny, nx = image.shape
+    x0, x1 = max(0, ix - reach), min(nx, ix + reach + 1)
+    y0, y1 = max(0, iy - reach), min(ny, iy + reach + 1)
+    box = image[y0:y1, x0:x1]
+    if box.size == 0 or not np.isfinite(box).any():
+        return None
+    py, px = np.unravel_index(int(np.nanargmax(box)), box.shape)
+    if box[py, px] - level < PEAK_MIN_SNR * pixel_sigma:
+        return None
+    return float(math.hypot(x0 + px - x, y0 + py - y))
+
+
 _WCS_HEADER_KEYS = (
     "NAXIS1", "NAXIS2", "CTYPE1", "CTYPE2", "CUNIT1", "CUNIT2", "BUNIT",
     "CRVAL1", "CRVAL2", "CRPIX1", "CRPIX2", "CDELT1", "CDELT2",

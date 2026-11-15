@@ -10,7 +10,7 @@ document (https://claude.ai/artifact/9AHiC9z8fX7MRQ5rxg1iDE).
 | Folder | Status |
 | --- | --- |
 | `backend/` | Done: FastAPI + PostgreSQL API. Details and contract in `backend/README.md` |
-| `frontend/` | In progress: Next.js menu, sky explorer, field viewer and observation lab (`/lab/observation`). See `frontend/README.md` and `docs/observation-lab.md` |
+| `frontend/` | In progress: Next.js menu, sky explorer and field viewer. See `frontend/README.md`; `docs/observation-lab.md` keeps the findings of the removed `/lab/observation` viewer |
 | `shared/` | Synthetic static demo export (`shared/demo`), same shape as the API |
 | `data/`, `docs/` | `docs/` holds the frontend plan and the observation lab findings; `data/` is a placeholder |
 

@@ -6,8 +6,8 @@
 //
 // This file is framework-free: a timeline function (time -> how the scene should look) and a tiny
 // controller shared by the menu (which launches) and the overlay (which renders). The overlay
-// lives in the root layout, so it survives the route change from the menu to the viewer and the
-// animation never restarts or cuts.
+// lives in the root layout, so it survives any re-render of the menu and the animation never
+// restarts or cuts.
 
 export type WarpPhase = "launch" | "cruise" | "arrive" | "done";
 
@@ -48,8 +48,8 @@ export const REDUCED: Timing = {
 /** Where the vanishing point sits once the camera has tipped up (0 = top, 1 = bottom of screen). */
 export const LOOK_UP_Y = 0.3;
 
-/** Where "Begin exploring" is taking the user: the sky globe, or the observation viewer. */
-export type WarpTarget = "explore" | "viewer";
+/** Where the transition is taking the user: the sky globe (the only destination left). */
+export type WarpTarget = "explore";
 
 /**
  * How the tunnel is framed: over the whole page, or only inside the cockpit glass (drawn behind
@@ -148,21 +148,6 @@ type Queryable = {
 };
 
 /**
- * Whether the observation viewer has something to show: an epoch image has loaded, or it has
- * given up and shows an error. It reads the page instead of being told, so the viewer's code
- * does not depend on the transition (and nothing breaks if the viewer is redesigned: the
- * safety net in `Timing.maxTotal` covers a selector that stops matching).
- */
-export function isViewerReady(doc: Queryable, pathname: string): boolean {
-  if (!pathname.startsWith("/lab/observation")) return false;
-  const image = doc.querySelector('[role="application"] img');
-  if (image && image.complete && (image.naturalWidth ?? 0) > 0) return true;
-  // The empty `role="alert"` element Next.js adds for route announcements is not an error.
-  const alert = doc.querySelector('main [role="alert"]');
-  return !!alert && (alert.textContent ?? "").trim().length > 0;
-}
-
-/**
  * Whether the sky globe has something to show: the map (Aladin) has mounted in the visible
  * explorer and is no longer loading, or it failed and offers a retry (which is also "ready": the
  * user must see the error, not a tunnel). While the map's code is still being downloaded there is
@@ -175,15 +160,13 @@ export function isExploreReady(doc: Queryable): boolean {
   return doc.querySelector(`${open} .sky-message`) === null;
 }
 
-/** Ready or not for the destination the transition is heading to. */
-export function isDestinationReady(
-  target: WarpTarget,
-  doc: Queryable,
-  pathname: string,
-): boolean {
-  return target === "explore"
-    ? isExploreReady(doc)
-    : isViewerReady(doc, pathname);
+/**
+ * Ready or not for the destination the transition is heading to. It reads the page instead of
+ * being told, so the destination's code does not depend on the transition (the safety net in
+ * `Timing.maxTotal` covers a selector that stops matching).
+ */
+export function isDestinationReady(_target: WarpTarget, doc: Queryable): boolean {
+  return isExploreReady(doc);
 }
 
 /** The destination's own loading message ("Loading…", "Building: downloading 3/24"), if it shows one. */

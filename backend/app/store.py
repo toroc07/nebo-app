@@ -803,13 +803,16 @@ class PostgresStore:
                 target_flux_mjy_sr, target_variance_mjy_sr2,
                 aperture_flux_ujy, aperture_sigma_stat_ujy, aperture_sigma_reported_ujy,
                 flags_bitmask_center, saturated_near_target, science_bad_fraction,
-                clean_pixel_fraction, cutout_url, sha256_hex, local_cache_path, gcs_uri
+                clean_pixel_fraction, cutout_url, sha256_hex, local_cache_path, gcs_uri,
+                local_background_mjy_sr, local_background_sigma_mjy_sr,
+                local_background_pixels, aperture_peak_offset_px
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s
             )
             ON CONFLICT (patch_id, detector, uri) DO UPDATE SET
                 timeline_id = EXCLUDED.timeline_id,
@@ -840,7 +843,11 @@ class PostgresStore:
                 cutout_url = COALESCE(EXCLUDED.cutout_url, nasa_sector_exposures.cutout_url),
                 sha256_hex = COALESCE(EXCLUDED.sha256_hex, nasa_sector_exposures.sha256_hex),
                 local_cache_path = COALESCE(EXCLUDED.local_cache_path, nasa_sector_exposures.local_cache_path),
-                gcs_uri = COALESCE(EXCLUDED.gcs_uri, nasa_sector_exposures.gcs_uri)
+                gcs_uri = COALESCE(EXCLUDED.gcs_uri, nasa_sector_exposures.gcs_uri),
+                local_background_mjy_sr = EXCLUDED.local_background_mjy_sr,
+                local_background_sigma_mjy_sr = EXCLUDED.local_background_sigma_mjy_sr,
+                local_background_pixels = EXCLUDED.local_background_pixels,
+                aperture_peak_offset_px = EXCLUDED.aperture_peak_offset_px
         """
         params = [
             (
@@ -883,6 +890,10 @@ class PostgresStore:
                 e.get("sha256_hex"),
                 e.get("local_cache_path"),
                 e.get("gcs_uri"),
+                _clean_float(e.get("local_background_mjy_sr")),
+                _clean_float(e.get("local_background_sigma_mjy_sr")),
+                e.get("local_background_pixels"),
+                _clean_float(e.get("aperture_peak_offset_px")),
             )
             for e in exposures
         ]

@@ -1,5 +1,9 @@
 # Observation viewer — findings
 
+> **Removed on 2026-11-15.** The `/lab/observation` route, its components and its `/lab/demo`
+> route are gone. These notes are kept for their findings; the Gaia, pixel↔sky and zoom-level
+> helpers they describe live on in `frontend/lib/lab/` and are used by the field viewer.
+
 `/lab/observation` is the full-screen, interactive image viewer. It renders the synthetic export
 in `shared/demo/` or, with the backend running, the real API. It is reached from the menu:
 **Home → Observe → "Begin exploring"** goes straight to it, and the page has its own

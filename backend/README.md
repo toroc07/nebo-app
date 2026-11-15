@@ -80,7 +80,9 @@ python -m app.etl run --file fields.csv                         # one "ra,dec" p
 
 Timelines built before saturation tracking have `saturated_near_target` NULL. Fill them without
 a rebuild: `python -m app.backfill_saturation` (cached cutouts only) or add `--download` to fetch
-the missing ones (set `NEBO_DISK_CACHE=0` to not keep them).
+the missing ones (set `NEBO_DISK_CACHE=0` to not keep them). Likewise the local-background
+columns of the measured spectrum: `python -m app.backfill_background` (see
+[`/spectrum/measured`](#get-patchesidspectrummeasured)).
 
 **Worker mode.** By default (`NEBO_BUILD_MODE=inline`) the API builds a missing field in its own
 threads. On platforms that throttle CPU between requests (Cloud Run) set
@@ -370,11 +372,24 @@ shape. Messages are deleted after 24 hours and nothing about the sender is store
 ### `GET /patches/{id}/spectrum/measured`
 
 The spectrum measured from the patch's stored exposures, all detectors and epochs: `points`
-(one per exposure: `wavelength_um`, `flux_ujy`, `sigma_ujy`, `detector`, `channel_id`,
-`epoch_index`, `mjd`) and `channels` (median flux per SPHEREx channel, robust error, `n`).
-Exposures saturated near the object are left out (`excluded_saturated`). A 3×3-pixel aperture at
-the object's position on each date, no aperture correction and no local background subtraction:
-valid for bright sources; faint ones are dominated by sky background.
+(one per exposure: `wavelength_um`, `flux_ujy`, `sigma_ujy`, `background_ujy`, `blended`,
+`detector`, `channel_id`, `epoch_index`, `mjd`) and `channels` (median flux per SPHEREx channel,
+robust error, `n`). A 3×3-pixel aperture at the object's position on each date, no aperture
+correction (the flux is roughly 70–90 % of the total).
+
+- **Local sky.** With `background_subtracted: true`, each flux has 9× the sky level of an annulus
+  4–9 px around the object subtracted (clipped median; its error is added to `sigma_ujy`), and
+  rows not processed for it yet are left out (`excluded_no_background`), so subtracted and raw
+  points never mix. `false` means no row of the patch has it yet: the fluxes are raw.
+- **Blends.** `blended: true` when the light in a 5×5 box peaks ≥ 1.2 px from the object (a
+  neighbour dominates); those points stay in `points` but not in the `channels` median
+  (`blended_points` counts them). A neighbour closer than that cannot be told apart.
+- Exposures saturated near the object are left out (`excluded_saturated`), as are those without
+  an aperture flux (`excluded_missing`).
+
+Rows built before the background columns existed are filled without a rebuild by
+`python -m app.backfill_background` (re-reads each cutout from the cache or IRSA; `--patch N` for
+one patch, `--all` to recompute). It writes in batches, so it can be stopped and rerun.
 
 ## Notes for the frontend
 

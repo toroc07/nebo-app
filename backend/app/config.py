@@ -83,6 +83,13 @@ ARCHIVE_WAIT_S = float(os.environ.get("NEBO_ARCHIVE_WAIT_S", "150"))
 # Native SPHEREx pixel scale, used for the common output grid.
 PIXEL_SCALE_ARCSEC = 6.15
 
+# Local sky background for the per-exposure 3x3 aperture (measured spectrum, P1-1): the clipped
+# median of the valid pixels in this annulus around the object, in pixels. The inner radius keeps
+# the PSF wings out; on real WISE 0855 cutouts radii 3-7, 4-9 and 5-12 agree within the errors.
+LOCAL_BACKGROUND_ANNULUS_PX = (4.0, 9.0)
+# Fewer valid annulus pixels than this (edge, masked pixels) gives no background value.
+LOCAL_BACKGROUND_MIN_PIXELS = 40
+
 # Progressive wave-by-wave build for coordinate searches (patch.target_slug is None).
 PROGRESSIVE_COORDINATE_BUILD = os.environ.get("NEBO_PROGRESSIVE_COORDINATE_BUILD", "1").strip().lower() not in (
     "0",

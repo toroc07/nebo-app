@@ -92,11 +92,8 @@ nearby or fast Gaia stars around the field as named links to their own field, ta
 instantly" (a preloaded patch within 30″ for this detector, from `/patches`) or "new download ·
 1–3 min".
 
-## Observation viewer
+## Observation lab (removed)
 
-`/lab/observation` (opened by URL) is a full-screen viewer of the SPHEREx epochs. Zoom with
-the wheel or a pinch, drag to pan, click to drop a pin that shows RA/Dec (draggable), and use the
-slider or Blink to compare epochs. Zooming switches automatically between the 3′, 6′ and 15′ images the backend serves (they are central crops of one image). The image starts at the full screen width, and the top-bar switch (or the `C` key) alternates between the grey infrared band and a color palette (demo data only; the colors are a display palette, not the sky's real colors). By default it reads the real API; the Controls panel (or the error
-message) can switch to the synthetic export in `shared/demo/`, which works without a backend. Details and the types
-`lib/api.ts` still lacks are in `docs/observation-lab.md`. `tests/browser.mjs` needs `shared/demo`
-next to the frontend folder.
+The URL-only `/lab/observation` viewer and its `/lab/demo` route were removed. Its Gaia, pixel↔sky
+and zoom-level helpers stay in `lib/lab/` because the field viewer uses them; its findings are in
+`docs/observation-lab.md`. `tests/browser.mjs` needs `shared/demo` next to the frontend folder.

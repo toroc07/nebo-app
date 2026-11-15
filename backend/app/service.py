@@ -197,8 +197,8 @@ def _build_exposure_row(
     ``source_position`` is where the catalogue object is at this exposure's time (from its
     proper motion); without it the patch centre is measured. The 3x3 aperture flux is only
     recorded when all its pixels are valid: saturated or flagged pixels would make the sum a
-    silent underestimate. It has no aperture correction or local background subtraction, so it
-    is a quick-look value, not science-grade photometry.
+    silent underestimate. The flux is stored raw (no aperture correction); the local sky level
+    from an annulus is stored beside it, and the measured spectrum subtracts it.
     """
     url = irsa.cutout_url(record.uri, patch.ra, patch.dec, config.FETCH_SIZE_DEG)
     url_digest = hashlib.sha256(url.encode()).hexdigest()
@@ -215,6 +215,11 @@ def _build_exposure_row(
             pix_x = pix_y = float("nan")
     target_flux = target_var = None
     aperture_flux_ujy = aperture_sigma_stat_ujy = aperture_sigma_reported_ujy = None
+    background = (
+        imaging.local_background(cutout.image, cutout.science_bad, pix_x, pix_y)
+        if math.isfinite(pix_x) and math.isfinite(pix_y)
+        else None
+    )
 
     if math.isfinite(pix_x) and math.isfinite(pix_y):
         ix, iy = int(np.rint(pix_x)), int(np.rint(pix_y))
@@ -233,8 +238,7 @@ def _build_exposure_row(
             box_bad = cutout.science_bad[y0:y1, x0:x1]
             valid_box = (~box_bad) & np.isfinite(box_img) & np.isfinite(box_var) & (box_var >= 0)
             if box_img.shape == (3, 3) and valid_box.all():
-                pix_sr = math.radians(config.PIXEL_SCALE_ARCSEC / 3600.0) ** 2
-                scale_ujy = pix_sr * 1e12
+                scale_ujy = imaging.pixel_to_ujy()
                 flux_mjy_sr = float(np.sum(box_img[valid_box]))
                 stat_mjy_sr = float(math.sqrt(np.sum(box_var[valid_box])))
                 aperture_flux_ujy = flux_mjy_sr * scale_ujy
@@ -282,6 +286,18 @@ def _build_exposure_row(
         "aperture_flux_ujy": aperture_flux_ujy,
         "aperture_sigma_stat_ujy": aperture_sigma_stat_ujy,
         "aperture_sigma_reported_ujy": aperture_sigma_reported_ujy,
+        # Sky level per pixel around the object (annulus); the measured spectrum subtracts
+        # 9x this from the raw 3x3 aperture flux above.
+        "local_background_mjy_sr": background[0] if background else None,
+        "local_background_sigma_mjy_sr": background[1] if background else None,
+        "local_background_pixels": background[2] if background else None,
+        # Where the light in the aperture peaks, from the object's position (≥ 1.2 px: a
+        # neighbour dominates the aperture at this wavelength).
+        "aperture_peak_offset_px": (
+            imaging.peak_offset(cutout.image, pix_x, pix_y, background[0], background[3])
+            if background
+            else None
+        ),
         "flags_bitmask_center": cutout.flags_center,
         "saturated_near_target": (
             imaging.saturated_near(cutout.saturated, pix_x, pix_y)

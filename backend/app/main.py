@@ -1399,31 +1399,77 @@ def spectrum_channels(spec: dict) -> list[dict]:
 
 MEASURED_SPECTRUM_NOTE = (
     "Measured: one point per SPHEREx exposure, a 3x3-pixel aperture at the object's position on "
-    "that date (proper motion applied), without aperture correction or local background "
-    "subtraction. Reliable for bright sources; for faint ones (e.g. WISE 0855 below ~3 µm) the "
-    "sky background dominates and the curve is mostly background. Exposures with saturated "
-    "pixels near the object are left out (their flux is only a lower limit). Points come from "
-    "all epochs, so a variable object scatters."
+    "that date (proper motion applied), minus the local sky level from an annulus 4-9 pixels "
+    "around it; no aperture correction, so the flux is a lower bound of the total (roughly 70-90 "
+    "%). Points where the light peaks on a neighbour (1.2 px or more from the object) are drawn "
+    "apart and left out of the median. A neighbour closer than that cannot be told apart at "
+    "6.15\" per pixel and stays in: for a faint object the short wavelengths may be its light "
+    "(e.g. WISE 0855 is only its own source above ~4 µm). Exposures with saturated pixels near "
+    "the object are left out (lower limits). Points come from all epochs, so a variable object "
+    "scatters."
 )
+
+MEASURED_SPECTRUM_NOTE_RAW = (
+    "Measured: one point per SPHEREx exposure, a 3x3-pixel aperture at the object's position on "
+    "that date (proper motion applied), without aperture correction or local background "
+    "subtraction (this field has not been processed for it yet). Reliable for bright sources; "
+    "for faint ones the sky background dominates. Exposures with saturated pixels near the "
+    "object are left out (their flux is only a lower limit). Points come from all epochs, so a "
+    "variable object scatters."
+)
+
+# The light in the aperture peaking this far (pixels) from the object means a neighbour
+# dominates it: a source on the object peaks within half a pixel diagonal (~0.7 px).
+BLENDED_PEAK_OFFSET_PX = 1.2
+
+
+def _finite(value: Any) -> bool:
+    return value is not None and math.isfinite(float(value))
 
 
 def measured_spectrum(exposures: list[dict]) -> dict:
     """The spectrum measured from the stored exposures (P1-1): every usable exposure as a point
-    (wavelength, flux, sigma) and, per SPHEREx channel, the median flux with a robust error."""
-    points, saturated, missing = [], 0, 0
+    (wavelength, flux, sigma) and, per SPHEREx channel, the median flux with a robust error.
+
+    Once the patch has local-background values (new builds, or ``app.backfill_background``),
+    each flux has 9x the annulus sky level subtracted and rows without one are left out, so the
+    curve never mixes subtracted and raw points. Points whose light peaks on a neighbour are
+    marked ``blended`` and kept out of the per-channel median.
+    """
+    usable = [
+        e for e in exposures
+        if not e.get("saturated_near_target")
+        and _finite(e.get("aperture_flux_ujy")) and _finite(e.get("wavelength_um"))
+    ]
+    subtract = any(_finite(e.get("local_background_mjy_sr")) for e in usable)
+    scale = imaging.pixel_to_ujy()
+    points, saturated, missing, no_background = [], 0, 0, 0
     for e in exposures:
-        flux, lam = e.get("aperture_flux_ujy"), e.get("wavelength_um")
         if e.get("saturated_near_target"):
             saturated += 1
             continue
-        if flux is None or lam is None or not (math.isfinite(flux) and math.isfinite(lam)):
+        flux, lam = e.get("aperture_flux_ujy"), e.get("wavelength_um")
+        if not (_finite(flux) and _finite(lam)):
             missing += 1
             continue
         sigma = e.get("aperture_sigma_reported_ujy") or e.get("aperture_sigma_stat_ujy")
+        sigma = float(sigma) if _finite(sigma) else None
+        background_ujy = None
+        if subtract:
+            if not _finite(e.get("local_background_mjy_sr")):
+                no_background += 1
+                continue
+            background_ujy = 9 * float(e["local_background_mjy_sr"]) * scale
+            flux = float(flux) - background_ujy
+            if sigma is not None and _finite(e.get("local_background_sigma_mjy_sr")):
+                sigma = math.hypot(sigma, 9 * float(e["local_background_sigma_mjy_sr"]) * scale)
+        offset = e.get("aperture_peak_offset_px")
         points.append({
             "wavelength_um": round(float(lam), 5),
             "flux_ujy": float(flux),
-            "sigma_ujy": float(sigma) if sigma is not None and math.isfinite(sigma) else None,
+            "sigma_ujy": sigma,
+            "background_ujy": background_ujy,
+            "blended": _finite(offset) and float(offset) >= BLENDED_PEAK_OFFSET_PX,
             "detector": e.get("detector"),
             "channel_id": e.get("channel_id"),
             "epoch_index": e.get("epoch_index"),
@@ -1432,7 +1478,7 @@ def measured_spectrum(exposures: list[dict]) -> dict:
     points.sort(key=lambda p: p["wavelength_um"])
     by_channel: dict[int, list[dict]] = {}
     for p in points:
-        if p["channel_id"] is not None:
+        if p["channel_id"] is not None and not p["blended"]:
             by_channel.setdefault(int(p["channel_id"]), []).append(p)
     channels = []
     for channel_id, group in sorted(by_channel.items()):
@@ -1454,11 +1500,14 @@ def measured_spectrum(exposures: list[dict]) -> dict:
         "measured": True,
         "source": DATA_SOURCE,
         "unit": "uJy",
-        "note": MEASURED_SPECTRUM_NOTE,
+        "background_subtracted": subtract,
+        "note": MEASURED_SPECTRUM_NOTE if subtract else MEASURED_SPECTRUM_NOTE_RAW,
         "points": points,
         "channels": channels,
+        "blended_points": sum(1 for p in points if p["blended"]),
         "excluded_saturated": saturated,
         "excluded_missing": missing,
+        "excluded_no_background": no_background,
     }
 
 

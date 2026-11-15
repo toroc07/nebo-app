@@ -7,7 +7,7 @@ for and where it lives. Use it to answer "why this number?" without reading the 
 > update its row in the same PR (checklist in [`AGENTS.md`](../AGENTS.md#keeping-docs-in-sync)).
 > References are `file` + symbol, not line numbers, so they survive edits.
 > How the pieces connect is in [`architecture.md`](architecture.md); where the data comes from is
-> in [`data-sources.md`](data-sources.md); the lab viewer math is in
+> in [`data-sources.md`](data-sources.md); the pixel↔sky math (from the removed lab viewer) is in
 > [`observation-lab.md`](observation-lab.md#pixel--sky-math).
 
 Contents:
@@ -172,7 +172,7 @@ a discovery.
 | Wheel zoom | `factor = exp(−Δpx·k)`, k = 0.0015 (0.01 with Ctrl/pinch) | `frontend/lib/lab/viewport.ts` | Exponential zoom is smooth at every scale |
 | Viewport limits | ≤ 64 screen px per image px; ≥ 25% of the image visible | `viewport.ts` | Never zoom into nothing or lose the field |
 | Nested levels | 147/59/31 crops, smallest that covers the view (margin 0.9) | `frontend/lib/lab/fov.ts`, `levels.ts` | Load the sharpest crop for the current zoom |
-| Blink comparator | 800 ms default; 400 / 800 / 1500 ms options, saved preference | `Nebo.tsx`, `Field.tsx`, `ObservationLab.tsx` | Classic way astronomers spot moving objects; adjustable for accessibility |
+| Blink comparator | 800 ms default; 400 / 800 / 1500 ms options, saved preference | `Nebo.tsx`, `Field.tsx` | Classic way astronomers spot moving objects; adjustable for accessibility |
 | Timeline polling | `max(1, Retry-After) s`; field gives up after 3 min; after a 502 waits ≥ 60 s | `frontend/lib/api.ts`, `Field.tsx` | Follow the server's pace, never hammer it |
 | Warp timing | `MOTION` (fade-in .35, launch .9, tilt .8, min 1.9, max 12, arrive 1.0 s); `REDUCED` for reduced motion | `frontend/lib/warp.ts` | Effect lasts as long as the data takes, with bounds |
 | Warp tunnel | Canvas 2D, 560 streaks, perspective `r = focal·radius/z`, near plane 0.035 | `frontend/lib/warp-render.ts` | Cheap enough for any GPU; not a shader |

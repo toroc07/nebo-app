@@ -466,3 +466,22 @@ def test_partial_render_skips_npz_final_keeps_it():
     final = render_epoch_images(records, [[0]], processed)
     assert all(i.npz is None for i in partial) and len(partial) == len(final)
     assert any(i.npz for i in final)
+
+
+def test_exposure_row_stores_the_local_sky_level_and_where_the_light_peaks():
+    row = _row(source_position=_star_position())
+    # The fake sky is IMAGE 1.0 - ZODI 0.25 everywhere but the star.
+    assert row["local_background_mjy_sr"] == 0.75
+    assert row["local_background_pixels"] > 100
+    # A noiseless sky has no σ to judge a peak against, so nothing is located.
+    assert row["aperture_peak_offset_px"] is None
+
+
+def test_background_backfill_measures_at_the_stored_target_pixel():
+    from app import backfill_background
+
+    data = make_cutout_bytes(RA, DEC, star_offset_px=(0, 3), shape=(31, 31))
+    level, error, pixels, _ = backfill_background.measure(data, RA, DEC, 15.0, 12.0)
+    assert level == 0.75 and error == 0.0 and pixels > 100
+    # No stored position: marked as tried (0 pixels) so a rerun skips it.
+    assert backfill_background.measure(data, RA, DEC, None, None) == (None, None, 0, None)

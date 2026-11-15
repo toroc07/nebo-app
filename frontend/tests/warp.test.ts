@@ -9,7 +9,6 @@ import {
   frameAt,
   isDestinationReady,
   isExploreReady,
-  isViewerReady,
   viewerStatus,
   type Timeline,
 } from "../lib/warp";
@@ -164,7 +163,7 @@ test("the controller ignores a second launch and only the first ready counts", (
   let notified = 0;
   c.subscribe(() => notified++);
   c.launch(5, "explore");
-  c.launch(6, "viewer");
+  c.launch(6, "explore");
   assert.equal(c.timeline()?.launchedAt, 5);
   assert.equal(notified, 1);
   assert.equal(c.isReady(), false);
@@ -179,7 +178,7 @@ test("the controller ignores a second launch and only the first ready counts", (
   c.markReady(10);
   assert.equal(c.isActive(), false);
   // And a new transition can start afterwards.
-  c.launch(20, "viewer");
+  c.launch(20, "explore");
   assert.equal(c.timeline()?.launchedAt, 20);
 });
 
@@ -193,42 +192,7 @@ type El = {
 const page = (found: Record<string, El | null>) => ({
   querySelector: (selector: string) => found[selector] ?? null,
 });
-const IMG = '[role="application"] img';
-const ALERT = 'main [role="alert"]';
 const STATUS = 'main [role="status"]:not([data-warp] *)';
-
-test("the viewer is ready once an epoch image has loaded", () => {
-  const loaded = page({
-    [IMG]: { complete: true, naturalWidth: 59, textContent: null },
-  });
-  assert.equal(isViewerReady(loaded, "/lab/observation"), true);
-  const loading = page({
-    [IMG]: { complete: false, naturalWidth: 0, textContent: null },
-  });
-  assert.equal(isViewerReady(loading, "/lab/observation"), false);
-  const broken = page({
-    [IMG]: { complete: true, naturalWidth: 0, textContent: null },
-  });
-  assert.equal(isViewerReady(broken, "/lab/observation"), false);
-});
-
-test("an error message counts as ready, but an empty alert does not", () => {
-  const error = page({
-    [ALERT]: { textContent: "We could not reach the image service." },
-  });
-  assert.equal(isViewerReady(error, "/lab/observation"), true);
-  const announcer = page({ [ALERT]: { textContent: "  " } });
-  assert.equal(isViewerReady(announcer, "/lab/observation"), false);
-});
-
-test("the menu is never mistaken for the viewer", () => {
-  const withImage = page({
-    [IMG]: { complete: true, naturalWidth: 59, textContent: null },
-  });
-  assert.equal(isViewerReady(withImage, "/"), false);
-  assert.equal(isViewerReady(withImage, "/lab/observation/"), true);
-  assert.equal(isViewerReady(page({}), "/lab/observation"), false);
-});
 
 test("the viewer's own loading message is passed through", () => {
   assert.equal(
@@ -279,28 +243,15 @@ test("the globe is not ready while the map's code is still downloading or the vi
   );
 });
 
-test("each destination is judged by its own page", () => {
-  const globe = page({ [HOST]: { textContent: "" } });
-  assert.equal(isDestinationReady("explore", globe, "/"), true);
-  // The globe being ready says nothing about the viewer, which needs its route and an image.
-  assert.equal(isDestinationReady("viewer", globe, "/"), false);
-  const viewer = page({
-    [IMG]: { complete: true, naturalWidth: 59, textContent: null },
-  });
-  assert.equal(isDestinationReady("viewer", viewer, "/lab/observation"), true);
-  assert.equal(
-    isDestinationReady("explore", viewer, "/lab/observation"),
-    false,
-  );
+test("the destination is judged by its own page", () => {
+  assert.equal(isDestinationReady("explore", page({ [HOST]: { textContent: "" } })), true);
+  assert.equal(isDestinationReady("explore", page({})), false);
 });
 
 test("the controller remembers where it is heading", () => {
   const c = new WarpController();
   c.launch(1, "explore");
   assert.equal(c.timeline()?.target, "explore");
-  c.finish();
-  c.launch(2, "viewer");
-  assert.equal(c.timeline()?.target, "viewer");
 });
 
 // --- star field -----------------------------------------------------------------------------
