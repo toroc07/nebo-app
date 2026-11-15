@@ -485,3 +485,53 @@ def test_background_backfill_measures_at_the_stored_target_pixel():
     assert level == 0.75 and error == 0.0 and pixels > 100
     # No stored position: marked as tried (0 pixels) so a rerun skips it.
     assert backfill_background.measure(data, RA, DEC, None, None) == (None, None, 0, None)
+
+
+def test_background_backfill_retries_what_irsa_refused_one_at_a_time(monkeypatch):
+    from contextlib import contextmanager
+
+    from app import backfill_background, db
+
+    rows = [
+        {"id": i, "uri": f"u{i}", "cutout_center_ra": RA, "cutout_center_dec": DEC,
+         "cutout_size_deg": 0.35, "target_pix_x": 15.0, "target_pix_y": 15.0}
+        for i in (1, 2)
+    ]
+    written: list[tuple] = []
+
+    class Conn:
+        def execute(self, *_):
+            return type("R", (), {"fetchall": lambda _self: rows})()
+
+        def cursor(self):
+            return self
+
+        def executemany(self, _sql, values):
+            written.extend(values)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    class Pool:
+        @contextmanager
+        def connection(self):
+            yield Conn()
+
+    monkeypatch.setattr(db, "get_store", lambda: type("S", (), {"pool": Pool()})())
+    monkeypatch.setattr(backfill_background, "RETRY_PAUSE_S", 0)
+    data = make_cutout_bytes(RA, DEC, shape=(31, 31))
+    refused = {"u2"}
+
+    def fetch(uri, *_args, **_kwargs):
+        if uri in refused:
+            refused.discard(uri)  # IRSA answers 503 to the burst, then serves the lone retry
+            raise RuntimeError("503 Server Error: Service Unavailable")
+        return data
+
+    monkeypatch.setattr(backfill_background.irsa, "fetch_cutout", fetch)
+    backfill_background.main(workers=2)
+    assert sorted(v[-1] for v in written) == [1, 2]
+    assert all(v[0] == 0.75 for v in written)

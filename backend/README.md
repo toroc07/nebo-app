@@ -389,7 +389,10 @@ correction (the flux is roughly 70–90 % of the total).
 
 Rows built before the background columns existed are filled without a rebuild by
 `python -m app.backfill_background` (re-reads each cutout from the cache or IRSA; `--patch N` for
-one patch, `--all` to recompute). It writes in batches, so it can be stopped and rerun.
+one patch, `--all` to recompute, `--workers N` for fewer parallel downloads). It writes in
+batches, so it can be stopped and rerun. IRSA answers `503` at once to bursts of parallel
+requests; the exposures it refuses are retried one at a time at the end, and any still refused
+are listed as `skip <id>` and left for a rerun.
 
 ## Notes for the frontend
 
