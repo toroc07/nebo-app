@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
@@ -87,6 +87,9 @@ export default function Nebo() {
     [skyCoordinates, setSkyCoordinates] = useState<{ ra: number; dec: number } | null>(null),
     [skyCommand, setSkyCommand] = useState<SkyCommand | null>(null),
     [skyView, setSkyView] = useState<SkyView | null>(null),
+    // First-person turn between the cockpit (right = towards the analysis wall) and back.
+    [turn, setTurn] = useState<"right" | "left" | null>(null),
+    [screenPowered, setScreenPowered] = useState(true),
     [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, grid: false }),
     [query, setQuery] = useState<Query | null>(null),
     [ra, setRa] = useState(""),
@@ -102,6 +105,8 @@ export default function Nebo() {
     departing = useRef(false),
     pending = useRef<Destination | null>(null);
   const reduced = prefs.reduced || systemReduced;
+  const turnRef = useRef(turn);
+  turnRef.current = turn;
   useEffect(() => {
     try {
       const p = JSON.parse(localStorage.getItem("nebo.preferences") || "null");
@@ -171,7 +176,8 @@ export default function Nebo() {
       if (
         !loaded ||
         reduced ||
-        matchMedia("(prefers-reduced-motion: reduce)").matches
+        matchMedia("(prefers-reduced-motion: reduce)").matches ||
+        turnRef.current
       )
         return;
       const menu = root.current?.querySelector(".panel-menu");
@@ -263,7 +269,22 @@ export default function Nebo() {
     }
   }
   const go = contextSafe((destination: Destination) => {
-    if (departing.current || destination === view) return;
+    if (departing.current || destination === view || turn) return;
+    const motion =
+      loaded && !reduced && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Cockpit ⇄ analysis screen is one room: the camera turns instead of cutting.
+    if (motion && view === "Explore" && destination === "Field") {
+      setScreenPowered(false);
+      setTurn("right");
+      setView("Field");
+      return;
+    }
+    if (motion && view === "Field" && destination === "Explore") {
+      // Switch the screen off first, then turn back to the cockpit.
+      setScreenPowered(false);
+      setTimeout(() => setTurn("left"), 320);
+      return;
+    }
     // The tunnel starts right away and runs as the loading screen of the destination (the sky
     // globe, or the observation viewer across the route change): components/WarpOverlay.tsx.
     if (destination === "Explore") launchWarp("explore");
@@ -335,6 +356,48 @@ export default function Nebo() {
       exit.to(main, { opacity: 0, y: -6, duration: 0.18 });
     }
   });
+  // Layout effect: the walls must be rotated into place before the first frame is painted,
+  // or the newly mounted screen would flash at full size for one frame.
+  useLayoutEffect(() => {
+    if (!turn) return;
+    const explorer = root.current?.querySelector<HTMLElement>(".explorer-grid");
+    const field = root.current?.querySelector<HTMLElement>('[data-console="field"]');
+    const corner = root.current?.querySelector<HTMLElement>(".turn-corner");
+    const finish = () => {
+      if (explorer && field) gsap.set([explorer, field], { clearProps: "transform" });
+      if (turn === "right") {
+        setTurn(null);
+        setScreenPowered(true);
+      } else {
+        setView("Explore");
+        setTurn(null);
+        setScreenPowered(true);
+      }
+    };
+    if (!explorer || !field || !corner) return finish();
+    /*
+     * The turn is a camera pan across one continuous strip: cockpit · connecting wall · analysis
+     * screen. The middle panel (turn-corner.webp) was painted to join the two views, so the
+     * pan never shows a seam or the space behind the walls. Flat translations only: no 3D,
+     * which clipped the walls and needed dark masks at their edges.
+     */
+    const vw = window.innerWidth;
+    // The corner's last 9 % fades out over the screen's left edge (and its first 9 %, offset by
+    // a negative margin, over the cockpit's right edge), so the strip advances 82 % of its width.
+    const span = corner.offsetWidth * 0.82;
+    const right = turn === "right";
+    // Pan positions (px): the cockpit at 0, the corner just right of it, the screen after both.
+    const start = right ? 0 : -(vw + span);
+    const end = right ? -(vw + span) : 0;
+    const timeline = gsap.timeline({ onComplete: finish, defaults: { duration: 1.25, ease: "power2.inOut" } });
+    timeline
+      .fromTo(explorer, { x: start }, { x: end }, 0)
+      .fromTo(corner, { x: start + vw }, { x: end + vw }, 0)
+      .fromTo(field, { x: start + vw + span }, { x: end + vw + span }, 0);
+    return () => {
+      timeline.kill();
+    };
+  }, [turn]);
   // A field can be opened from Featured objects, the sky explorer or the coordinates form. Back
   // returns to whichever one it was opened from: the last screen that was not a field.
   const fieldOrigin = useRef<View>("Observe");
@@ -696,6 +759,7 @@ export default function Nebo() {
                 title={selected?.name || "Your observation field"}
                 headingRef={heading}
                 onBack={back}
+                powered={screenPowered}
                 recommended={selected?.recommended_detector || 3}
                 speed={prefs.speed}
                 reduced={reduced}
@@ -802,8 +866,19 @@ export default function Nebo() {
             )}
           </>
         )}
+        {turn && <div className="turn-corner" aria-hidden="true" />}
         {skyMounted && (
-          <div hidden={view !== "Explore"} className="explorer-grid">
+          <div
+            hidden={view !== "Explore" && view !== "Field" && !turn}
+            className="explorer-grid"
+            inert={view === "Field" && !turn}
+            aria-hidden={view === "Field" && !turn ? true : undefined}
+          >
+            {/*
+              * While the analysis screen is up, the cockpit stays mounted and painted behind it
+              * (inert, aria-hidden). display:none would make Aladin resize and reload on the way
+              * back (a stalled turn); visibility:hidden would blank its WebGL sky (broken glass).
+              */}
             <div className="sky-panel">
               <Sky
                 targets={targets}

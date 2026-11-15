@@ -544,6 +544,28 @@ footer .mono {
   .explorer-grid .sky-help { left: auto; right: calc(100vw * 215 / 1855); }
 }
 .explorer-grid[hidden] { display: none; }
+/*
+ * The wall between the cockpit and the analysis screen, shown only while the camera pans
+ * (see the turn in Nebo.tsx). Its edges fade so it melts into the two live views.
+ */
+.turn-corner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 7;
+  width: min(150dvh, 85vw);
+  height: 100dvh;
+  background: #020509 url("/panels/turn-corner.webp") center / cover no-repeat;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  margin-left: calc(min(150dvh, 85vw) * -0.09);
+  pointer-events: none;
+}
+/*
+ * Behind the analysis screen the cockpit stays painted (the opaque screen covers it) and only
+ * leaves the focus order (inert, in Nebo.tsx). visibility:hidden would make Chrome drop the
+ * WebGL sky, and Aladin would not repaint it until the view changed: half-empty glass.
+ */
 /* isolation keeps Aladin's internal z-indexes (reticle, menus) under the cockpit. */
 .sky-panel { position: relative; isolation: isolate; min-height: 0; background: #09111c; color: #f6f4ed; }
 .aladin-host { height: 100%; min-height: 0; width: 100%; }
