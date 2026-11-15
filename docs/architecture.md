@@ -1,0 +1,530 @@
+# Nebo architecture
+
+How the system works today, end to end: deployment, backend, database, frontend and the
+external data it uses. Every diagram is Mermaid, so GitHub renders it in place.
+
+> **Keep this file true.** When a change touches an endpoint, a table, a build step, a data
+> source, a deploy setting, an environment variable or the user journey, update the matching
+> section and diagram here and add a line to the [changelog](#architecture-changelog). The
+> checklist is in [`AGENTS.md`](../AGENTS.md#keeping-docs-in-sync). External data sources are
+> detailed in [`data-sources.md`](data-sources.md).
+
+Contents:
+[1. System context](#1-system-context) ·
+[2. Deployment and processes](#2-deployment-and-processes) ·
+[3. Backend](#3-backend) ·
+[4. Timeline request flow](#4-timeline-request-flow) ·
+[5. Build pipeline](#5-build-pipeline) ·
+[6. Database](#6-database) ·
+[7. Caches and storage](#7-caches-and-storage) ·
+[8. Frontend](#8-frontend) ·
+[9. Real vs simulated data](#9-real-vs-simulated-data) ·
+[10. Known gaps and doc drift](#10-known-gaps-and-doc-drift) ·
+[Changelog](#architecture-changelog)
+
+---
+
+## 1. System context
+
+Nebo is a web viewer of the infrared sky. The user flies over an all-sky SPHEREx map, picks a
+target or types coordinates, and opens a small field where the SPHEREx images of each epoch
+can be blinked to spot real changes (movers, variables).
+
+```mermaid
+flowchart LR
+  user(["User / browser"])
+
+  subgraph vercel["Vercel"]
+    fe["Next.js frontend<br/>(frontend/)"]
+  end
+
+  subgraph gcp["Google Cloud"]
+    api["FastAPI API<br/>(backend/app, Cloud Run)"]
+    worker["ETL worker<br/>python -m app.etl worker<br/>(queue mode only)"]
+    gcs[("GCS bucket<br/>FITS cutout cache<br/>(optional)")]
+  end
+
+  pg[("PostgreSQL<br/>timelines, PNG/NPZ, catalogue")]
+
+  subgraph nasa["NASA/IPAC IRSA"]
+    tap["TAP /TAP/sync<br/>spherex.plane + artifact"]
+    sia["SIA /SIA<br/>spherex_dr1, qr3 ..."]
+    ibe["IBE cutouts<br/>/ibe/data/spherex/..."]
+    hips["SPHEREx HiPS cube<br/>/data/hips/SPHEREx/..."]
+  end
+
+  gaia["ESA Gaia DR3 TAP<br/>gaiadr3.gaia_source"]
+
+  user --> fe
+  fe -- "REST /api/v1" --> api
+  fe -- "HiPS tiles (Aladin Lite)" --> hips
+  api --> pg
+  worker --> pg
+  api -- "frame list" --> tap
+  api -. "hedge / fallback" .-> sia
+  api -- "FITS cutouts" --> ibe
+  worker --> tap & sia & ibe
+  api <--> gcs
+  worker <--> gcs
+  api -- "cone search" --> gaia
+```
+
+- The browser talks to **our API** for everything except the background sky map, which
+  Aladin Lite streams straight from IRSA's SPHEREx HiPS.
+- The API never proxies HiPS tiles and never stores raw FITS in Postgres: it stores the
+  processed PNG/NPZ per epoch and the metadata of every exposure used.
+
+## 2. Deployment and processes
+
+| Piece | Where | How it starts |
+| --- | --- | --- |
+| Frontend | Vercel (default Next.js settings, `next build --webpack`) | `NEXT_PUBLIC_API_ORIGIN` points at the API |
+| API | Cloud Run, from `backend/Dockerfile` (python:3.12-slim, port 8080) | `python -m app.db init \|\| true; uvicorn app.main:app` |
+| ETL worker | Same image, command `python -m app.etl worker` | Only when `NEBO_BUILD_MODE=queue` |
+| Preload / batch ETL | Same image or a laptop | `python -m app.etl run` (alias `python -m app.preload`) |
+| PostgreSQL | Managed Postgres in the cloud; `docker-compose.yml` runs Postgres 16 locally | `backend/db/schema.sql` is applied by `app.db init` |
+| GCS | Optional bucket, enabled by `NEBO_GCS_BUCKET` | Read before IRSA, written after a download |
+
+```mermaid
+flowchart TB
+  subgraph inline["NEBO_BUILD_MODE=inline (default, local dev)"]
+    a1["API request"] --> a2["claim_timeline"] --> a3["build thread pool<br/>MAX_CONCURRENT_BUILDS=2"]
+    a3 --> a4["download pool<br/>MAX_PARALLEL_DOWNLOADS=6"]
+  end
+  subgraph queue["NEBO_BUILD_MODE=queue (Cloud Run)"]
+    b1["API request"] --> b2["claim_timeline<br/>stage=queued"] --> b3[("timelines table<br/>= the queue")]
+    b4["etl worker loop"] -- "dequeue_timeline<br/>FOR UPDATE SKIP LOCKED" --> b3
+    b4 --> b5["build in worker"]
+  end
+```
+
+Cloud Run throttles CPU once a response is sent, so builds started inside the API stall
+there; that is why the cloud uses queue mode plus a worker. Set `NEBO_DISK_CACHE=0` on Cloud
+Run (its disk lives in RAM).
+
+**Environment variables** (backend `app/config.py`, `app/gcs_storage.py`):
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `DATABASE_URL` | empty | Postgres DSN; empty means the API answers 503 |
+| `NEBO_BUILD_MODE` | `inline` | `inline` builds in the API, `queue` leaves it to `etl worker` |
+| `NEBO_MAX_PARALLEL_DOWNLOADS` | 6 | Cutout downloads in flight per process |
+| `NEBO_MAX_CONCURRENT_BUILDS` | 2 | Builds running at once (inline) |
+| `NEBO_MAX_PENDING_BUILDS` | 6 | Beyond this, new patches get 503 busy (inline) |
+| `NEBO_HTTP_TIMEOUT_S` | 180 | Cutout download timeout |
+| `NEBO_DISK_CACHE` / `NEBO_CACHE_DIR` | `1` / `backend/.cache` | FITS cache on disk |
+| `NEBO_PROGRESSIVE_COORDINATE_BUILD` | `1` | Wave-by-wave builds for coordinate searches |
+| `NEBO_CORS_ORIGINS` | `*` | Allowed frontend origins |
+| `NEBO_GCS_BUCKET` / `NEBO_GCS_PROJECT` / `NEBO_GCS_PREFIX` | unset | Optional GCS cutout cache |
+| `NEXT_PUBLIC_API_ORIGIN` (frontend) | `http://127.0.0.1:8000` | API base URL seen by the browser |
+
+## 3. Backend
+
+FastAPI + psycopg 3 + NumPy/Astropy. The full API contract is in
+[`backend/README.md`](../backend/README.md).
+
+```mermaid
+flowchart TB
+  main["main.py<br/>routes, payloads, errors"]
+  service["service.py<br/>TimelineService: resolve, claim,<br/>build, epochs, render"]
+  irsa["irsa.py<br/>TAP / SIA query, cutout fetch"]
+  imaging["imaging.py<br/>FITS read, reproject, coadd,<br/>stretch, PNG / NPZ"]
+  store["store.py<br/>PostgresStore: all SQL"]
+  db["db.py<br/>pool + schema init"]
+  gaia["gaia.py<br/>Gaia DR3 cone search"]
+  eph["ephemeris.py<br/>proper-motion positions"]
+  sci["models.py / metrics.py /<br/>science_catalogs.py"]
+  gcs["gcs_storage.py"]
+  etl["etl.py / preload.py<br/>CLI: run, worker"]
+  export["export.py<br/>static JSON + PNG export"]
+  targets["targets.py<br/>catalogue seed"]
+  config["config.py"]
+
+  main --> service & store & gaia & eph & sci & imaging
+  etl --> service & db & targets
+  export --> main & store
+  service --> irsa & imaging & store & eph
+  irsa --> gcs
+  store --> db
+  db --> targets
+  config -.-> main & service & irsa & store
+```
+
+| Module | Responsibility |
+| --- | --- |
+| `main.py` | FastAPI app, CORS, error handlers (503 no DB / busy), payload builders, every route |
+| `service.py` | `TimelineService`: patch resolution (30″ reuse), atomic claim, build orchestration, epoch splitting, progressive waves, rendering |
+| `irsa.py` | IRSA access: TAP query (SIA hedge after 20 s, SIA fallback on failure), cutout URL, cutout download with disk/GCS cache and backoff |
+| `imaging.py` | Reads IMAGE/VARIANCE/FLAGS/ZODI, subtracts zodi, north-up TAN grid, nearest-neighbour reprojection, inverse-variance co-add, asinh stretch, PNG/NPZ, diff PNG |
+| `store.py` | `PostgresStore` (connection pool 1–10) with all SQL; `Store` protocol used by tests |
+| `db.py` | Process-wide store; `python -m app.db init` applies the schema and seeds targets, 102 channels and 17 indices |
+| `gaia.py` | ESA Gaia DR3 cone search (CSV), position propagation from J2016.0 |
+| `ephemeris.py` | Expected position from proper motion (catalogue epoch 2026.2) |
+| `models.py`, `metrics.py`, `science_catalogs.py` | Science layer: photometry, spectral indices, Models 1–3. **Mostly simulated**, see [section 9](#9-real-vs-simulated-data) |
+| `etl.py`, `preload.py` | Batch builds (`run`) and the queue worker (`worker`) |
+| `export.py` | Exports ready timelines as static JSON + PNG with the same shape as the API |
+| `targets.py` | Seed catalogue: Barnard's Star, ε Indi B, WISE 0855, RW Aurigae, R Draconis |
+
+### Endpoints (`/api/v1`)
+
+| Group | Endpoints |
+| --- | --- |
+| Health and catalogue | `GET /health`, `GET /targets`, `GET /patches`, `GET /catalogs/channels`, `GET /catalogs/spectral-indices` |
+| Images and timelines | `GET /timeline`, `GET /timeline/diff`, `GET /images/{id}.png`, `GET /images/{id}.npz`, `GET /patches/{id}/sectors` |
+| Gaia | `GET /patches/{id}/gaia` |
+| Science (simulated) | `GET /patches/{id}/spectrum`, `GET /patches/{id}/metrics`, `POST /patches/{id}/analyze` |
+| Models (simulated) | `POST /models/classify-event`, `POST /models/classify-spectrum`, `POST /models/forecast-temporal`, `GET /patches/{id}/models/{event,spectrum,forecast}` |
+| Citizen votes | `POST /patches/{id}/votes`, `GET /patches/{id}/votes` |
+
+Status codes on `/timeline`: `200` ready, `202` building (`Retry-After` 2 s early, 5 s later),
+`502` failed (retried after 60 s), `503` no database or too many builds, `404` unknown target.
+
+## 4. Timeline request flow
+
+`GET /timeline?ra&dec|target&size&detector[&wait_for]` is the heart of the app. It never blocks:
+the first call claims a build and returns `202`, the client polls.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser (Field / lab)
+  participant A as API main.py
+  participant S as TimelineService
+  participant DB as PostgreSQL
+  participant W as Build thread or etl worker
+  participant I as IRSA
+
+  B->>A: GET /timeline?ra&dec&size&detector&wait_for=first_light
+  A->>S: resolve_patch (reuse a patch within 30″ or create it)
+  S->>DB: find_patch_near / create_patch + sector_coordinates
+  A->>S: timeline(patch, detector, size)
+  S->>DB: claim_timeline (INSERT ... ON CONFLICT, stage=queued)
+  S-->>W: start build (inline pool or queue)
+  A-->>B: 202 building, progress.stage, Retry-After 2
+  W->>I: TAP frame list (SIA hedge after 20 s)
+  W->>I: FITS cutouts, 6 in parallel
+  W->>DB: save_partial_timeline (first_light, then preview_ready)
+  loop every Retry-After seconds
+    B->>A: GET /timeline ... (same query)
+    A->>DB: get_timeline + list_images
+    alt preview exists and wait_for allows it
+      A-->>B: 200 is_partial true, refining true, epochs[] so far
+    else still nothing to show
+      A-->>B: 202 progress (stage, done, total)
+    end
+  end
+  W->>DB: complete_timeline (swap images, status ready)
+  B->>A: GET /timeline ...
+  A-->>B: 200 final (no is_partial)
+  B->>A: GET /images/{id}.png (immutable cache)
+```
+
+Notes:
+- `wait_for=first_light|preview` is opt-in and only for coordinate searches; the default
+  (`complete`) keeps answering `202` until the build ends.
+- Partial saves replace the image rows, so **image ids change**: clients re-read
+  `image_url` on every poll.
+- All epochs of one size share `display_min/max`, so a blink compares like with like.
+
+## 5. Build pipeline
+
+```mermaid
+flowchart TD
+  start(["claimed timeline"]) --> q{"TAP result in<br/>api_query_cache?"}
+  q -- yes --> recs["frame records"]
+  q -- no --> tap["irsa.query_frames<br/>TAP, SIA hedge after 20 s,<br/>SIA fallback on failure"]
+  tap --> cache["set_cached_api"] --> recs
+  recs --> none{"any frames?"}
+  none -- no --> fail["fail_timeline<br/>502 'no SPHEREx images'"]
+  none -- yes --> ep["split_into_epochs<br/>gap 30 d, span 14 d, min 12 frames<br/>select_evenly, max 16 per epoch"]
+  ep --> prog{"coordinate search and<br/>progressive build on?"}
+  prog -- "no (catalogue target)" --> all["download every frame<br/>(proper-motion aware photometry)"]
+  prog -- yes --> waves["queue all waves up front"]
+  waves --> w1["first_light: 1 frame"] --> s1["partial render + save<br/>(no npz, no hole fill)"]
+  waves --> w2["preview_ready: 1 frame per epoch"] --> s2["partial render + save"]
+  waves --> w3["refining: remaining frames"]
+  s1 --> w3
+  s2 --> w3
+  w3 --> render
+  all --> render["render_epoch_images<br/>co-add, npz, hole fill,<br/>shared asinh stretch, 3 sizes"]
+  render --> done["complete_timeline<br/>status ready, stage done"]
+
+  subgraph perframe["per frame (download pool)"]
+    f1["fetch_cutout<br/>disk, GCS, then IRSA IBE"] --> f2["read_cutout<br/>zodi subtracted"] --> f3["reproject_nearest_many<br/>north-up 147 px grid"] --> f4["exposure row<br/>(3x3 aperture photometry)"]
+  end
+```
+
+Sizes: the cutout is always fetched at 0.25° × √2 and reprojected onto the large grid
+(147 px at 6.15″/px); medium (59 px) and small (31 px) are central crops. North is up, east is
+left, and the patch centre is the central pixel.
+
+```mermaid
+stateDiagram-v2
+  [*] --> queued: claim_timeline
+  queued --> querying: build starts / dequeue_timeline
+  querying --> downloading: frames found
+  querying --> failed: no frames or IRSA error
+  downloading --> first_light: progressive only
+  first_light --> preview_ready
+  preview_ready --> refining
+  downloading --> rendering: catalogue target
+  refining --> rendering
+  rendering --> done: complete_timeline
+  failed --> queued: retried after 60 s
+  done --> [*]
+  note right of downloading
+    A build not updated for 15 min
+    (STALE_BUILD_S) can be claimed again.
+  end note
+```
+
+## 6. Database
+
+PostgreSQL, schema in [`backend/db/schema.sql`](../backend/db/schema.sql) (idempotent; applied by
+`python -m app.db init`). PNG and NPZ bytes live in `timeline_images` as `bytea`.
+
+```mermaid
+erDiagram
+  targets ||--o{ patches : "target_slug"
+  patches ||--o{ timelines : "patch_id"
+  timelines ||--o{ timeline_images : "timeline_id"
+  patches ||--o{ sector_coordinates : "patch_id"
+  patches ||--o{ nasa_sector_exposures : "patch_id"
+  timelines ||--o{ nasa_sector_exposures : "timeline_id"
+  spherex_channels ||--o{ nasa_sector_exposures : "channel_id"
+  spherex_channels ||--o{ spectral_index_definitions : "anchor channels"
+  patches ||--o{ gcs_media_assets : "patch_id"
+  timelines ||--o{ gcs_media_assets : "timeline_id"
+  patches ||--o{ patch_spectra : "patch_id"
+  patch_spectra ||--o{ patch_spectral_indices : "spectrum_id"
+  spectral_index_definitions ||--o{ patch_spectral_indices : "index_code"
+  patches ||--o{ ml_model1_attributions : "patch_id"
+  patches ||--o{ ml_model2_classifications : "patch_id"
+  patch_spectra |o--o{ ml_model2_classifications : "spectrum_id"
+  patches ||--o{ ml_model3_forecasts : "patch_id"
+  ml_model1_attributions |o--o{ ml_model3_forecasts : "model1_attribution_id"
+  patches ||--o{ citizen_votes : "patch_id"
+
+  targets {
+    text slug PK
+    text name
+    float ra
+    float dec
+    float pm_ra_mas_yr
+    float pm_dec_mas_yr
+    int recommended_detector
+  }
+  patches {
+    int id PK
+    float ra
+    float dec
+    text target_slug FK
+  }
+  timelines {
+    int id PK
+    int patch_id FK
+    int detector
+    text status
+    text stage
+    int progress_done
+    int progress_total
+  }
+  timeline_images {
+    int id PK
+    int timeline_id FK
+    int epoch_index
+    text size
+    float display_min
+    float display_max
+    bytea png
+    bytea npz
+  }
+  nasa_sector_exposures {
+    int id PK
+    int patch_id FK
+    int timeline_id FK
+    text uri
+    text release
+    float mjd_start
+    float aperture_flux_ujy
+  }
+  api_query_cache {
+    text cache_key PK
+    text provider
+    jsonb response_json
+  }
+```
+
+| Table | What it holds | Written by | Read by |
+| --- | --- | --- | --- |
+| `targets` | Seed catalogue with proper motions | `db init`, `etl` (`upsert_targets`) | `/targets`, builds (proper motion) |
+| `patches` | One per sky position (reused within 30″) | `create_patch` | everything patch-scoped |
+| `timelines` | One per patch × detector: status, stage, progress; doubles as the build queue | claim, progress, partial/complete/fail | `/timeline`, `/patches`, worker |
+| `timeline_images` | PNG per epoch × size, NPZ for the large size | partial and final saves | `/timeline`, `/images`, `/timeline/diff`, `/metrics` |
+| `sector_coordinates` | Corners and bounds of each size and the fetch size | `create_patch` | `/patches/{id}/sectors` |
+| `nasa_sector_exposures` | Every IRSA exposure used: uri, release, times, WCS, photometry, cutout URL | builds | epoch `releases`, `/sectors` |
+| `api_query_cache` | IRSA TAP frame lists (`irsa_spherex_tap`) and Gaia cones (`gaia_dr3_tap`) | builds, `/gaia` | builds, `/gaia` |
+| `spherex_channels`, `spectral_index_definitions` | 102 channels and 17 spectral indices | `db init` | `/catalogs/*`, science |
+| `patch_spectra`, `patch_spectral_indices` | Per-patch spectra and indices (simulated) | science endpoints | science endpoints |
+| `ml_model1_attributions`, `ml_model2_classifications`, `ml_model3_forecasts` | Model outputs (simulated) | model endpoints | model endpoints |
+| `citizen_votes` | Votes per epoch (`REAL_CHANGE`, `ARTIFACT`, `MOVER`, `UNSURE`) | `POST /votes` | `GET /votes` (token hidden) |
+| `gcs_media_assets` | Planned registry of GCS objects | **never written** | **never read** |
+
+## 7. Caches and storage
+
+| Layer | Key | Where | Notes |
+| --- | --- | --- | --- |
+| Patch reuse | position within 30″ | `patches` | Nearby searches share all caches below |
+| TAP frame list | sha256 of patch ra/dec + detector | `api_query_cache` | No expiry; skipped on `--rebuild` |
+| Gaia cone | patch ra/dec + cone radius + `g_max` + row limit | `api_query_cache` | One cone covers every size |
+| FITS cutout (disk) | sha256 of the cutout URL | `NEBO_CACHE_DIR/cutouts/` | Off with `NEBO_DISK_CACHE=0` |
+| FITS cutout (GCS) | same, under `NEBO_GCS_PREFIX/cutouts/` | GCS bucket | Read before IRSA, written after |
+| Processed images | image id | `timeline_images` | Served with `Cache-Control: immutable` |
+
+## 8. Frontend
+
+Next.js 16 (App Router) + TypeScript + React 19, Aladin Lite 3 for the sky, GSAP for camera
+and menu motion, react-three-fiber for the star burst, d3-geo for the cockpit globe, CSS
+modules + Tailwind 4. Setup in [`frontend/README.md`](../frontend/README.md).
+
+### Routes
+
+| Route | File | What it is |
+| --- | --- | --- |
+| `/` | `app/page.tsx` → `components/Nebo.tsx` | The whole app: menu, sky explorer, field viewer, switched by state |
+| `/lab/observation` | `app/lab/observation/page.tsx` | Full-screen observation lab (pan/zoom, Gaia overlay, demo source). Reached by URL only |
+| `/lab/demo/[...path]` | `app/lab/demo/[...path]/route.ts` | Read-only server of `shared/demo*` JSON/PNG for the lab's simulated demo |
+
+`app/layout.tsx` keeps `WarpOverlay` mounted across routes.
+
+### Component tree
+
+```mermaid
+graph TD
+  Layout["app/layout.tsx"] --> Page["/ page.tsx"] --> Nebo
+  Layout --> WarpOverlay --> Scene["Scene (canvas tunnel)"]
+  Layout --> LabPage["/lab/observation"] --> ObservationLab --> ImageViewport
+  Nebo --> HomeScene
+  Nebo --> Sky["Sky (Aladin Lite, SPHEREx HiPS)"]
+  Nebo --> Cockpit
+  Nebo --> Flight["Flight (r3f star burst)"]
+  Nebo --> Field["Field (blink comparator)"]
+  Field --> ConsoleSelect
+  Cockpit --> CoordinatePanel
+  Cockpit --> CockpitScreens
+  CockpitScreens --> EarthGlobe & SkyLocator & FovGauge & Tools
+  Scene -. "portal when view = cockpit" .-> Sky
+```
+
+| Component | Role |
+| --- | --- |
+| `Nebo` | Root state machine (`view`), preferences in `localStorage`, loads `/targets` and `/patches`, orchestrates GSAP transitions |
+| `HomeScene` | Start screen menu painted into the background art |
+| `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), target markers, executes camera commands |
+| `Cockpit`, `CockpitScreens`, `CoordinatePanel` | Console over the sky: destinations, RA/Dec entry, zoom, layers, Earth sub-point globe, clock |
+| `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view |
+| `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
+| `ObservationLab`, `ImageViewport` | Lab viewer: nested 3′/6′/15′ levels, pan/zoom, Gaia rings, expected-position marker |
+| `Flight` | Short WebGL2 star burst (desktop only) |
+
+### User journey
+
+```mermaid
+stateDiagram-v2
+  [*] --> Home
+  Home --> Explore: Start (warp to the cockpit)
+  Home --> Tutorial
+  Home --> Featured
+  Home --> Coordinates
+  Home --> Settings
+  Tutorial --> Observe
+  Observe --> Explore: Begin exploring
+  Observe --> Coordinates
+  Featured --> Field: open a target
+  Coordinates --> Field: valid RA and Dec
+  Explore --> Field: View images
+  Field --> Explore: Back
+  Field --> Featured: Back
+  Field --> Coordinates: Back
+  note right of Explore
+    /lab/observation is a separate route,
+    opened by URL; its back link goes to /
+  end note
+```
+
+Reduced motion (`prefers-reduced-motion` or the setting) skips every animation.
+
+### Data flow
+
+```mermaid
+flowchart LR
+  subgraph browser["Browser"]
+    nebo["Nebo / Field"]
+    lab["ObservationLab"]
+    api_ts["lib/api.ts<br/>timeline() polling:<br/>Retry-After or retry_after_s"]
+    contract["lib/lab/contract.ts<br/>loadTargets, loadTimeline"]
+    aladin["Aladin Lite"]
+  end
+  nebo --> api_ts
+  lab --> contract
+  contract -- "source = api" --> api_ts
+  contract -- "source = demo" --> demo["/lab/demo/* route<br/>shared/demo*"]
+  api_ts -- "/targets, /patches, /timeline,<br/>/images, /patches/{id}/gaia" --> api["Nebo API"]
+  aladin -- "HiPS tiles" --> hips["IRSA SPHEREx HiPS"]
+```
+
+- One environment variable: `NEXT_PUBLIC_API_ORIGIN`.
+- `timeline()` handles `202` by waiting `Retry-After` (or `retry_after_s`, default 5 s) and
+  shows `progress.stage`; errors carry their own retry countdown.
+- The main app has no demo fallback; only the lab can switch to the synthetic demo.
+- Gaia is never queried from the browser; it goes through `/patches/{id}/gaia`.
+
+### Tests
+
+- Frontend unit tests: `npm test` (`tsx --test tests/*.test.ts`): api, coordinates, fov,
+  viewport, sky, gaia, warp, demo palettes.
+- Browser flows: Playwright scripts in `frontend/tests/*.mjs`, run by hand against a local build.
+- Backend: `pytest` in `backend/` (no network or DB needed; Postgres tests run only with
+  `NEBO_TEST_DATABASE_URL`).
+
+## 9. Real vs simulated data
+
+Part of the project's honest-science rule: the UI must say "observed change" or "candidate
+signal", never "Planet X found".
+
+| Output | Source |
+| --- | --- |
+| Epoch images (PNG/NPZ), dates, releases, exposure metadata | **Real**: IRSA SPHEREx Level 2 images |
+| Exposure photometry, `image_photometry` in `/metrics` | **Real**: measured on the real images |
+| Gaia overlay | **Real**: ESA Gaia DR3 |
+| Background sky map | **Real**: IRSA SPHEREx HiPS |
+| Spectrum, spectral indices, confidence, variability, Models 1–3 | **Simulated** from demo profiles (`models.SIMULATED_NOTE`), labelled as such in the API |
+| `shared/demo*` and the lab's "Simulated demo" | **Synthetic** (fake cutouts), for offline demos only |
+| Cockpit decorative stars, landscape art | Decorative, separate from detections |
+
+## 10. Known gaps and doc drift
+
+Found while writing this document (2026-11-15); fix them and strike them here.
+
+- `Field.tsx` maps only `queued`, `querying`, `downloading`, `rendering`; the stages
+  `first_light`, `preview_ready`, `refining` fall back to a generic label, and the frontend does
+  not use `wait_for` yet, so users wait for the full build before seeing an image.
+- `frontend/README.md` mentions DSS2 (the code uses only the SPHEREx HiPS).
+  `docs/observation-lab.md` and `frontend/README.md` say "Begin exploring" opens the lab and that
+  the demo is the default source; today the lab is URL-only and defaults to the API.
+- `gcs_media_assets` and several columns (`targets.gaia_*`, `targets.wise_*`,
+  `patches.gaia_crossmatch_json`, `timeline_images.gcs_uri`) are never written.
+- Queue mode has no backpressure, and a worker killed mid-build leaves the timeline in a
+  non-`queued` stage that the worker does not pick up again (only a new request after 15 min
+  re-claims it).
+- Partial saves change image ids (delete + insert).
+
+## Architecture changelog
+
+Newest first. One line per change that affects this document.
+
+- **2026-11-15** — First version of this document (deployment, backend, build pipeline, DB,
+  frontend, data sources).
+- **2026-11-15** — Faster coordinate searches (PR #15): stage-based `Retry-After` (2/5 s), all
+  waves queued up front, cheaper partial renders, TAP hedged with SIA after 20 s, throttled
+  progress writes, service warm-up at startup.
