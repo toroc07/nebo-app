@@ -10,6 +10,7 @@ import {
   type Query,
   ApiError,
 } from "@/lib/api";
+import { changeLabel, changesSummary } from "@/lib/overlays";
 import s from "./science.module.css";
 
 export default function EpochDiffTriplet({
@@ -37,6 +38,7 @@ export default function EpochDiffTriplet({
   const [gaiaComplete, setGaiaComplete] = useState<number | null>(null);
   const [candError, setCandError] = useState("");
   const [truncated, setTruncated] = useState(false);
+  const [summary, setSummary] = useState("");
   const [diffError, setDiffError] = useState(false);
 
   const compareEpoch = currentEpoch === templateEpoch && epochs.length > 1
@@ -52,6 +54,7 @@ export default function EpochDiffTriplet({
     setCandError("");
     setCandidates([]);
     setTruncated(false);
+    setSummary("");
     fetchPatchCandidates(
       patchId,
       { detector, size, epoch_a: templateEpoch, epoch_b: compareEpoch },
@@ -60,6 +63,7 @@ export default function EpochDiffTriplet({
       .then((res) => {
         setCandidates(res.candidates);
         setTruncated(res.truncated);
+        setSummary(changesSummary(res));
         setGaiaComplete(res.gaia_complete_to_g);
       })
       .catch((e) => {
@@ -119,7 +123,7 @@ export default function EpochDiffTriplet({
           />
           {/* A failed request must not read as "no changes". */}
           Show detected changes (
-          {candError ? "unavailable" : `${candidates.length}${truncated ? "+" : ""}`})
+          {candError ? "unavailable" : summary || `${candidates.length}${truncated ? "+" : ""}`})
         </label>
       </div>
 
@@ -163,13 +167,17 @@ export default function EpochDiffTriplet({
                 <span
                   key={`${c.x}-${c.y}-${idx}`}
                   className={`${s.candidateMarker} ${
-                    c.classification === "candidate_signal" ? s.candidateSignal : s.candidateCatalogued
+                    c.classification === "candidate_signal"
+                      ? s.candidateSignal
+                      : c.classification === "catalogued_systematic"
+                        ? s.candidateSystematic
+                        : s.candidateCatalogued
                   }`}
                   style={{
                     left: `${((c.x + 0.5) / widthPx) * 100}%`,
                     top: `${((c.y + 0.5) / heightPx) * 100}%`,
                   }}
-                  title={`${c.classification === "candidate_signal" ? "Candidate signal" : "Catalogued object"} · SNR ${c.snr.toFixed(1)}`}
+                  title={`${changeLabel(c)} · SNR ${c.snr.toFixed(1)}`}
                 />
               ))}
           </div>
@@ -178,6 +186,9 @@ export default function EpochDiffTriplet({
 
       <p className={s.note}>
         Red = brighter in Epoch {compareEpoch + 1}, Blue = fainter, Black = unchanged, Transparent = no data.
+        {" "}Changes are detected at 5σ after scaling the new epoch to the template and matching their PSFs;
+        grey marks sit on static catalogued stars whose flux agrees in both epochs (likely PSF or
+        wavelength residuals, not changes).
         {gaiaComplete !== null && ` Cross-matched against Gaia DR3 (complete to G = ${gaiaComplete.toFixed(1)}).`}
         {candError && ` (${candError})`}
       </p>

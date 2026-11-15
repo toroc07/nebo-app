@@ -128,13 +128,18 @@ export default function FieldOverlays({
 
       {changes?.map((change) => {
         const id = `${change.x},${change.y}`;
-        const known = change.classification === "catalogued_object";
+        const tone =
+          change.classification === "catalogued_systematic"
+            ? s.badgeSystematic
+            : change.classification === "catalogued_object"
+              ? s.badgeKnown
+              : s.badgeNew;
         if (!labelled.has(id))
           return (
             <button
               key={`c${id}`}
               type="button"
-              className={`${s.changeDot} ${known ? s.badgeKnown : s.badgeNew}`}
+              className={`${s.changeDot} ${tone}`}
               style={at(change.x, change.y)}
               tabIndex={-1}
               aria-pressed={isSelected("change", id)}
@@ -146,7 +151,7 @@ export default function FieldOverlays({
           <button
             key={`c${id}`}
             type="button"
-            className={`${s.badge} ${known ? s.badgeKnown : s.badgeNew}`}
+            className={`${s.badge} ${tone}`}
             style={at(change.x, change.y)}
             aria-pressed={isSelected("change", id)}
             onClick={() => onSelect({ kind: "change", change })}

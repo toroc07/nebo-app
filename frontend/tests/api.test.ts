@@ -14,6 +14,7 @@ import {
   warningLabel,
   latitudeLabel,
   type Epoch,
+  stackImageUrl,
 } from "../lib/api";
 test("epoch dates show the whole span of the epoch, in UTC", () => {
   assert.equal(
@@ -280,4 +281,12 @@ test("latitude label shows galactic b and ecliptic beta with a true minus sign",
   assert.equal(latitudeLabel({ galactic_b: 3 }), "b +3.0°");
   assert.equal(latitudeLabel({}), null);
   assert.equal(latitudeLabel(null), null);
+});
+
+test("stackImageUrl sends the epochs sorted and once each", () => {
+  const url = new URL(stackImageUrl({ target: "barnards-star" }, { epochs: [2, 0, 2], detector: 3, size: "medium" }));
+  assert.equal(url.pathname, "/api/v1/timeline/stack");
+  assert.equal(url.searchParams.get("epochs"), "0,2");
+  assert.equal(url.searchParams.get("detector"), "3");
+  assert.equal(url.searchParams.get("target"), "barnards-star");
 });

@@ -85,7 +85,7 @@ app.add_middleware(
     allow_origins=config.CORS_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
-    expose_headers=["X-Diff-Limit", "X-Masked-Fraction"],
+    expose_headers=["X-Diff-Limit", "X-Masked-Fraction", "X-Stack-Epochs", "X-Stack-Frames"],
 )
 
 
@@ -538,6 +538,84 @@ def timeline_diff(
     side = imaging.grid_pixels(config.SIZES_DEG[size])
     png, limit = imaging.to_diff_png(*(imaging.crop_center(x, side) for x in arrays))
     return Response(content=png, media_type="image/png", headers={"X-Diff-Limit": f"{limit:.6g}"})
+
+
+MAX_STACK_EPOCHS = 50
+
+
+def _parse_epoch_list(text: str) -> list[int]:
+    """``"0,2"`` → ``[0, 2]``: at least two distinct, non-negative epoch indices."""
+    try:
+        epochs = [int(part) for part in text.split(",")]
+    except ValueError:
+        raise HTTPException(status_code=422, detail="epochs must be comma-separated integers, e.g. 0,2.") from None
+    if any(e < 0 for e in epochs):
+        raise HTTPException(status_code=422, detail="Epoch indices cannot be negative.")
+    if len(set(epochs)) != len(epochs):
+        raise HTTPException(status_code=422, detail="Each epoch can be stacked only once.")
+    if not 2 <= len(epochs) <= MAX_STACK_EPOCHS:
+        raise HTTPException(status_code=422, detail=f"Stack between 2 and {MAX_STACK_EPOCHS} epochs.")
+    return sorted(epochs)
+
+
+@app.get(f"{API_PREFIX}/timeline/stack")
+def timeline_stack(
+    epochs: str = Query(
+        ...,
+        max_length=200,
+        description="Comma-separated epoch indices to co-add, e.g. 0,2 (at least two, no repeats).",
+    ),
+    ra: float | None = Query(None, ge=0.0, lt=360.0),
+    dec: float | None = Query(None, ge=-90.0, le=90.0),
+    target: str | None = Query(None, pattern=r"^[a-z0-9-]{1,64}$"),
+    size: SizeName = Query(config.DEFAULT_SIZE),
+    detector: int | None = Query(None, ge=1, le=6),
+    service: TimelineService = Depends(get_service),
+) -> Response:
+    """PNG of the inverse-variance co-add of several epochs, with the timeline's shared stretch.
+
+    Stacking epochs lowers the noise (fainter sources show up) but averages away anything that
+    changed between them. Needs a ready timeline (it never starts a build). 422 when an epoch
+    index is malformed, repeated or not in the timeline. Header ``X-Stack-Epochs`` lists the
+    epochs used and ``X-Stack-Frames`` the SPHEREx frames behind them.
+    """
+    chosen = _parse_epoch_list(epochs)
+    patch, detector = _resolve(service, ra, dec, target, detector)
+    store = service.store
+    timeline = store.get_timeline(patch.id, detector)
+    if timeline is None or timeline.status != "ready":
+        raise HTTPException(status_code=404, detail="Timeline not ready: request /timeline first.")
+    shown = {i.epoch_index: i for i in store.list_images(timeline.id, size)}
+    unknown = [e for e in chosen if e not in shown]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Epoch {unknown[0]} is not in this timeline (it has {len(shown)} epochs).",
+        )
+    largest = max(config.SIZES_DEG, key=config.SIZES_DEG.get)
+    by_epoch = {i.epoch_index: i for i in store.list_images(timeline.id, largest)}
+    images, variances = [], []
+    for epoch in chosen:
+        npz = store.get_npz(by_epoch[epoch].id) if epoch in by_epoch else None
+        if npz is None:
+            raise HTTPException(status_code=404, detail=f"No float data for epoch {epoch}.")
+        data = np.load(io.BytesIO(npz))
+        images.append(data["image"])
+        variances.append(data["variance"])
+    stacked, _ = imaging.coadd(images, variances)
+    side = imaging.grid_pixels(config.SIZES_DEG[size])
+    # Same display treatment and limits as the per-epoch PNGs, so the stack blinks against them.
+    crop = imaging.crop_center(imaging.fill_enclosed_holes(stacked), side)
+    reference = shown[chosen[0]]
+    png = imaging.to_png(crop, reference.display_min, reference.display_max)
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "X-Stack-Epochs": ",".join(str(e) for e in chosen),
+            "X-Stack-Frames": str(sum(shown[e].frames_used for e in chosen)),
+        },
+    )
 
 
 @app.get(f"{API_PREFIX}/timeline/rgb")
@@ -999,10 +1077,15 @@ def get_patch_candidates(
     size: SizeName = Query(config.DEFAULT_SIZE),
     epoch_a: int = Query(0, ge=0),
     epoch_b: int | None = Query(None, ge=0),
-    snr_threshold: float = Query(4.0, ge=2.0, le=20.0),
+    snr_threshold: float = Query(crossmatch.DEFAULT_SNR_THRESHOLD, ge=2.0, le=20.0),
+    normalise: bool = Query(
+        True,
+        description="Scale epoch B to A and homogenise their PSFs before differencing (false: raw B - A).",
+    ),
     store: Store = Depends(get_store),
 ):
-    """Detect epoch-to-epoch changes and label each as catalogued_object or candidate_signal."""
+    """Detect epoch-to-epoch changes and label each as candidate_signal, catalogued_object or
+    catalogued_systematic (a static Gaia star with consistent flux: likely a PSF/wavelength residual)."""
     patch = _patch_or_404(store, patch_id)
     images, arrays = _load_epoch_arrays(store, patch_id, detector, size)
     by_epoch = {img.epoch_index: img for img in images}
@@ -1012,9 +1095,10 @@ def get_patch_candidates(
         raise HTTPException(status_code=404, detail="Float32 arrays (.npz) missing for requested epochs.")
 
     wcs, _ = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
-    detections = crossmatch.detect_epoch_changes(
-        arrays[epoch_a], arrays[epoch_b], wcs, snr_threshold=snr_threshold
+    search = crossmatch.find_epoch_changes(
+        arrays[epoch_a], arrays[epoch_b], wcs, snr_threshold=snr_threshold, normalise=normalise
     )
+    detections = [] if search is None else search.detections
 
     gaia_sources: list[gaia.GaiaSource] = []
     gaia_available = False
@@ -1041,19 +1125,33 @@ def get_patch_candidates(
         mjd_a=by_epoch[epoch_a].mid_mjd,
         mjd_b=by_epoch[epoch_b].mid_mjd,
         g_complete=g_complete,
+        search=search,
+        wcs=wcs,
     )
+    ranked = crossmatch.rank_changes(candidates)
+    systematics = sum(1 for c in ranked if c["classification"] == "catalogued_systematic")
     return {
         "patch_id": patch.id,
         "detector": detector,
         "size": size,
         "epoch_a": epoch_a,
         "epoch_b": epoch_b,
+        "snr_threshold": snr_threshold,
         "gaia_available": gaia_available,
         "wise_available": wise_available,
         "gaia_complete_to_g": g_complete,
-        "candidates": candidates,
-        # Detection stops at the cap: there may be more changes than listed.
-        "truncated": len(detections) >= crossmatch.MAX_CANDIDATES,
+        "normalisation": None if search is None else search.normalisation.payload(),
+        # Over every detection, also those past the list cap.
+        "counts": {
+            "detected": len(ranked),
+            "changes": len(ranked) - systematics,
+            "likely_systematic": systematics,
+        },
+        # Changes first, likely systematics last; at most MAX_CANDIDATES.
+        "candidates": ranked[: crossmatch.MAX_CANDIDATES],
+        # More detections than listed (or detection stopped at its own cap).
+        "truncated": len(ranked) > crossmatch.MAX_CANDIDATES
+        or len(detections) >= crossmatch.MAX_DETECTIONS,
     }
 
 

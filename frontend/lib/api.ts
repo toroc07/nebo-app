@@ -220,10 +220,25 @@ export type CandidateDetection = {
   snr: number;
   delta_flux: number;
   // The API field is `classification` (backend/app/crossmatch.py).
-  classification: "catalogued_object" | "candidate_signal";
+  // catalogued_systematic: a residual on a static Gaia star whose flux agrees in both epochs,
+  // most likely the PSF or the wavelength sampled, not a change of the sky.
+  classification: "catalogued_object" | "candidate_signal" | "catalogued_systematic";
   polarity?: "positive" | "negative";
   gaia_match?: { source_id: string; g_mag: number; dist_arcsec: number } | null;
   wise_match?: { source_id: string; w1_mag: number; w2_mag: number; dist_arcsec: number } | null;
+  systematic?: { reason: string; shift_px: number; flux_ratio_b_over_a: number } | null;
+};
+
+/** How epoch B was matched to epoch A before the difference (see /candidates). */
+export type ChangeNormalisation = {
+  flux_scale: number;
+  scale_stars: number;
+  psf_sigma_a_px: number | null;
+  psf_sigma_b_px: number | null;
+  psf_match_kernel_px: number;
+  psf_matched_epoch: "a" | "b" | null;
+  smoothing_sigma_px: number;
+  noise_sigma: number;
 };
 
 export type CandidatesResponse = {
@@ -235,6 +250,11 @@ export type CandidatesResponse = {
   gaia_available: boolean;
   wise_available: boolean;
   gaia_complete_to_g: number | null;
+  snr_threshold?: number;
+  normalisation?: ChangeNormalisation | null;
+  // Over every detection, including those past the list cap.
+  counts?: { detected: number; changes: number; likely_systematic: number };
+  // Changes first, likely systematics last.
   candidates: CandidateDetection[];
   // true when detection hit the server cap: show "N+".
   truncated: boolean;
@@ -495,6 +515,16 @@ export function diffImageUrl(
   opts: { a: number; b: number; detector: number; size: string },
 ) {
   return `${origin}/api/v1/timeline/diff?${queryParams(query, opts)}`;
+}
+
+/** Inverse-variance co-add of several epochs (at least two), with the timeline's stretch. */
+export function stackImageUrl(
+  query: Query,
+  opts: { epochs: number[]; detector: number; size: string },
+) {
+  const { epochs, ...rest } = opts;
+  const sorted = [...new Set(epochs)].sort((a, b) => a - b);
+  return `${origin}/api/v1/timeline/stack?${queryParams(query, { ...rest, epochs: sorted.join(",") })}`;
 }
 
 export function rgbImageUrl(

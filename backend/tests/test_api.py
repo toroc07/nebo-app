@@ -232,6 +232,25 @@ def test_timeline_diff(client):
     assert http.get("/api/v1/timeline/diff", params=params | {"a": 0, "b": 9}).status_code == 404
 
 
+def test_timeline_stack(client):
+    http, service = client
+    params = {"ra": RA, "dec": DEC, "size": "small", "detector": 3}
+    assert http.get("/api/v1/timeline/stack", params=params | {"epochs": "0,1"}).status_code == 404
+    http.get("/api/v1/timeline", params=params)
+    wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC))
+
+    timeline = http.get("/api/v1/timeline", params=params).json()
+    stack = http.get("/api/v1/timeline/stack", params=params | {"epochs": "1,0"})
+    assert stack.status_code == 200 and stack.headers["content-type"] == "image/png"
+    assert stack.headers["x-stack-epochs"] == "0,1"
+    assert int(stack.headers["x-stack-frames"]) == sum(e["frames_used"] for e in timeline["epochs"])
+    side = timeline["size"]["width_px"]
+    image = Image.open(io.BytesIO(stack.content))
+    assert image.size == (side, side) and image.mode == "LA"  # Same grey stretch as the epochs.
+    for bad in ("0", "0,0", "0,x", "0,-1", "0,9", ""):
+        assert http.get("/api/v1/timeline/stack", params=params | {"epochs": bad}).status_code == 422, bad
+
+
 def test_coordinate_timeline_202_includes_first_light_static_image_and_sector(client, monkeypatch):
     from app import config
 
