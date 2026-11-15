@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import hashlib
 import io
+import math
 from contextlib import asynccontextmanager
 import logging
 import time
@@ -16,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from . import config, db, ephemeris, imaging, irsa, metrics, models, science_catalogs
+from . import config, db, ephemeris, gaia, imaging, irsa, metrics, models, science_catalogs
 from .service import (
     ServiceBusy,
     TargetNotFound,
@@ -447,6 +449,139 @@ def list_spectral_index_catalog(store: Store = Depends(get_store)) -> list[dict]
     if rows:
         return rows
     return [asdict(idx) | {"feature_channels": list(idx.feature_channels)} for idx in science_catalogs.SPHEREX_17_INDICES]
+
+
+# ----- Gaia DR3 catalogue overlay ---------------------------------------------------------
+
+# One query per patch covers the "large" image whatever its size, plus room for fast movers
+# (Barnard's Star moves ~100" between J2016.0 and 2026).
+GAIA_RADIUS_DEG = config.SIZES_DEG["large"] * math.sqrt(2) / 2 + 0.05
+MAX_GAIA_EPOCHS = 50
+
+
+def _patch_gaia_sources(store: Store, patch: Patch, g_max: float) -> list[gaia.GaiaSource]:
+    """Gaia stars around a patch, from the api_query_cache table when they were asked before."""
+    # The row limit is part of the key: an answer cut at another limit would misreport truncation.
+    key = hashlib.sha256(
+        f"gaia_dr3_cone:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{g_max:.2f}"
+        f":{gaia.MAX_ROWS}".encode()
+    ).hexdigest()
+    cached = store.get_cached_api(key)
+    if cached and isinstance(cached.get("response_json"), list):
+        return [gaia.GaiaSource(**row) for row in cached["response_json"]]
+    sources = gaia.query_cone(patch.ra, patch.dec, GAIA_RADIUS_DEG, g_max=g_max)
+    store.set_cached_api(
+        key,
+        gaia.PROVIDER,
+        [asdict(s) for s in sources],
+        query_text=gaia.build_cone_query(patch.ra, patch.dec, GAIA_RADIUS_DEG, g_max),
+        request_params={
+            "patch_id": patch.id,
+            "ra": patch.ra,
+            "dec": patch.dec,
+            "radius_deg": GAIA_RADIUS_DEG,
+            "g_max": g_max,
+        },
+        row_count=len(sources),
+    )
+    return sources
+
+
+def _round_or_none(value: float | None, digits: int) -> float | None:
+    return None if value is None else round(value, digits)
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/gaia")
+def get_patch_gaia(
+    patch_id: int = Path(..., ge=1),
+    size: SizeName = Query(config.DEFAULT_SIZE),
+    mjd: list[float] = Query(
+        ...,
+        min_length=1,
+        max_length=MAX_GAIA_EPOCHS,
+        description="Dates (MJD) to place the stars at; pass each epoch's mid_mjd.",
+    ),
+    g_max: float = Query(gaia.DEFAULT_G_MAX, ge=6.0, le=21.0, description="Faintest Gaia G magnitude."),
+    store: Store = Depends(get_store),
+):
+    """Catalogued Gaia DR3 stars on a patch image, moved to the date of each epoch.
+
+    ``positions[i]`` matches ``mjd[i]``. Pixels use the same grid as the PNGs (north up, east
+    left, row 0 at the top). A star is listed when it falls inside the image at any epoch.
+    """
+    patch = _patch_or_404(store, patch_id)
+    try:
+        sources = _patch_gaia_sources(store, patch, g_max)
+    except gaia.GaiaQueryError as error:
+        logging.getLogger(__name__).warning("Gaia query failed for patch %s: %s", patch_id, error)
+        return JSONResponse(
+            status_code=502,
+            content={"code": "gaia_unavailable", "detail": "The Gaia archive did not answer. Retry later."},
+            headers={"Retry-After": str(BUSY_RETRY_AFTER_S)},
+        )
+
+    wcs, (side, _) = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
+    stars = []
+    for source in sources:
+        positions = []
+        for date in mjd:
+            ra, dec = source.position_at(date)
+            x, y = (float(v) for v in wcs.world_to_pixel_values(ra, dec))
+            y = side - 1 - y  # FITS row 0 is the bottom; the PNG is flipped.
+            positions.append(
+                {
+                    "mjd": date,
+                    "ra": round(ra, 7),
+                    "dec": round(dec, 7),
+                    "x": round(x, 2),
+                    "y": round(y, 2),
+                    "in_image": bool(-0.5 <= x <= side - 0.5 and -0.5 <= y <= side - 0.5),
+                }
+            )
+        if not any(p["in_image"] for p in positions):
+            continue
+        pm_total = source.pm_total_mas_yr
+        distance = source.distance_pc
+        stars.append(
+            {
+                "source_id": source.source_id,
+                "g_mag": _round_or_none(source.g_mag, 3),
+                "bp_rp": _round_or_none(source.bp_rp, 3),
+                "pm_ra_mas_yr": _round_or_none(source.pm_ra_mas_yr, 3),
+                "pm_dec_mas_yr": _round_or_none(source.pm_dec_mas_yr, 3),
+                "pm_total_mas_yr": _round_or_none(pm_total, 3),
+                "parallax_mas": _round_or_none(source.parallax_mas, 4),
+                "distance_pc": _round_or_none(distance, 2),
+                "positions": positions,
+            }
+        )
+
+    # The query keeps the brightest MAX_ROWS stars. When that limit is hit the list is only
+    # complete down to the faintest star it returned, so "no Gaia star here" holds only that far.
+    truncated = len(sources) >= gaia.MAX_ROWS
+    g_complete = g_max
+    if truncated:
+        mags = [s.g_mag for s in sources if s.g_mag is not None]
+        g_complete = round(max(mags), 3) if mags else g_max
+
+    return {
+        "patch_id": patch.id,
+        "size": {"name": size, "width_px": side, "height_px": side},
+        "catalog": {
+            "name": gaia.CATALOG_NAME,
+            "ref_epoch": gaia.REF_EPOCH_YEAR,
+            "g_max": g_max,
+            "g_complete": g_complete,
+            "radius_deg": round(GAIA_RADIUS_DEG, 5),
+            "truncated": truncated,
+            "note": (
+                "Positions propagated from J2016.0 with Gaia proper motions (parallax ignored). "
+                "Cold brown dwarfs are too faint in visible light to appear in Gaia."
+            ),
+        },
+        "mjd": mjd,
+        "stars": stars,
+    }
 
 
 # ----- science metrics, 17 spectral indices & ML Models 1, 2, 3 -------------------------

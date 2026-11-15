@@ -214,6 +214,39 @@ The processed image: 8-bit greyscale with an alpha channel, where pixels without
 transparent. Row 0 is north, and east is on the left. Ids change when a timeline is rebuilt,
 so responses are cached for a year (`immutable`).
 
+### `GET /patches/{id}/gaia?size=medium&mjd=<mid_mjd>&mjd=<mid_mjd>...`
+
+Catalogued Gaia DR3 stars on the patch image, to tell known objects from uncatalogued changes.
+Pass one `mjd` per epoch (its `mid_mjd`, up to 50); `stars[].positions[i]` matches `mjd[i]`.
+Gaia positions (J2016.0) are propagated with their proper motion to each date; parallax is
+ignored. Pixels use the PNG grid of that `size` (row 0 north, east left). Optional
+`g_max` (default 18) is the faintest G magnitude asked for; the brightest 5000 stars are kept.
+In dense fields (galactic plane) that limit is hit: `catalog.truncated` is `true` and
+`catalog.g_complete` is the magnitude down to which the list is complete (otherwise it equals
+`g_max`). Say "no Gaia star brighter than G = g_complete", never "uncatalogued" without it.
+The cone query is cached in `api_query_cache`.
+
+```json
+{
+  "patch_id": 1,
+  "size": {"name": "medium", "width_px": 59, "height_px": 59},
+  "catalog": {"name": "Gaia DR3", "ref_epoch": 2016.0, "g_max": 18.0, "g_complete": 18.0,
+              "radius_deg": 0.22678, "truncated": false, "note": "..."},
+  "mjd": [60914.2, 61110.4],
+  "stars": [{
+    "source_id": "4472832130114786688", "g_mag": 8.194, "bp_rp": 2.835,
+    "pm_ra_mas_yr": -801.551, "pm_dec_mas_yr": 10362.394, "pm_total_mas_yr": 10393.35,
+    "parallax_mas": 546.976, "distance_pc": 1.83,
+    "positions": [{"mjd": 60914.2, "ra": 269.4462, "dec": 4.7687, "x": 29.1, "y": 29.4, "in_image": true}]
+  }]
+}
+```
+
+`pm_*`, `parallax_mas`, `distance_pc` and `bp_rp` can be `null` (Gaia has no full solution for
+that star). Cold brown dwarfs such as WISE 0855 and Eps Indi B are not in Gaia: an infrared
+source with no Gaia star on it is expected for them. `502` with `code: "gaia_unavailable"` when
+the ESA archive does not answer (retry after `Retry-After`); `404` for an unknown patch.
+
 ## Notes for the frontend
 
 - Show the epochs in order as a blink animation. All epochs and all sizes share the

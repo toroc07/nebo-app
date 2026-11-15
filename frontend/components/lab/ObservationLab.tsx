@@ -2,7 +2,13 @@
 // Observation viewer: a full-screen, interactive view of the SPHEREx epochs. The image is the
 // interface (zoom, pan, click for coordinates, drag a pin); the controls follow the sky console.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { epochDateRange } from "@/lib/api";
+import { ApiError, epochDateRange } from "@/lib/api";
+import {
+  gaiaMarks,
+  gaiaSummary,
+  loadGaia,
+  type GaiaField,
+} from "@/lib/lab/gaia";
 import {
   colorPalettes,
   epochImageUrl,
@@ -55,6 +61,13 @@ export default function ObservationLab() {
   const [playing, setPlaying] = useState(false);
   const [interval, setIntervalMs] = useState(800);
   const [marker, setMarker] = useState(true);
+  // Gaia DR3 overlay: off by default (a 15' field near the galactic plane holds ~900 stars).
+  const [showGaia, setShowGaia] = useState(false);
+  // The answer is kept with the query it belongs to, so a stale one is never drawn.
+  const [gaia, setGaia] = useState<{ key: string; field: GaiaField } | null>(
+    null,
+  );
+  const [gaiaError, setGaiaError] = useState("");
   const [imageError, setImageError] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   // The pin is stored as a sky position, so it survives epoch, level and detector changes.
@@ -226,6 +239,64 @@ export default function ObservationLab() {
   const markerPx =
     marker && position?.in_image ? { x: position.x, y: position.y } : null;
 
+  // Gaia is asked once per observation, at the world's size (the largest loaded level) and with
+  // every epoch's date; each level is a central crop of the world, so one answer serves them all.
+  const gaiaQuery = useMemo(() => {
+    const world = loadedLevels(levels ?? {}).at(-1);
+    if (!world || !world.epochs.length) return null;
+    const mjds = world.epochs.map((e) => e.mid_mjd);
+    return {
+      key: `${world.patch.id}|${world.size.name}|${mjds.join(",")}`,
+      patchId: world.patch.id,
+      size: world.size.name,
+      mjds,
+    };
+  }, [levels]);
+  const gaiaKey = gaiaQuery?.key ?? "";
+  const gaiaQueryRef = useRef(gaiaQuery);
+  gaiaQueryRef.current = gaiaQuery;
+
+  useEffect(() => {
+    const q = gaiaQueryRef.current;
+    if (!showGaia || source !== "api" || !fresh || !q) return;
+    if (gaia?.key === q.key) return;
+    const abort = new AbortController();
+    setGaiaError("");
+    loadGaia(q.patchId, q.size, q.mjds, abort.signal)
+      .then((field) => {
+        if (!abort.signal.aborted) setGaia({ key: q.key, field });
+      })
+      .catch((e: Error) => {
+        if (abort.signal.aborted) return;
+        setGaiaError(
+          e instanceof ApiError && e.status === 502
+            ? "The Gaia archive did not answer. Try again in a minute."
+            : "Gaia stars could not be loaded.",
+        );
+      });
+    return () => abort.abort();
+    // `gaia` is left out on purpose: storing the answer must not trigger a new request.
+  }, [showGaia, source, fresh, gaiaKey]);
+
+  const gaiaField = gaia && gaia.key === gaiaKey ? gaia.field : null;
+  const gaiaShown = useMemo(
+    () =>
+      showGaia && source === "api" && gaiaField && worldGrid && data
+        ? gaiaMarks(gaiaField, epoch, worldGrid, {
+            width: data.size.width_px,
+            height: data.size.height_px,
+          })
+        : [],
+    [showGaia, source, gaiaField, worldGrid, data, epoch],
+  );
+  const gaiaLine =
+    source !== "api"
+      ? "only with the SPHEREx archive source"
+      : !showGaia
+        ? "off"
+        : gaiaError ||
+          (gaiaField ? gaiaSummary(gaiaField, gaiaShown) : "Loading…");
+
   // Pin position in the current image, for the readout. null = the pin is outside this image.
   const pinPx = useMemo(() => {
     if (!pin || !grid) return null;
@@ -294,6 +365,7 @@ export default function ObservationLab() {
           onLevelChange={setLevelName}
           resetKey={selectionKey}
           marker={markerPx}
+          catalogStars={gaiaShown}
           pin={pin}
           onPinChange={handlePin}
           onHover={setHover}
@@ -418,6 +490,29 @@ export default function ObservationLab() {
               />
               Expected position
             </label>
+            <label
+              className={s.check}
+              title={
+                source === "api"
+                  ? "Catalogued Gaia DR3 stars, moved to the date of each epoch"
+                  : "Gaia stars need the SPHEREx archive source"
+              }
+            >
+              <input
+                type="checkbox"
+                checked={showGaia && source === "api"}
+                disabled={source !== "api"}
+                onChange={(e) => {
+                  setShowGaia(e.target.checked);
+                  setAnnounce(
+                    e.target.checked
+                      ? "Showing catalogued Gaia DR3 stars"
+                      : "Gaia stars hidden",
+                  );
+                }}
+              />
+              Gaia DR3 stars
+            </label>
           </div>
           <div id="viewer-details" hidden={!panelOpen} className={s.details}>
           {data && current && (
@@ -451,6 +546,19 @@ export default function ObservationLab() {
                 {position
                   ? `RA ${position.ra.toFixed(5)} Dec ${position.dec.toFixed(5)} · px (${position.x}, ${position.y})${position.in_image ? "" : " · outside image"}`
                   : "not reported"}
+              </dd>
+              <dt>Gaia DR3</dt>
+              <dd>
+                {gaiaLine}
+                {gaiaField && showGaia && (
+                  <>
+                    <br />
+                    Green: catalogued star at this epoch&apos;s date · magenta:
+                    fast mover. Positions from J2016.0 with Gaia proper
+                    motions. Cold brown dwarfs are too faint in visible light
+                    to be in Gaia.
+                  </>
+                )}
               </dd>
               <dt>Center</dt>
               <dd>
@@ -508,6 +616,12 @@ export default function ObservationLab() {
                 ? `Infrared band D${data.detector.id} · ${data.detector.wavelength_range_um.join("–")} µm · grey = brightness`
                 : `${data.palette[0].toUpperCase()}${data.palette.slice(1)} palette on infrared band D${data.detector.id} · ${data.detector.wavelength_range_um.join("–")} µm · not the sky's real colors`}
             </p>
+            {showGaia && source === "api" && (
+              <p className={s.note}>
+                Gaia DR3 · {gaiaLine}
+                {gaiaField && " · green = catalogued, magenta = fast mover"}
+              </p>
+            )}
             <aside className={s.readout} aria-label="Coordinates">
               {(hover || !pin) && (
                 <p className={s.mono}>
