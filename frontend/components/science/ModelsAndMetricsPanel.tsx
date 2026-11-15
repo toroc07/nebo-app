@@ -20,7 +20,8 @@ const LOWER_LIMIT_NOTE =
 // Never present unchecked frames as clean: null saturation reads "n/a".
 function saturationLabel(row: ImagePhotometryPoint): string {
   if (row.saturated === null) return "n/a";
-  return `${row.saturated_frames}/${row.total_frames} frames`;
+  const unchecked = row.total_frames - row.checked_frames;
+  return `${row.saturated_frames}/${row.checked_frames} frames${unchecked ? ` (+${unchecked} n/a)` : ""}`;
 }
 
 function saturationTitle(row: ImagePhotometryPoint): string {
