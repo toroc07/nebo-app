@@ -274,24 +274,27 @@
 .crewList {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: calc(10 * var(--S));
+  gap: calc(8 * var(--S));
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.crewList li {
+  display: grid; /* the card fills the cell, so both rows keep equal heights */
 }
 .member {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(6 * var(--S));
-  padding: calc(10 * var(--S)) calc(6 * var(--S));
+  gap: calc(4 * var(--S));
+  padding: calc(7 * var(--S)) calc(6 * var(--S));
   text-align: center;
   background: rgb(10 30 46 / 0.65);
   border: 1px solid rgb(63 210 255 / 0.3);
   border-radius: calc(5 * var(--S));
 }
 .member img {
-  width: calc(64 * var(--S));
+  width: calc(56 * var(--S));
   min-width: 52px;
   aspect-ratio: 1;
   object-fit: cover;
@@ -302,6 +305,22 @@
 .member strong {
   font: 600 max(11px, calc(12.5 * var(--S))) / 1.2 Plex, sans-serif;
   color: #fff;
+}
+a.member {
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+a.member:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgb(63 210 255 / 0.4);
+}
+a.member:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+.member .handle {
+  color: #5fa9c2;
 }
 .member span {
   font: max(10px, calc(11 * var(--S))) / 1.25 PlexMono, monospace;

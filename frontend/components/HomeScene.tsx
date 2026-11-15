@@ -67,26 +67,31 @@ const CREW = [
     name: "Jasen Mihovil Yukopila Escobar",
     role: "Frontend Developer",
     photo: "/crew/jasen.webp",
+    github: "Jmyukopila",
   },
   {
     name: "Alejandro Patron Montero",
     role: "Fullstack Developer & Data",
     photo: "/crew/alejandro.webp",
+    github: "pxtroniwnl",
   },
   {
     name: "Carlos Miguel Toro Torres",
     role: "Fullstack Developer & Data",
     photo: "/crew/carlos.webp",
+    github: "toroc07",
   },
   {
     name: "Shalom Jhoanna Arrieta Marrugo",
     role: "Backend Developer & Data",
     photo: "/crew/shalom.webp",
+    github: "shalom-A26",
   },
   {
     name: "Daryem Antonio Garcia Cardona",
     role: "Data Engineer & Scientist",
     photo: "/crew/daryem.webp",
+    github: "Dmgar",
   },
   {
     name: "Katlyn Gutierrez Cardona",
@@ -173,13 +178,33 @@ export default function HomeScene({
             </header>
             <p className={s.crewNote}>Data Science students · Universidad Tecnológica de Bolívar</p>
             <ul className={s.crewList}>
-              {CREW.map((m) => (
-                <li key={m.name} className={s.member}>
-                  <img src={m.photo} alt="" width={96} height={96} draggable={false} />
-                  <strong>{m.name}</strong>
-                  <span>{m.role}</span>
-                </li>
-              ))}
+              {CREW.map((m) => {
+                const card = (
+                  <>
+                    <img src={m.photo} alt="" width={96} height={96} draggable={false} />
+                    <strong>{m.name}</strong>
+                    <span>{m.role}</span>
+                    {m.github ? <span className={s.handle}>@{m.github} ↗</span> : null}
+                  </>
+                );
+                return (
+                  <li key={m.name}>
+                    {m.github ? (
+                      <a
+                        className={s.member}
+                        href={`https://github.com/${m.github}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${m.name} on GitHub (opens in a new tab)`}
+                      >
+                        {card}
+                      </a>
+                    ) : (
+                      <div className={s.member}>{card}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : (
