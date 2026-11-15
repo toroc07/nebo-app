@@ -358,6 +358,12 @@ shape. Messages are deleted after 24 hours and nothing about the sender is store
   `expected_position`: `{ra, dec, x, y, in_image}` from the catalogue proper motion at the
   epoch's mid time, or `null` for objects outside the catalogue. `x`/`y` are PNG pixels
   (origin top-left, pixel centres at integers).
+- per epoch: `coverage`: `{span_days, max_gap_days, mixed_bursts, wavelength_um}`.
+  `wavelength_um` is `{min, max}` over the epoch's exposures (LVF filter) or `null` when none
+  reports a wavelength. `mixed_bursts` is `true` when the epoch lasts longer than
+  `EPOCH_MAX_SPAN_DAYS`, which only happens when small spans were folded into it. `span_days`
+  covers every frame of the epoch; `max_gap_days` and `wavelength_um` only the frames used in
+  the co-add, so `max_gap_days` can exceed `EPOCH_GAP_DAYS` when unused frames sit in a gap.
 
 `GET /timeline/diff?a=0&b=1` (same `ra`/`dec`/`target`, `size`, `detector` as `/timeline`):
 PNG of epoch `b` minus epoch `a`. Red = brighter in `b`, blue = fainter, black = unchanged,

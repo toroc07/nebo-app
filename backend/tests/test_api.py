@@ -145,6 +145,7 @@ def test_timeline_has_corners_data_version_and_expected_position(client):
     assert body["data"]["source"] and body["data"]["processed_at"]
     for epoch in body["epochs"]:
         assert epoch["releases"], "every epoch names the data release of its exposures"
+        assert {"span_days", "max_gap_days", "mixed_bursts", "wavelength_um"} <= set(epoch["coverage"])
         position = epoch["expected_position"]
         assert position["in_image"] and 0 <= position["x"] <= body["size"]["width_px"] - 1
     # Barnard moves north between the two epochs (dec grows, PNG y shrinks).

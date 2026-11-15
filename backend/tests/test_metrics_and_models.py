@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from app import imaging, main, metrics, models, science_catalogs
@@ -97,6 +98,34 @@ def test_epoch_saturation_counts_frames_inside_the_epoch():
     assert main._epoch_saturation(partial, image)["saturated"] is None
     assert main._epoch_saturation([], image)["saturated"] is None
     assert main._epoch_saturation([], image)["saturated_frac"] is None
+
+
+def test_epoch_coverage_flags_epochs_that_mix_bursts():
+    from types import SimpleNamespace
+
+    from app.service import mjd_to_datetime
+
+    # One burst of 5 days: a single observing visit, no warning.
+    short = SimpleNamespace(start_utc=mjd_to_datetime(61000.0), end_utc=mjd_to_datetime(61005.0))
+    exposures = [
+        {"mjd_start": 61000.0, "wavelength_um": 1.20},
+        {"mjd_start": 61002.0, "wavelength_um": 1.31},
+        {"mjd_start": 61005.0, "wavelength_um": None},  # unknown wavelength: skipped
+        {"mjd_start": 61300.0, "wavelength_um": 2.00},  # another epoch
+    ]
+    coverage = main._epoch_coverage(exposures, short)
+    assert coverage["span_days"] == pytest.approx(5.0)
+    assert coverage["max_gap_days"] == pytest.approx(3.0)
+    assert coverage["mixed_bursts"] is False
+    assert coverage["wavelength_um"] == {"min": 1.2, "max": 1.31}
+
+    # 47 days with a 25-day hole: small spans were folded together, so it is flagged.
+    long = SimpleNamespace(start_utc=mjd_to_datetime(61000.0), end_utc=mjd_to_datetime(61047.0))
+    mixed = [{"mjd_start": m, "wavelength_um": None} for m in (61000.0, 61010.0, 61035.0, 61047.0)]
+    coverage = main._epoch_coverage(mixed, long)
+    assert coverage["mixed_bursts"] is True
+    assert coverage["max_gap_days"] == pytest.approx(25.0)
+    assert coverage["wavelength_um"] is None
 
 
 def test_difference_snr_and_mahalanobis_displacement():
