@@ -565,8 +565,9 @@ Newest first. One line per change that affects this document.
 
 - **2026-11-15** — Honest spectrum and epochs (P1-1, P1-4): while the spectrum is a model
   (`simulated`), the Spectrum tab is called "Spectrum (model)", reads "Illustrative model · not
-  SPHEREx data" and hides Model 2's χ²red. Each `/timeline` epoch adds `coverage` (`span_days`,
-  `max_gap_days`, `wavelength_um` min/max from the exposures, and `mixed_bursts` when the epoch is
+  SPHEREx data" and hides Model 2's χ²red. Each `/timeline` epoch adds `coverage` (`span_days`
+  over all frames; `max_gap_days` and `wavelength_um` min/max over the frames used in the co-add,
+  so the gap can exceed 30 d; and `mixed_bursts` when the epoch is
   longer than `EPOCH_MAX_SPAN_DAYS`, i.e. small spans were folded in); the viewer shows it under
   "This epoch" with an amber note when bursts are mixed. Epoch grouping itself is unchanged.
 - **2026-11-15** — Docs: new [`science-and-techniques.md`](science-and-techniques.md) lists every

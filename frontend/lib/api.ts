@@ -31,7 +31,12 @@ export type Epoch = {
   coverage?: EpochCoverage;
 };
 export type EpochCoverage = {
+  /** First to last exposure of the epoch, counting every frame IRSA has (used or not). */
   span_days: number;
+  /**
+   * Longest gap between consecutive frames used in the co-add (at most 16, spread evenly, minus
+   * failed downloads). Frames left out can sit in between, so this can exceed the 30-day split rule.
+   */
   max_gap_days: number;
   /** The epoch joins separate observing bursts (it is longer than one burst can be). */
   mixed_bursts: boolean;

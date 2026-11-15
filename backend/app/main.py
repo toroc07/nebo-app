@@ -135,6 +135,11 @@ def _epoch_coverage(exposures: list[dict], image) -> dict:
     ``split_into_epochs`` cuts passes into spans shorter than ``EPOCH_MAX_SPAN_DAYS``; an epoch
     longer than that had small spans folded into it, so it mixes separate observing bursts
     (and, through the LVF filter, different wavelengths). The viewer warns about those.
+
+    ``span_days`` comes from the image dates, i.e. every frame of the epoch. ``max_gap_days`` and
+    ``wavelength_um`` come from the stored exposures, which are only the frames used in the
+    co-add (``select_evenly`` keeps at most ``MAX_FRAMES_PER_EPOCH``; failed downloads are
+    skipped). Frames left out can sit inside a gap, so it may exceed ``EPOCH_GAP_DAYS``.
     """
     # Plain floats: datetime_to_mjd returns numpy scalars, which JSON cannot encode.
     low, high = float(datetime_to_mjd(image.start_utc)), float(datetime_to_mjd(image.end_utc))
