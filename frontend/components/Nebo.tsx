@@ -416,6 +416,7 @@ export default function Nebo() {
               <Field
                 query={query}
                 target={selected}
+                catalog={targets}
                 title={selected?.name || "Your observation field"}
                 headingRef={heading}
                 onBack={back}
