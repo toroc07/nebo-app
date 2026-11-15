@@ -1,0 +1,67 @@
+{
+  "passed": true,
+  "entering": [
+    0,
+    0
+  ],
+  "stress": [
+    {
+      "width": 320,
+      "height": 568,
+      "margins": [
+        20,
+        20
+      ]
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "margins": [
+        20,
+        20
+      ]
+    },
+    {
+      "width": 568,
+      "height": 320,
+      "margins": [
+        20,
+        20
+      ]
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "margins": [
+        46.078125,
+        46.078125
+      ]
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "margins": [
+        90,
+        90
+      ]
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "margins": [
+        320,
+        320
+      ]
+    }
+  ],
+  "hover": true,
+  "proximity": true,
+  "keyboard": true,
+  "touch": true,
+  "reducedMotion": true,
+  "axe": {
+    "light": [],
+    "dark": []
+  },
+  "errors": []
+}

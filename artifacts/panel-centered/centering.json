@@ -1,0 +1,23 @@
+[
+  {
+    "viewport": 375,
+    "left": 20,
+    "right": 20,
+    "top": 89.59375,
+    "bottom": 1024.5
+  },
+  {
+    "viewport": 1280,
+    "left": 90,
+    "right": 90,
+    "top": 128,
+    "bottom": 732
+  },
+  {
+    "viewport": 1920,
+    "left": 320,
+    "right": 320,
+    "top": 200.703125,
+    "bottom": 932.703125
+  }
+]

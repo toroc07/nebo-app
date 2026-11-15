@@ -1,0 +1,231 @@
+{
+  "url": "http://localhost:3002/lab/observation?source=demo",
+  "date": "2026-11-14T22:44:06.789Z",
+  "runs": [
+    {
+      "tag": "light-1280x800",
+      "scheme": "light",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "light-1280x800.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "14px": 108,
+          "28px": 3,
+          "18px": 2,
+          "13px": 41,
+          "12px": 63,
+          "24px": 1
+        },
+        "families": {
+          "Plex": 171,
+          "Barlow": 2,
+          "PlexMono": 45
+        },
+        "radii": {
+          "3px": 33,
+          "50%": 3,
+          "24px": 1,
+          "20px": 1,
+          "6px": 5
+        },
+        "colors": 10,
+        "shadows": 9
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "light-1440x900",
+      "scheme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screenshot": "light-1440x900.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "14px": 108,
+          "28px": 3,
+          "18px": 2,
+          "13px": 41,
+          "12px": 63,
+          "24px": 1
+        },
+        "families": {
+          "Plex": 171,
+          "Barlow": 2,
+          "PlexMono": 45
+        },
+        "radii": {
+          "3px": 33,
+          "50%": 3,
+          "24px": 1,
+          "20px": 1,
+          "6px": 5
+        },
+        "colors": 10,
+        "shadows": 9
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "light-1920x1080",
+      "scheme": "light",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot": "light-1920x1080.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "demasiados-cta-en-primer-pliegue",
+          "selector": "body",
+          "detail": "9 botones de peso alto visibles a la vez: ¿cuál es la acción primaria?"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "14px": 108,
+          "28px": 3,
+          "18px": 2,
+          "13px": 41,
+          "12px": 63,
+          "24px": 1
+        },
+        "families": {
+          "Plex": 171,
+          "Barlow": 2,
+          "PlexMono": 45
+        },
+        "radii": {
+          "3px": 33,
+          "50%": 3,
+          "24px": 1,
+          "20px": 1,
+          "6px": 5
+        },
+        "colors": 10,
+        "shadows": 9
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-1280x800",
+      "scheme": "dark",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "dark-1280x800.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "14px": 108,
+          "28px": 3,
+          "18px": 2,
+          "13px": 41,
+          "12px": 63,
+          "24px": 1
+        },
+        "families": {
+          "Plex": 171,
+          "Barlow": 2,
+          "PlexMono": 45
+        },
+        "radii": {
+          "3px": 33,
+          "50%": 3,
+          "24px": 1,
+          "20px": 1,
+          "6px": 5
+        },
+        "colors": 10,
+        "shadows": 9
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-1440x900",
+      "scheme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screenshot": "dark-1440x900.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "14px": 108,
+          "28px": 3,
+          "18px": 2,
+          "13px": 41,
+          "12px": 63,
+          "24px": 1
+        },
+        "families": {
+          "Plex": 171,
+          "Barlow": 2,
+          "PlexMono": 45
+        },
+        "radii": {
+          "3px": 33,
+          "50%": 3,
+          "24px": 1,
+          "20px": 1,
+          "6px": 5
+        },
+        "colors": 10,
+        "shadows": 9
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-1920x1080",
+      "scheme": "dark",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot": "dark-1920x1080.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "demasiados-cta-en-primer-pliegue",
+          "selector": "body",
+          "detail": "9 botones de peso alto visibles a la vez: ¿cuál es la acción primaria?"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "14px": 108,
+          "28px": 3,
+          "18px": 2,
+          "13px": 41,
+          "12px": 63,
+          "24px": 1
+        },
+        "families": {
+          "Plex": 171,
+          "Barlow": 2,
+          "PlexMono": 45
+        },
+        "radii": {
+          "3px": 33,
+          "50%": 3,
+          "24px": 1,
+          "20px": 1,
+          "6px": 5
+        },
+        "colors": 10,
+        "shadows": 9
+      },
+      "runtimeIssues": []
+    }
+  ],
+  "runtimeIssues": []
+}

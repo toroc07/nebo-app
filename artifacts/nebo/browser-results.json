@@ -1,0 +1,36 @@
+{
+  "passed": true,
+  "requests": 8,
+  "errors": [],
+  "stress": [
+    {
+      "width": 320,
+      "height": 568
+    },
+    {
+      "width": 568,
+      "height": 320
+    },
+    {
+      "width": 375,
+      "height": 812
+    }
+  ],
+  "checks": [
+    "coordinates validation",
+    "202 polling",
+    "play pause",
+    "one epoch",
+    "zero epochs",
+    "503 recovery",
+    "persistent preferences",
+    "tutorial",
+    "keyboard activation",
+    "image viewer: fit, zoom, pin, drag pin, refit",
+    "infrared/color switch keeps the view",
+    "zoom switches between the 3 sizes",
+    "Back from a field returns to its origin",
+    "200% text",
+    "RTL"
+  ]
+}
