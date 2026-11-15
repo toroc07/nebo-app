@@ -65,6 +65,9 @@ A.init.then(() => {                    // WASM: always wait for A.init
 
 ## Conventions
 
+- Docs: follow `AGENTS.md` → "Keeping docs in sync". Any change to endpoints, tables, the build
+  pipeline, data sources, deploy or the user journey updates `docs/architecture.md` (diagrams +
+  changelog) and, for data sources, `docs/data-sources.md`.
 - Accessibility: respect `prefers-reduced-motion`; adjustable blink speed.
 - Mobile: limit the pixel ratio and turn off postprocessing on small screens.
 - Before using a library API, check context7 (Aladin, r3f, GSAP, Motion, Next.js).
