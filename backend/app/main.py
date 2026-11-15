@@ -1153,6 +1153,24 @@ def get_patch_spectrum(
     return _simulated(spec | {"channels": spectrum_channels(spec)})
 
 
+def _epoch_saturation(exposures: list[dict[str, Any]], image: Any) -> dict[str, Any]:
+    """Frames of this epoch with OVERFLOW/SUR_ERROR in the photometry box around the object."""
+    # The epoch spans the mjd_start of its frames (render_epoch_images); 1 s of slack for rounding.
+    lo = datetime_to_mjd(image.start_utc) - 1e-5
+    hi = datetime_to_mjd(image.end_utc) + 1e-5
+    flags = [e.get("saturated_near_target") for e in exposures if lo <= e["mjd_start"] <= hi]
+    known = [f for f in flags if f is not None]
+    saturated = sum(known)
+    return {
+        # Tri-state: unchecked frames (e.g. the cutout could not be fetched) never count as clean.
+        "saturated": True if saturated else (False if flags and len(known) == len(flags) else None),
+        "saturated_frames": saturated,
+        "checked_frames": len(known),
+        "total_frames": len(flags),
+        "saturated_frac": round(saturated / len(known), 3) if known else None,
+    }
+
+
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/metrics")
 def get_patch_metrics(
     patch_id: int = Path(..., ge=1),
@@ -1167,6 +1185,7 @@ def get_patch_metrics(
         tl = store.get_timeline(patch_id, detector)
         if tl is not None and tl.status == "ready":
             target = store.get_target(patch.target_slug) if patch.target_slug else None
+            exposures = store.list_nasa_sector_exposures(patch_id, detector)
             for img_info in store.list_images(tl.id, "large"):
                 npz = store.get_npz(img_info.id)
                 if npz is None:
@@ -1181,7 +1200,14 @@ def get_patch_metrics(
                 phot = metrics.extract_optimal_psf_photometry(
                     data["image"], data["variance"], center_xy=center
                 )
-                image_photometry.append({"epoch_index": img_info.epoch_index, "mid_mjd": img_info.mid_mjd, **phot})
+                saturation = _epoch_saturation(exposures, img_info)
+                if saturation["saturated"]:
+                    # Saturated cores are NaN or clipped: the flux is only an approximate lower
+                    # limit and the propagated sigma ignores the missing core.
+                    phot |= {"sigma_stat": None, "sigma_reported": None, "snr": None}
+                image_photometry.append(
+                    {"epoch_index": img_info.epoch_index, "mid_mjd": img_info.mid_mjd, **phot, **saturation}
+                )
     return {
         "patch": bundle["patch"],
         # Confidence, variability and indices are simulated; image_photometry is measured on

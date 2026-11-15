@@ -111,10 +111,11 @@ def extract_optimal_psf_photometry(
 
     if not np.any(valid):
         return {
-            "flux_hat": 0.0,
-            "sigma_stat": 1.0,
-            "sigma_reported": 1.0,
-            "snr": 0.0,
+            # No usable pixels or variance: no measurement, not an invented one.
+            "flux_hat": None,
+            "sigma_stat": None,
+            "sigma_reported": None,
+            "snr": None,
             "q_fit_epsf": 99.0,
             "chi2_psf": 99.0,
             "c_80_20": 0.0,
@@ -139,7 +140,8 @@ def extract_optimal_psf_photometry(
         sigma_stat = math.sqrt(1.0 / denom)
 
     sigma_reported = science_catalogs.compute_reported_sigma(flux_hat, sigma_stat)
-    snr = flux_hat / sigma_reported if sigma_reported > 0.0 else 0.0
+    # S/N from the measured noise; the 3% floor would cap every bright source at 33.3.
+    snr = flux_hat / sigma_stat
 
     model = flux_hat * psf
     resid = net - model

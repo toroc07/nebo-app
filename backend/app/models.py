@@ -152,6 +152,16 @@ def _softmax(logits: dict[str, float], temperature: float = 1.0) -> dict[str, fl
     return {k: exps[k] / total for k in logits}
 
 
+def _shrink(probs: dict[str, float], eps: float = 0.1) -> dict[str, float]:
+    """Mix with the uniform distribution so no class reads 0% or 100%.
+
+    shortcut: uncalibrated shrinkage of hand-set weights; replace with real calibration when we
+    have labelled events.
+    """
+    k = len(probs)
+    return {c: round((1.0 - eps) * p + eps / k, 6) for c, p in probs.items()}
+
+
 def _normalize_m1_features(raw: dict[str, Any]) -> dict[str, float]:
     return {name: float(raw.get(name, _M1_REF_MEAN[name])) for name in MODEL1_FEATURES}
 
@@ -197,7 +207,7 @@ def run_model1_event_classifier(
         hard_bound_applied = "bound_3_asymmetric_dipole"
 
     total_p = sum(probs.values()) or 1.0
-    probs = {k: round(v / total_p, 6) for k, v in probs.items()}
+    probs = _shrink({k: v / total_p for k, v in probs.items()})
     predicted_class = max(probs, key=lambda k: probs[k])
     conf_pct = int(round(probs[predicted_class] * 100))
 
@@ -506,8 +516,7 @@ def run_model2_spectral_classifier(
         fused_logits[cls_name] = 0.85 * ml_logits.get(cls_name, 0.0) - 1.2 * min(chi2_red, 25.0)
 
     best_fit = min(fit_results, key=lambda r: r["chi2_reduced"])
-    posteriors = _softmax(fused_logits, temperature=1.0)
-    posteriors = {k: round(v, 6) for k, v in posteriors.items()}
+    posteriors = _shrink(_softmax(fused_logits, temperature=1.0))
     predicted_class = max(posteriors, key=lambda k: posteriors[k])
 
     selected_tpl = next(r for r in fit_results if r["class_name"] == predicted_class)

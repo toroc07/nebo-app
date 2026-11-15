@@ -7,11 +7,35 @@ import {
   fetchPatchMetrics,
   submitCitizenVote,
   type CitizenVote,
+  type ImagePhotometryPoint,
   type Model1EventResponse,
   type Model3ForecastResponse,
   type PatchMetricsResponse,
 } from "@/lib/api";
 import s from "./science.module.css";
+
+const LOWER_LIMIT_NOTE =
+  "Approximate lower limit: saturated pixels near the object are clipped or missing, so the real flux is higher.";
+
+// Never present unchecked frames as clean: null saturation reads "n/a".
+function saturationLabel(row: ImagePhotometryPoint): string {
+  if (row.saturated === null) return "n/a";
+  const unchecked = row.total_frames - row.checked_frames;
+  return `${row.saturated_frames}/${row.checked_frames} frames${unchecked ? ` (+${unchecked} n/a)` : ""}`;
+}
+
+function saturationTitle(row: ImagePhotometryPoint): string {
+  return `${row.checked_frames} of ${row.total_frames} frames checked for OVERFLOW/SUR_ERROR near the object`;
+}
+
+function modelEstimateLabel(simulated: boolean | undefined): string {
+  return `Model estimate, not a detection${simulated ? " · simulated demo profile" : ""}.`;
+}
+
+// Uncalibrated scores read as a coarse level, never as an exact percentage.
+function likelihoodLevel(pct: number): string {
+  return pct >= 70 ? "high" : pct >= 40 ? "medium" : "low";
+}
 
 const VOTE_CHOICES = [
   { id: "real_change", label: "Real change" },
@@ -110,10 +134,11 @@ export default function ModelsAndMetricsPanel({
       <div className={s.gridTwo}>
         <div className={s.subCard}>
           <h3>Model 1 · Event Attribution</h3>
+          <p className={s.note}>{modelEstimateLabel(model1.simulated)}</p>
           <p className={s.mono} style={{ margin: "0 0 0.4rem" }}>
             Class: <strong>{model1.predicted_class}</strong>
             {model1.citizen_level1?.confidence_score_pct !== undefined &&
-              ` · ${model1.citizen_level1.confidence_score_pct}% confidence`}
+              ` · ${likelihoodLevel(model1.citizen_level1.confidence_score_pct)} likelihood`}
           </p>
           <div className={s.barList}>
             {Object.entries(model1.probabilities)
@@ -157,10 +182,18 @@ export default function ModelsAndMetricsPanel({
 
         <div className={s.subCard}>
           <h3>Model 3 · GP Forecast &amp; Astrometric Cone</h3>
-          <p className={s.mono} style={{ margin: "0 0 0.4rem" }}>
-            Status: <strong>{model3.citizen_level1?.alert_status ?? "NOMINAL"}</strong>
-            {model3.z_alert !== undefined && ` · Z_alert = ${model3.z_alert.toFixed(2)}σ`}
-          </p>
+          <p className={s.note}>{modelEstimateLabel(model3.simulated)}</p>
+          {/* A simulated light curve says nothing about this patch: no alert status for it. */}
+          {model3.simulated ? (
+            <p className={s.note}>
+              The light curve is a simulated demo profile, so no alert status is shown.
+            </p>
+          ) : (
+            <p className={s.mono} style={{ margin: "0 0 0.4rem" }}>
+              Status: <strong>{model3.citizen_level1?.alert_status ?? "n/a"}</strong>
+              {model3.z_alert !== undefined && ` · Z_alert = ${model3.z_alert.toFixed(2)}σ`}
+            </p>
+          )}
           {forecast.length > 1 && <GpForecastSparkline series={forecast} />}
           {model3.predicted_cone && (
             <p className={s.note}>
@@ -170,7 +203,7 @@ export default function ModelsAndMetricsPanel({
               {model3.predicted_cone.cone_radius_3s_arcsec.toFixed(2)}″
             </p>
           )}
-          {model3.citizen_level1?.summary && (
+          {!model3.simulated && model3.citizen_level1?.summary && (
             <p className={s.note}>{model3.citizen_level1.summary}</p>
           )}
         </div>
@@ -187,8 +220,9 @@ export default function ModelsAndMetricsPanel({
                 <tr>
                   <th>Epoch</th>
                   <th>Flux</th>
-                  <th>σ (3% floor)</th>
+                  <th>σ (measured)</th>
                   <th>SNR</th>
+                  <th>Saturation</th>
                   <th>Clean</th>
                 </tr>
               </thead>
@@ -196,14 +230,27 @@ export default function ModelsAndMetricsPanel({
                 {metricsData.image_photometry.map((row) => (
                   <tr key={row.epoch_index}>
                     <td>E{row.epoch_index + 1}</td>
-                    <td>{row.flux_hat.toFixed(3)}</td>
-                    <td>{row.sigma_reported.toFixed(3)}</td>
-                    <td>{row.snr.toFixed(1)}</td>
+                    <td title={row.saturated ? LOWER_LIMIT_NOTE : undefined}>
+                      {row.flux_hat === null
+                        ? "n/a"
+                        : `${row.saturated ? "≥" : ""}${row.flux_hat.toFixed(3)}`}
+                    </td>
+                    <td>{row.sigma_stat?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.snr?.toFixed(1) ?? "n/a"}</td>
+                    <td title={saturationTitle(row)}>{saturationLabel(row)}</td>
                     <td>{Math.round(row.p_clean_flags * 100)}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+          {metricsData.image_photometry.some((row) => row.saturated_frames > 0) && (
+            <p className={s.note}>≥ {LOWER_LIMIT_NOTE}</p>
+          )}
+          {metricsData.image_photometry.some((row) => row.saturated === null) && (
+            <p className={s.note}>
+              Saturation n/a: some frames could not be checked, so the epoch is not known to be clean.
+            </p>
           )}
         </div>
 

@@ -354,6 +354,7 @@ erDiagram
     text release
     float mjd_start
     float aperture_flux_ujy
+    bool saturated_near_target
   }
   api_query_cache {
     text cache_key PK
