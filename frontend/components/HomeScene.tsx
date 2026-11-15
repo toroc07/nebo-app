@@ -65,28 +65,38 @@ const MOTES: [number, number, number, number][] = [
 const CREW = [
   {
     name: "Jasen Mihovil Yukopila Escobar",
-    role: "Software Developer & Data Scientist",
+    role: "Frontend Developer",
     photo: "/crew/jasen.webp",
+    github: "Jmyukopila",
   },
   {
     name: "Alejandro Patron Montero",
-    role: "Full-Stack Developer",
+    role: "Fullstack Developer & Data",
     photo: "/crew/alejandro.webp",
+    github: "pxtroniwnl",
   },
   {
-    name: "Carlos Toro Torres",
-    role: "Backend Developer & Data Analyst",
+    name: "Carlos Miguel Toro Torres",
+    role: "Fullstack Developer & Data",
     photo: "/crew/carlos.webp",
+    github: "toroc07",
   },
   {
-    name: "Shalom Jhoanna",
-    role: "Frontend Developer",
+    name: "Shalom Jhoanna Arrieta Marrugo",
+    role: "Backend Developer & Data",
     photo: "/crew/shalom.webp",
+    github: "shalom-A26",
   },
   {
-    name: "Daryem Antonio Garcia Cardona",
-    role: "Backend Developer & Data Engineer",
+    name: "Dariem Antonio Garcia Cardona",
+    role: "Data Engineer & Scientist",
     photo: "/crew/daryem.webp",
+    github: "Dmgar",
+  },
+  {
+    name: "Katlyn Gutierrez Cardona",
+    role: "Storyteller & Communications",
+    photo: "/crew/katlyn.webp",
   },
 ];
 
@@ -147,15 +157,17 @@ export default function HomeScene({
         ))}
       </div>
       <div className={s.screen} data-off={off || undefined}>
-        <img
-          className={s.logo}
-          src="/brand/nebo-logo-ui.png"
-          alt=""
-          aria-hidden="true"
-          width={504}
-          height={393}
-          draggable={false}
-        />
+        {showCrew ? null : (
+          <img
+            className={s.logo}
+            src="/brand/nebo-logo-ui.png"
+            alt=""
+            aria-hidden="true"
+            width={504}
+            height={393}
+            draggable={false}
+          />
+        )}
         {showCrew ? (
           <section className={s.crew} aria-labelledby="crew-title">
             <header className={s.crewHead}>
@@ -164,14 +176,35 @@ export default function HomeScene({
                 <ArrowLeft aria-hidden="true" /> Back
               </button>
             </header>
+            <p className={s.crewNote}>Data Science students · Universidad Tecnológica de Bolívar</p>
             <ul className={s.crewList}>
-              {CREW.map((m) => (
-                <li key={m.name} className={s.member}>
-                  <img src={m.photo} alt="" width={96} height={96} draggable={false} />
-                  <strong>{m.name}</strong>
-                  <span>{m.role}</span>
-                </li>
-              ))}
+              {CREW.map((m) => {
+                const card = (
+                  <>
+                    <img src={m.photo} alt="" width={96} height={96} draggable={false} />
+                    <strong>{m.name}</strong>
+                    <span>{m.role}</span>
+                    {m.github ? <span className={s.handle}>@{m.github} ↗</span> : null}
+                  </>
+                );
+                return (
+                  <li key={m.name}>
+                    {m.github ? (
+                      <a
+                        className={s.member}
+                        href={`https://github.com/${m.github}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${m.name} on GitHub (opens in a new tab)`}
+                      >
+                        {card}
+                      </a>
+                    ) : (
+                      <div className={s.member}>{card}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : (
