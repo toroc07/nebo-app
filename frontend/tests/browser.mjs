@@ -124,7 +124,7 @@ await menu.getByRole("button", { name: /Crew/ }).click();
 await page.getByRole("heading", { level: 2, name: "Crew", exact: true }).waitFor();
 assert.equal(await page.locator("section[aria-labelledby='crew-title'] li").count(), 6, "six crew members");
 await page.getByText("Universidad Tecnológica de Bolívar").waitFor();
-assert.equal(await page.locator("section[aria-labelledby='crew-title'] a[href^='https://github.com/']").count(), 5, "five GitHub links");
+assert.equal(await page.locator("section[aria-labelledby='crew-title'] a[href^='https://github.com/']").count(), 6, "six GitHub links");
 assert.equal(
   await page.getByRole("link", { name: /Jasen .* on GitHub/ }).getAttribute("href"),
   "https://github.com/Jmyukopila",
