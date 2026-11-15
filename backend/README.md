@@ -279,6 +279,19 @@ Returns nearby (`parallax > 50 mas`) or fast-moving (`pm > 500 mas/yr`) Gaia DR3
 to epoch 2026.2 for the sky explorer, cached in `api_query_cache` with a curated fallback if ESA
 Gaia TAP is unavailable.
 
+### `GET /patches/{id}/spectrum?epoch_index=-1` and `GET /patches/{id}/metrics?detector=3`
+
+Simulated science profiles (`simulated: true`). Fields the web client reads (keep them stable;
+`frontend/tests/fixtures/science-responses.json` holds a real answer):
+- `/spectrum`: `channels[]` of `{channel_id, band, lambda_c_um, flux_mjy, sigma_mjy, is_blankch}`
+  (102 entries, derived from the stored columnar arrays; BLANKCH 51-52 and invalid channels have
+  `flux_mjy: null`, never 0), plus `indices[]` (`index_code, value, uncertainty, snr,
+  is_significant_3s`).
+- `/metrics`: `confidence.c_global` (0-100) with `s_snr, s_dipole, s_flags, s_psf`; `variability`
+  (`chi2_var_reduced, stetson_j, von_neumann_eta, lomb_scargle_power, is_variable`);
+  `image_photometry[]` measured on the patch's float32 arrays.
+- `/models/event`: `treeshap_values.top_drivers[]` of `{feature, phi}`.
+
 ### Database catalog hydration (`python -m app.db sync-catalogs`)
 
 Hydrates `targets.gaia_*` and `targets.wise_*` columns (and updates proper-motion-propagated

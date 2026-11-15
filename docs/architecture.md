@@ -546,6 +546,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Science API contract: `/patches/{id}/spectrum` adds a derived `channels[]`;
+  the frontend types follow the backend names (`c_global`, `phi`, variability keys). Each science
+  tab renders inside an error boundary.
 - **2026-11-15** — Field: the science analysis tabs open in a slide-in side panel (Analysis
   pill on the image; full-screen sheet on narrow screens) instead of inline in the console grid;
   a field load can be stopped (polling stops, the server build continues and is cached), and the
