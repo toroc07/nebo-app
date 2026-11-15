@@ -12,7 +12,8 @@ import ChatPanel from "./ChatPanel";
 import { GENERAL_ROOM } from "@/lib/chat";
 import HomeScene from "./HomeScene";
 import type { SkyCommand, SkyLayers, SkyView } from "./Sky";
-import { launchWarp } from "@/lib/warp";
+import { launchWarp, warp } from "@/lib/warp";
+import NeboBoot from "./NeboBoot";
 const Sky = dynamic(() => import("./Sky"), {
   ssr: false,
   loading: () => <p className="sky-loading">Loading sky…</p>,
@@ -44,6 +45,10 @@ export default function Nebo() {
     // On the ground the cockpit is switched off and its glass is dark until the jump.
     [cockpitPower, setCockpitPower] = useState<"off" | "boot" | "on">("on"),
     [glassDark, setGlassDark] = useState(false),
+    // START sequence: the Nebo power-on plays in the glass, then the approach tunnel. The whole
+    // app is inert from START until the tunnel has finished.
+    [appBoot, setAppBoot] = useState(false),
+    [locked, setLocked] = useState(false),
     [screenPowered, setScreenPowered] = useState(true),
     [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, grid: false }),
     [query, setQuery] = useState<Query | null>(null),
@@ -221,6 +226,32 @@ export default function Nebo() {
   // Timers of the launch sequence (power-up, jump), cleared if the page leaves mid-way.
   const launchTimers = useRef<number[]>([]);
   useEffect(() => () => launchTimers.current.forEach(clearTimeout), []);
+
+  // Every button stays locked from START until the approach tunnel has played out. The tunnel
+  // reports its end through the warp controller; a safety timer unlocks anyway if it never does.
+  const approaching = useRef(false);
+  const unlockTimer = useRef<number | undefined>(undefined);
+  function lock() {
+    setLocked(true);
+    window.clearTimeout(unlockTimer.current);
+    unlockTimer.current = window.setTimeout(() => {
+      approaching.current = false;
+      setLocked(false);
+    }, 25_000);
+  }
+  useEffect(() => {
+    const off = warp.subscribe(() => {
+      if (approaching.current && !warp.isActive()) {
+        approaching.current = false;
+        window.clearTimeout(unlockTimer.current);
+        setLocked(false);
+      }
+    });
+    return () => {
+      off();
+      window.clearTimeout(unlockTimer.current);
+    };
+  }, []);
   // Set before a view change that the camera already animated, so the generic fade-in is skipped.
   const skipEntrance = useRef(false);
 
@@ -231,6 +262,7 @@ export default function Nebo() {
     // The tunnel starts once the screens are on (power-on is 520 ms + staggered delays).
     later(900, () => {
       setCockpitPower("on");
+      approaching.current = true;
       launchWarp("explore", "cockpit");
     });
     // The tunnel's own fade-in is 0.35 s; lift the dark glass only once it is covered.
@@ -260,7 +292,8 @@ export default function Nebo() {
       if (turn === "launch") {
         setView("Explore");
         setTurn(null);
-        powerUpAndJump();
+        // The Nebo power-on plays first; its end starts the approach (powerUpAndJump).
+        setAppBoot(true);
       } else if (turn === "right") {
         setTurn(null);
         setScreenPowered(true);
@@ -305,6 +338,7 @@ export default function Nebo() {
       go("Explore");
       return;
     }
+    lock();
     setCockpitPower("off");
     setGlassDark(true);
     setTurn("launch");
@@ -326,7 +360,12 @@ export default function Nebo() {
         : "Home",
     );
   return (
-    <div className="app-shell" ref={root}>
+    <div
+      className="app-shell"
+      ref={root}
+      inert={locked}
+      aria-busy={locked || undefined}
+    >
       <a className="skip" href="#content">
         Skip to content
       </a>
@@ -385,6 +424,14 @@ export default function Nebo() {
               * back (a stalled turn); visibility:hidden would blank its WebGL sky (broken glass).
               */}
             <div className="sky-panel">
+              {appBoot && (
+                <NeboBoot
+                  onDone={() => {
+                    setAppBoot(false);
+                    powerUpAndJump();
+                  }}
+                />
+              )}
               <Sky
                 targets={targets}
                 selected={selected}

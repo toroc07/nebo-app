@@ -221,8 +221,17 @@ export default function CoordinatePanel({
               type="button"
               className={s.holoReset}
               onClick={() => {
-                show(initial);
+                // Clear the form for a new entry. (It used to go back to the position the panel
+                // opened with, which looked like nothing happened: that value was already shown.)
+                setFormat("sexagesimal");
+                setRa(emptyRa);
+                setDec(emptyDec);
+                setRaDeg("");
+                setDecDeg("");
                 setError("");
+                raUnit.current = "h";
+                decUnit.current = "d";
+                first.current?.focus();
               }}
             >
               <RotateCcw aria-hidden="true" /> Reset

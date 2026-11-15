@@ -414,6 +414,7 @@ graph TD
   Layout --> WarpOverlay --> Scene["Scene (canvas tunnel)"]
   Layout --> LabPage["/lab/observation"] --> ObservationLab --> ImageViewport
   Nebo --> HomeScene
+  Nebo --> NeboBoot["NeboBoot (power-on in the glass)"]
   Nebo --> Sky["Sky (Aladin Lite, SPHEREx HiPS)"]
   Nebo --> Cockpit
   Nebo --> Flight["Flight (r3f star burst)"]
@@ -437,6 +438,7 @@ graph TD
 | `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
 | `ObservationLab`, `ImageViewport` | Lab viewer: nested 3′/6′/15′ levels, pan/zoom, Gaia rings, expected-position marker |
 | `Flight` | Short WebGL2 star burst (desktop only) |
+| `NeboBoot` | Nebo power-on played in the cockpit glass after START (3.2 s), before the approach tunnel; the app is `inert` from START until the tunnel ends |
 | `StarHologram` | Spinning 3D model of the observed object on the field room's wall tablet (procedural shader; colours from each object's temperature; wide screens only) |
 | `ChatPanel` | Public chat key (top-left) and panel in the sky explorer: room = selected target or `general`, polls every 3 s while open, generated nickname in `localStorage` |
 
@@ -537,6 +539,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — START sequence: pan → `NeboBoot` power-on → cockpit power-up → approach
+  tunnel; every control is locked (`inert` on the app shell) until the tunnel finishes
+  (warp controller), with a 25 s safety unlock. The RA / Dec key is now labelled Coords, and
+  its panel's Reset clears the form.
 - **2026-11-15** — Backend Gaia DR3 + CatWISE2020 integration: added `app/wise.py` (IRSA
   CatWISE2020 TAP client + `GET /patches/{id}/wise` with cold-candidate flagging),
   `app/crossmatch.py` (`GET /patches/{id}/candidates` for catalogued vs candidate changes,

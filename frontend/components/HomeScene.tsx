@@ -57,7 +57,7 @@ const STEPS = [
   {
     icon: Compass,
     title: "Fly",
-    text: "Drag the sky to move and zoom from the console. Pick a featured object in Objects, or type a position in RA / Dec.",
+    text: "Drag the sky to move and zoom from the console. Pick a featured object in Objects, or type a position in Coords.",
   },
   {
     icon: ScanEye,

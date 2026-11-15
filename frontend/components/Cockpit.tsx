@@ -173,7 +173,7 @@ export default function Cockpit({
           onClick={() => (panelOpen ? closePanel() : setPanel("open"))}
         >
           <Crosshair aria-hidden="true" />
-          <span className={s.paintedText}>RA / Dec</span>
+          <span className={s.paintedText}>Coords</span>
         </button>
         <div className={s.position} aria-live="polite">
           <span className={s.paintedLabel}>Position / ICRS</span>
