@@ -305,7 +305,8 @@ CREATE TABLE IF NOT EXISTS ml_model1_attributions (
     epoch_index       smallint NOT NULL DEFAULT -1,
     feature_vector    jsonb NOT NULL,
     predicted_class   text NOT NULL CHECK (
-        predicted_class IN ('REAL_TRANSIENT', 'SOLAR_SYSTEM_MOVER', 'INSTRUMENT_ARTIFACT')
+        predicted_class IN ('MOVING_OBJECT', 'VARIABLE_STAR_OR_TRANSIENT', 'AIRGLOW_OR_ZODI_STRIPE',
+                            'INSTRUMENTAL_ARTIFACT', 'EXTENDED_EMISSION')
     ),
     temperature_t     double precision NOT NULL DEFAULT 1.0,
     probabilities     jsonb NOT NULL,
@@ -323,7 +324,9 @@ CREATE TABLE IF NOT EXISTS ml_model2_classifications (
     patch_id            bigint NOT NULL REFERENCES patches (id) ON DELETE CASCADE,
     spectrum_id         bigint REFERENCES patch_spectra (id) ON DELETE SET NULL,
     predicted_class     text NOT NULL CHECK (
-        predicted_class IN ('T_Y_DWARF', 'SOLAR_SYSTEM_COMET', 'YSO_DISK', 'M_DWARF_FLARE')
+        predicted_class IN ('ULTRACOLD_Y_DWARF', 'COLD_BROWN_DWARF_T', 'HIGH_PROPER_MOTION_M_DWARF',
+                            'YOUNG_STELLAR_OBJECT_ACCRETION', 'PULSATING_MIRA_VARIABLE',
+                            'SOLAR_SYSTEM_COMET')
     ),
     best_template_name  text,
     template_teff_k     double precision,
@@ -366,7 +369,7 @@ CREATE TABLE IF NOT EXISTS citizen_votes (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     patch_id    bigint NOT NULL REFERENCES patches (id) ON DELETE CASCADE,
     epoch_index smallint NOT NULL DEFAULT 0,
-    vote        text NOT NULL CHECK (vote IN ('CONFIRM_OBJECT', 'MARK_ARTIFACT')),
+    vote        text NOT NULL CHECK (vote IN ('REAL_CHANGE', 'ARTIFACT', 'MOVER', 'UNSURE')),
     voter_token text,
     comment     text,
     created_at  timestamptz NOT NULL DEFAULT now()
@@ -374,3 +377,29 @@ CREATE TABLE IF NOT EXISTS citizen_votes (
 
 CREATE INDEX IF NOT EXISTS idx_citizen_votes_patch
     ON citizen_votes (patch_id, epoch_index);
+
+-- Migration: databases created before Nov 2026 have the first draft of these value lists, which
+-- no longer match app/models.py (MODEL1_CLASSES, the Model 2 templates) and the vote values of
+-- app/main.py, so every insert failed with a CheckViolation. CREATE TABLE IF NOT EXISTS does not
+-- touch existing tables, so the checks are replaced here. Idempotent; NOT VALID keeps any older
+-- rows instead of failing on them, and every new row is still checked.
+ALTER TABLE ml_model1_attributions
+    DROP CONSTRAINT IF EXISTS ml_model1_attributions_predicted_class_check;
+ALTER TABLE ml_model1_attributions
+    ADD CONSTRAINT ml_model1_attributions_predicted_class_check CHECK (
+        predicted_class IN ('MOVING_OBJECT', 'VARIABLE_STAR_OR_TRANSIENT', 'AIRGLOW_OR_ZODI_STRIPE',
+                            'INSTRUMENTAL_ARTIFACT', 'EXTENDED_EMISSION')
+    ) NOT VALID;
+ALTER TABLE ml_model2_classifications
+    DROP CONSTRAINT IF EXISTS ml_model2_classifications_predicted_class_check;
+ALTER TABLE ml_model2_classifications
+    ADD CONSTRAINT ml_model2_classifications_predicted_class_check CHECK (
+        predicted_class IN ('ULTRACOLD_Y_DWARF', 'COLD_BROWN_DWARF_T', 'HIGH_PROPER_MOTION_M_DWARF',
+                            'YOUNG_STELLAR_OBJECT_ACCRETION', 'PULSATING_MIRA_VARIABLE',
+                            'SOLAR_SYSTEM_COMET')
+    ) NOT VALID;
+ALTER TABLE citizen_votes DROP CONSTRAINT IF EXISTS citizen_votes_vote_check;
+ALTER TABLE citizen_votes
+    ADD CONSTRAINT citizen_votes_vote_check CHECK (
+        vote IN ('REAL_CHANGE', 'ARTIFACT', 'MOVER', 'UNSURE')
+    ) NOT VALID;

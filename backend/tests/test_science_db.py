@@ -163,9 +163,9 @@ def test_patch_spectrum_enforces_blankch_51_52_null_and_models_cache():
         -1,
         {
             "feature_vector": {"psf_chi2_red": 1.2, "clean_pixel_fraction": 0.96},
-            "predicted_class": "REAL_TRANSIENT",
+            "predicted_class": "MOVING_OBJECT",
             "temperature_t": 1.15,
-            "probabilities": {"REAL_TRANSIENT": 0.92, "SOLAR_SYSTEM_MOVER": 0.05, "INSTRUMENT_ARTIFACT": 0.03},
+            "probabilities": {"MOVING_OBJECT": 0.92, "VARIABLE_STAR_OR_TRANSIENT": 0.05, "INSTRUMENTAL_ARTIFACT": 0.03},
             "treeshap_values": {"psf_chi2_red": 0.41},
             "citizen_level1": {"headline": "Confirmado"},
             "researcher_level2": {"treeshap": {"psf_chi2_red": 0.41}},
@@ -175,14 +175,14 @@ def test_patch_spectrum_enforces_blankch_51_52_null_and_models_cache():
         patch.id,
         {
             "spectrum_id": spec["id"],
-            "predicted_class": "T_Y_DWARF",
+            "predicted_class": "ULTRACOLD_Y_DWARF",
             "best_template_name": "sonora_t250_logg4.5",
             "template_teff_k": 250.0,
             "template_log_g": 4.5,
             "chi2_reduced": 1.12,
             "dof": 98,
             "valid_channels_used": 100,
-            "bayesian_posteriors": {"T_Y_DWARF": 0.97},
+            "bayesian_posteriors": {"ULTRACOLD_Y_DWARF": 0.97},
             "citizen_level1": {"label": "Enana Y ultra-fría"},
             "researcher_level2": {"blankch_excluded": [51, 52]},
         },
@@ -202,10 +202,10 @@ def test_patch_spectrum_enforces_blankch_51_52_null_and_models_cache():
             "researcher_level2": {"model1_id": m1["id"]},
         },
     )
-    vote = store.save_citizen_vote(patch.id, 0, "CONFIRM_OBJECT", voter_token="anon-1")
-    assert m2["predicted_class"] == "T_Y_DWARF"
+    vote = store.save_citizen_vote(patch.id, 0, "MOVER", voter_token="anon-1")
+    assert m2["predicted_class"] == "ULTRACOLD_Y_DWARF"
     assert m3["model1_attribution_id"] == m1["id"]
-    assert vote["vote"] == "CONFIRM_OBJECT"
+    assert vote["vote"] == "MOVER"
     assert len(store.list_citizen_votes(patch.id)) == 1
 
 

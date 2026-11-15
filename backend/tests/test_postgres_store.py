@@ -128,8 +128,8 @@ def test_science_tables_sectors_and_models_round_trip(store):
         -1,
         {
             "feature_vector": {"psf_chi2": 1.1},
-            "predicted_class": "REAL_TRANSIENT",
-            "probabilities": {"REAL_TRANSIENT": 0.9, "SOLAR_SYSTEM_MOVER": 0.05, "INSTRUMENT_ARTIFACT": 0.05},
+            "predicted_class": "MOVING_OBJECT",
+            "probabilities": {"MOVING_OBJECT": 0.9, "VARIABLE_STAR_OR_TRANSIENT": 0.05, "INSTRUMENTAL_ARTIFACT": 0.05},
             "treeshap_values": {"psf_chi2": 0.3},
             "citizen_level1": {"badge": "Real Source"},
             "researcher_level2": {"temperature_t": 1.0},
