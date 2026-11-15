@@ -131,6 +131,36 @@ export default function ModelsAndMetricsPanel({
         </div>
       </div>
 
+      {/* Headline numbers first; the detail cards below carry the evidence. */}
+      <div className={s.statRow}>
+        <div className={s.stat}>
+          <span className={s.statLabel}>Event class</span>
+          <span className={s.statValue}>{model1.predicted_class}</span>
+        </div>
+        {model1.citizen_level1?.confidence_score_pct !== undefined && (
+          <div className={s.stat}>
+            <span className={s.statLabel}>Likelihood</span>
+            <span className={s.statValue}>
+              {likelihoodLevel(model1.citizen_level1.confidence_score_pct)}
+            </span>
+          </div>
+        )}
+        <div className={s.stat}>
+          <span className={s.statLabel}>Global confidence</span>
+          <span className={s.statValue}>
+            {metricsData.confidence.c_global.toFixed(1)}
+            <small>/ 100</small>
+          </span>
+        </div>
+        {/* A simulated light curve says nothing about this patch: no alert status for it. */}
+        {!model3.simulated && (
+          <div className={s.stat}>
+            <span className={s.statLabel}>Alert status</span>
+            <span className={s.statValue}>{model3.citizen_level1?.alert_status ?? "n/a"}</span>
+          </div>
+        )}
+      </div>
+
       <div className={s.gridTwo}>
         <div className={s.subCard}>
           <h3>Model 1 · Event Attribution</h3>
@@ -215,6 +245,7 @@ export default function ModelsAndMetricsPanel({
           {metricsData.image_photometry.length === 0 ? (
             <p className={s.note}>No float32 (.npz) epoch photometry available for this detector.</p>
           ) : (
+            <div className={s.tableWrap}>
             <table className={s.table}>
               <thead>
                 <tr>
@@ -243,6 +274,7 @@ export default function ModelsAndMetricsPanel({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {metricsData.image_photometry.some((row) => row.saturated_frames > 0) && (
             <p className={s.note}>≥ {LOWER_LIMIT_NOTE}</p>

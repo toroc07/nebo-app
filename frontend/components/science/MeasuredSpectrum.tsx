@@ -34,7 +34,7 @@ const BLENDED = "rgb(170 180 190 / 0.85)";
 /** Fewer usable exposures than this is not a spectrum. */
 const MIN_POINTS = 8;
 const W = 640,
-  H = 230,
+  H = 260,
   PAD = { l: 58, r: 14, t: 12, b: 30 };
 
 export default function MeasuredSpectrum({ patchId }: { patchId: number }) {
@@ -119,17 +119,17 @@ export default function MeasuredSpectrum({ patchId }: { patchId: number }) {
         {[1, 2, 3, 4, 5].map((lam) => (
           <g key={lam}>
             <line x1={x(lam)} x2={x(lam)} y1={PAD.t} y2={H - PAD.b} stroke="rgb(63 210 255 / 0.12)" />
-            <text x={x(lam)} y={H - 10} fill="#8fb6c8" fontSize="11" textAnchor="middle">
+            <text x={x(lam)} y={H - 10} fill="#8fb6c8" fontSize="13" textAnchor="middle">
               {lam} µm
             </text>
           </g>
         ))}
         {yTicks.map((f, i) => (
-          <text key={i} x={PAD.l - 6} y={y(f) + 4} fill="#8fb6c8" fontSize="10" textAnchor="end">
+          <text key={i} x={PAD.l - 6} y={y(f) + 4} fill="#8fb6c8" fontSize="12" textAnchor="end">
             {Math.abs(f) >= 1000 ? `${(f / 1000).toFixed(1)}k` : f.toFixed(0)}
           </text>
         ))}
-        <text x={12} y={midY} fill="#8fb6c8" fontSize="10" textAnchor="middle" transform={`rotate(-90 12 ${midY})`}>
+        <text x={12} y={midY} fill="#8fb6c8" fontSize="12" textAnchor="middle" transform={`rotate(-90 12 ${midY})`}>
           flux (µJy)
         </text>
         {data.points.map((p, i) => (

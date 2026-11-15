@@ -18,6 +18,8 @@ import {
   SquareDashed,
   X,
   Microscope,
+  Maximize2,
+  Minimize2,
   ScanLine,
   Sparkles,
   Star,
@@ -169,6 +171,8 @@ export default function Field({
     [scienceTab, setScienceTab] = useState<"diff" | "rgb" | "spectrum" | "models">("diff"),
     // Science side panel; "closing" keeps it mounted while it slides out.
     [analysis, setAnalysis] = useState<"closed" | "open" | "closing">("closed"),
+    // Wide covers the image too so charts and tables get room; compact keeps the image visible.
+    [analysisWide, setAnalysisWide] = useState(true),
     [copied, setCopied] = useState(false);
   // A shared link's epoch applies to the first finished timeline only.
   const firstEpoch = useRef(initialEpoch);
@@ -1149,6 +1153,7 @@ export default function Field({
                 id="science-panel"
                 className={sci.drawer}
                 data-state={analysis}
+                data-size={analysisWide ? "wide" : "side"}
                 role="dialog"
                 aria-labelledby="science-panel-title"
               >
@@ -1156,9 +1161,21 @@ export default function Field({
                   <h2 id="science-panel-title" ref={analysisHeading} tabIndex={-1}>
                     <Microscope aria-hidden="true" /> Scientific analysis
                   </h2>
-                  <button type="button" className={sci.drawerClose} aria-label="Close scientific analysis" onClick={closeAnalysis}>
-                    <X aria-hidden="true" />
-                  </button>
+                  <div className={sci.drawerActions}>
+                    <button
+                      type="button"
+                      className={`${sci.drawerClose} ${sci.drawerResize}`}
+                      aria-pressed={analysisWide}
+                      aria-label={analysisWide ? "Show the image beside the analysis" : "Widen the analysis"}
+                      title={analysisWide ? "Show the image" : "Widen"}
+                      onClick={() => setAnalysisWide((w) => !w)}
+                    >
+                      {analysisWide ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+                    </button>
+                    <button type="button" className={sci.drawerClose} aria-label="Close scientific analysis" onClick={closeAnalysis}>
+                      <X aria-hidden="true" />
+                    </button>
+                  </div>
                 </header>
                 <div className={sci.drawerBody}>
                 <div className={sci.tabs} role="tablist" aria-label="Scientific analysis filters">
