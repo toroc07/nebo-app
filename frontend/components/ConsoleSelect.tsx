@@ -3,7 +3,8 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import s from "./field.module.css";
 
-export type Option = { value: string; label: string };
+/** `short` is shown in the closed control when the full label would not fit; the list shows `label`. */
+export type Option = { value: string; label: string; short?: string };
 
 /**
  * Drop-down styled as part of the ship console. A native <select> opens the operating
@@ -29,7 +30,10 @@ export default function ConsoleSelect({
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
-  const selectedIndex = Math.max(0, options.findIndex((o) => o.value === value));
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((o) => o.value === value),
+  );
 
   function show() {
     setActive(selectedIndex);
@@ -56,7 +60,10 @@ export default function ConsoleSelect({
   }, [open]);
 
   useEffect(() => {
-    if (open) list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+    if (open)
+      list.current
+        ?.querySelector(`[data-index="${active}"]`)
+        ?.scrollIntoView({ block: "nearest" });
   }, [active, open]);
 
   function onButtonKey(e: KeyboardEvent) {
@@ -98,7 +105,13 @@ export default function ConsoleSelect({
           onClick={() => (open ? close(true) : show())}
           onKeyDown={onButtonKey}
         >
-          <span id={`${id}-value`}>{options[selectedIndex]?.label}</span>
+          {/* Visible: the short text when there is one. Announced: always the full label. */}
+          <span aria-hidden="true" title={options[selectedIndex]?.label}>
+            {options[selectedIndex]?.short ?? options[selectedIndex]?.label}
+          </span>
+          <span id={`${id}-value`} hidden>
+            {options[selectedIndex]?.label}
+          </span>
           <ChevronDown aria-hidden="true" data-open={open} />
         </button>
         {open && (

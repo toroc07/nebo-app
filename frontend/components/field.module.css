@@ -906,6 +906,17 @@
   .header h1 {
     font-size: calc(46 * var(--s));
   }
+  /* Long names ("Your observation field", "WISE 0855-0714"): smaller, up to two lines. */
+  .header h1[data-long] {
+    /* A plain block that wraps: inside the flex header, -webkit-box line clamping was blockified
+       and showed one cut line. Two lines of 1.08 fit the header's height. */
+    font-size: calc(30 * var(--s));
+    line-height: 1.08;
+    white-space: normal;
+    text-overflow: clip;
+    max-height: 2.16em;
+    min-width: 0;
+  }
   .body {
     position: absolute;
     top: calc(112 * var(--s));
@@ -1396,7 +1407,11 @@
   .cards {
     min-height: 0;
     overflow-y: auto;
-    scrollbar-width: thin;
+    /* Scrolls with the wheel, trackpad or keyboard, but shows no scrollbar. */
+    scrollbar-width: none;
+  }
+  .cards::-webkit-scrollbar {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

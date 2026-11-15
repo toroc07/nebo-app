@@ -563,6 +563,11 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — The address bar follows the view: the field viewer keeps its link (target or
+  ra/dec, fov, det, epoch, name) up to date, and the sky explorer and start screen write the Coords
+  destination as `?ra=&dec=&view=sky` (cleared without one). A `view=sky` link presets the
+  destination instead of opening the viewer. View images opens the catalogued object under the
+  centre mark (radius scales with the zoom, ≥ 3′). The Earth globe can no longer be dragged.
 - **2026-11-15** — Docs: new [`science-and-techniques.md`](science-and-techniques.md) lists every
   constant, threshold, formula and technique with its purpose; linked from this file, the docs
   index, `data-sources.md`, `observation-lab.md`, the README and the `AGENTS.md` checklist.

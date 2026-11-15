@@ -10,6 +10,8 @@ import {
   gmstDeg,
   subPoint,
   angularDistance,
+  centreRadiusDeg,
+  AT_MAP_CENTRE_DEG,
   hammer,
   hammerInverse,
   fovToFraction,
@@ -35,7 +37,12 @@ test("Dec round-trips through signed d/m/s parts", () => {
 
 test("rounding carries into the next unit instead of showing 60", () => {
   assert.deepEqual(raToParts(359.99999999), { h: "00", m: "00", s: "00.00" });
-  assert.deepEqual(decToParts(4.99999999), { sign: "+", d: "05", m: "00", s: "00.0" });
+  assert.deepEqual(decToParts(4.99999999), {
+    sign: "+",
+    d: "05",
+    m: "00",
+    s: "00.0",
+  });
 });
 
 test("a value that rounds to zero is +00, never −00", () => {
@@ -90,7 +97,14 @@ test("angular distance: poles, equator and tiny separations", () => {
 });
 
 test("Hammer projection round-trips and keeps east on the left", () => {
-  for (const [ra, dec] of [[0.1, 0], [90, 45], [180, 0], [269.446, 4.769], [330, -56.8], [10, -89]]) {
+  for (const [ra, dec] of [
+    [0.1, 0],
+    [90, 45],
+    [180, 0],
+    [269.446, 4.769],
+    [330, -56.8],
+    [10, -89],
+  ]) {
     const p = hammer(ra, dec);
     const back = hammerInverse(p.x, p.y)!;
     near(angularDistance(ra, dec, back.ra, back.dec), 0, 1e-6);
@@ -104,4 +118,13 @@ test("FOV gauge scale is logarithmic and invertible", () => {
   assert.equal(fovToFraction(180), 1);
   near(fractionToFov(fovToFraction(8)), 8, 1e-9);
   near(fovToFraction(Math.sqrt(0.1 * 180)), 0.5, 1e-9);
+});
+
+test("the centre mark covers more sky when zoomed out, never less than 3 arcmin", () => {
+  // Whole sky (180°) on a 1800 px map: the 22 px mark covers 2.2°.
+  assert.ok(Math.abs(centreRadiusDeg(180, 1800) - 2.2) < 1e-9);
+  // Zoomed in, the 3′ floor applies.
+  assert.equal(centreRadiusDeg(1, 1800), AT_MAP_CENTRE_DEG);
+  // No view yet: the floor too.
+  assert.equal(centreRadiusDeg(undefined, 1800), AT_MAP_CENTRE_DEG);
 });

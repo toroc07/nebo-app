@@ -405,12 +405,9 @@
     height: 90%;
     flex: none;
     aspect-ratio: 1;
-    cursor: grab;
-    touch-action: none;
+    /* Not draggable: it always follows the map centre. A click opens the Sky tab. */
+    cursor: pointer;
     overflow: visible;
-  }
-  .earth svg:active {
-    cursor: grabbing;
   }
   .earth svg:focus-visible {
     outline: 1px solid var(--cyan);

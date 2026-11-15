@@ -165,6 +165,17 @@ export default function Field({
   useEffect(() => {
     setDetector(recommended);
   }, [recommended]);
+  // The address bar always holds this field as it is shown (detector, size, epoch), so a reload or
+  // a copied URL opens the same view, and the Coords panel and the URL never disagree.
+  // Until a shared link's epoch has been applied (the field may still be building), the URL keeps
+  // it instead of the provisional first epoch. The field's name (a suggested star) stays too.
+  useEffect(() => {
+    history.replaceState(
+      history.state,
+      "",
+      fieldLink(location.pathname, query, size, detector, firstEpoch.current || epoch, name),
+    );
+  }, [query, size, detector, epoch, name]);
   useEffect(() => {
     setIntervalMs(speed);
   }, [speed]);
@@ -498,14 +509,21 @@ export default function Field({
           </button>
           <header className={s.header}>
             <PlanetIcon />
-            <h1 id="field-title" ref={headingRef} tabIndex={-1}>
+            <h1
+              id="field-title"
+              ref={headingRef}
+              tabIndex={-1}
+              title={target?.name ?? title}
+              // Long names get a smaller size and may wrap to two lines instead of being cut.
+              data-long={(target?.name ?? title).length > 12 ? "" : undefined}
+            >
               {target?.name ?? title}
             </h1>
             <button
               type="button"
               className={s.copyLink}
               onClick={async () => {
-                const url = fieldLink(location.origin + location.pathname, query, size, detector, epoch);
+                const url = fieldLink(location.origin + location.pathname, query, size, detector, epoch, name);
                 try {
                   await navigator.clipboard.writeText(url);
                   setCopied(true);
@@ -526,7 +544,11 @@ export default function Field({
               label="Detector"
               value={String(detector)}
               onChange={(v) => setDetector(Number(v))}
-              options={bands.map((b, i) => ({ value: String(i + 1), label: `D${i + 1} · ${b.range} µm · ${b.use}` }))}
+              options={bands.map((b, i) => ({
+                value: String(i + 1),
+                label: `D${i + 1} · ${b.range} µm · ${b.use}`,
+                short: `D${i + 1} · ${b.range} µm`,
+              }))}
             />
             <ConsoleSelect
               className={s.size}

@@ -16,7 +16,7 @@ import {
   hammerInverse,
   raToParts,
   subPoint,
-  AT_MAP_CENTRE_DEG,
+  centreRadiusDeg,
 } from "@/lib/coordinates";
 import type { SkyLayers, SkyView } from "./Sky";
 import s from "./cockpit.module.css";
@@ -155,7 +155,6 @@ export default function CockpitScreens({
       <EarthGlobe
         countries={countries}
         zenith={zenith}
-        follow={centre ? `${centre.ra.toFixed(4)},${centre.dec.toFixed(4)}` : ""}
         onOpen={() => onTab("sky")}
       />
 
@@ -254,7 +253,8 @@ export default function CockpitScreens({
         <strong>{nearest?.t.name ?? "—"}</strong>
         <small>
           {nearest
-            ? nearest.d < AT_MAP_CENTRE_DEG
+            ? nearest.d <
+              centreRadiusDeg(view?.fov, typeof window === "undefined" ? undefined : window.innerWidth)
               ? "At the map centre"
               : `${nearest.d.toFixed(nearest.d < 10 ? 2 : 1)}° from the map centre · go`
             : "Waiting for the map"}
@@ -308,29 +308,21 @@ function Tools({ focus }: { focus: Position | null }) {
 }
 
 /**
- * Orthographic Earth centred on the zenith point, i.e. the place on Earth where this sky is
- * straight overhead right now. Drag to turn the globe; double-click (or Enter) to re-centre.
+ * Orthographic Earth always centred on the zenith point, i.e. the place on Earth where the map
+ * centre is straight overhead right now. It cannot be turned by hand: it follows the map as the
+ * person moves it, with or without a selected object. A click (or Enter) opens the Sky tab.
  */
 function EarthGlobe({
   countries,
   zenith,
-  follow,
   onOpen,
 }: {
   countries: Countries;
   zenith: { lat: number; lon: number } | null;
-  /** The sky position the zenith comes from; a new one drops any manual rotation. */
-  follow: string;
   onOpen: () => void;
 }) {
-  const [offset, setOffset] = useState<{ lon: number; lat: number } | null>(null);
-  const drag = useRef<{ x: number; y: number; lon: number; lat: number; moved: boolean } | null>(null);
-  // Set after a real drag so the click that ends it does not also open the Sky tab.
-  const dragged = useRef(false);
-  // Keyed on the sky position, not on `zenith`: that one also moves every second with the clock.
-  useEffect(() => setOffset(null), [follow]);
   const size = 100;
-  const centre = offset ?? zenith ?? { lon: 0, lat: 0 };
+  const centre = zenith ?? { lon: 0, lat: 0 };
   const projection = geoOrthographic()
     .scale(size / 2 - 3)
     .translate([size / 2, size / 2])
@@ -338,28 +330,7 @@ function EarthGlobe({
     .clipAngle(90);
   const path = geoPath(projection);
   const point = zenith ? projection([zenith.lon, zenith.lat]) : null;
-  // Hidden when a manual rotation has turned the dot to the far side.
-  const visible = !!zenith && angularDistanceOnEarth(centre, zenith) < 90;
-
-  function onDown(e: PointerEvent<SVGSVGElement>) {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, ...centre, moved: false };
-    dragged.current = false;
-  }
-  function onMove(e: PointerEvent<SVGSVGElement>) {
-    if (!drag.current) return;
-    // A click with a little jitter is still a click, not a rotation.
-    if (!drag.current.moved && Math.hypot(e.clientX - drag.current.x, e.clientY - drag.current.y) < 4) return;
-    drag.current.moved = dragged.current = true;
-    const k = 180 / e.currentTarget.getBoundingClientRect().width;
-    setOffset({
-      lon: drag.current.lon - (e.clientX - drag.current.x) * k,
-      lat: Math.max(-89, Math.min(89, drag.current.lat + (e.clientY - drag.current.y) * k)),
-    });
-  }
-  function endDrag() {
-    drag.current = null;
-  }
+  const visible = !!zenith;
   return (
     <figure className={s.earth} style={place(20, 691, 197, 789)}>
       <svg
@@ -371,22 +342,10 @@ function EarthGlobe({
             : "Earth globe"
         }
         tabIndex={0}
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onLostPointerCapture={endDrag}
-        onDoubleClick={() => setOffset(null)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            setOffset(null);
-            onOpen();
-          }
+          if (e.key === "Enter") onOpen();
         }}
-        onClick={() => {
-          if (dragged.current) dragged.current = false;
-          else onOpen();
-        }}
+        onClick={onOpen}
       >
         <path className={s.earthSphere} d={path({ type: "Sphere" }) ?? ""} />
         <path className={s.earthGrid} d={path(geoGraticule10()) ?? ""} />
@@ -408,19 +367,9 @@ function EarthGlobe({
             <strong>{lon(zenith.lon)}</strong>
           </>
         )}
-        {offset && (
-          <button type="button" onClick={() => setOffset(null)}>
-            Re-centre
-          </button>
-        )}
       </figcaption>
     </figure>
   );
-}
-
-/** Same haversine as the sky one, on Earth coordinates. */
-function angularDistanceOnEarth(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  return angularDistance(a.lon, a.lat, b.lon, b.lat);
 }
 
 /** All-sky Hammer map: every catalogued object, the current view, and click-to-fly. */

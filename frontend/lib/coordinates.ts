@@ -107,6 +107,19 @@ export function subPoint(raDeg: number, decDeg: number, date: Date): { lat: numb
 /** A catalogued object this close to the map centre counts as "at the map centre" (3′, a small field). */
 export const AT_MAP_CENTRE_DEG = 0.05;
 
+/** On-screen radius of the map's centre reticle, in CSS pixels. */
+export const CENTRE_RETICLE_PX = 22;
+
+/**
+ * How close to the map centre an object must be to count as under the reticle: whatever the
+ * reticle covers at this zoom (`fovDeg` across `widthPx`), and never less than 3′. Zoomed out to
+ * the whole sky the reticle covers ~2°, so an object under it opens with View images.
+ */
+export function centreRadiusDeg(fovDeg: number | undefined, widthPx: number | undefined): number {
+  if (!fovDeg || !widthPx || widthPx <= 0) return AT_MAP_CENTRE_DEG;
+  return Math.max(AT_MAP_CENTRE_DEG, (fovDeg / widthPx) * CENTRE_RETICLE_PX);
+}
+
 /** Great-circle separation between two sky positions, in degrees (haversine, stable at small angles). */
 export function angularDistance(ra1: number, dec1: number, ra2: number, dec2: number): number {
   const h =

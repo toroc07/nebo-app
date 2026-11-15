@@ -36,6 +36,20 @@ const STEPS: Step[] = [
     ],
   },
   {
+    title: "Around the cockpit",
+    text: "Talk with other explorers, see where on Earth this sky is overhead, and open whatever sits under the centre mark.",
+    image: "/tutorial/cockpit-tools.webp",
+    alt: "Cockpit with the public chat open on the left, the Earth globe and the nearest catalogued object on the console.",
+    callouts: [
+      { x: 4.5, y: 4.2, lx: 34, ly: 8, label: "Chat", text: "Public chat: one room per featured object, or a general room. Messages are filtered and deleted after 24 hours." },
+      { x: 13.6, y: 35.8, lx: 38, ly: 32, label: "Chat room", text: "Your nickname is made up for you. No links or personal data: they are blocked." },
+      { x: 50, y: 50, lx: 64, ly: 30, label: "Centre mark", text: "View images opens the object under this mark, even if you did not select it." },
+      { x: 7.7, y: 90.7, lx: 18, ly: 70, label: "Earth globe", text: "The place on Earth where the map centre is straight overhead right now. It follows the map." },
+      { x: 81.4, y: 95.5, lx: 70, ly: 72, label: "Nearest object", text: "The closest featured object to the map centre. Click it to fly there." },
+      { x: 95.6, y: 4.2, lx: 86, ly: 16, label: "Back", text: "Returns to the start screen." },
+    ],
+  },
+  {
     title: "Choose a target",
     text: "Pick a featured object, or type any position on the sky.",
     image: "/tutorial/coords.webp",
@@ -59,6 +73,20 @@ const STEPS: Step[] = [
       { x: 57.5, y: 78.8, lx: 50, ly: 93, label: "Speed", text: "How long each epoch stays on screen." },
       { x: 79, y: 79.5, lx: 76, ly: 93, label: "Epochs", text: "Step through the dates one by one, or use the ← → keys." },
       { x: 84.4, y: 25.6, lx: 88, ly: 9, label: "Detector", text: "Each detector is a different band. Compare within one; WISE 0855 only shows in D6." },
+    ],
+  },
+  {
+    title: "Layers, links and analysis",
+    text: "Check the field against other catalogues, share exactly what you see, and open the analysis panel.",
+    image: "/tutorial/field-tools.webp",
+    alt: "Field screen with the Gaia layer on, the Copy link button, the layer buttons and the 3D model on the wall tablet.",
+    callouts: [
+      { x: 64.3, y: 17.3, lx: 66, ly: 5, label: "Copy link", text: "The address bar always holds this exact view (object or coordinates, detector, size, epoch). Copy it to share." },
+      { x: 80.9, y: 36.1, lx: 92, ly: 22, label: "Layers", text: "Gaia DR3 stars, CatWISE infrared sources and detected changes, each with its own switch." },
+      { x: 44, y: 52, lx: 28, ly: 40, label: "Catalogue rings", text: "Gaia stars moved to the date of each epoch. Click one for its distance and motion." },
+      { x: 38.2, y: 27.7, lx: 22, ly: 12, label: "Analysis", text: "Spectrum, RGB and models. Parts built from demonstration profiles say \"simulated\"." },
+      { x: 55.5, y: 31.3, lx: 46, ly: 5, label: "Alignment", text: "Checks that the epochs line up with Gaia before you trust a change." },
+      { x: 18.5, y: 71.7, lx: 12, ly: 92, label: "3D model", text: "An illustration of the object, from its type and temperature. Not SPHEREx data." },
     ],
   },
   {

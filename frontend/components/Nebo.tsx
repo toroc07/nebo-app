@@ -7,7 +7,7 @@ import { useGSAP } from "@gsap/react";
 import { ArrowLeft } from "lucide-react";
 import { read, type Target, type Query } from "@/lib/api";
 import { parseFieldLink, type FieldLink } from "@/lib/fieldLink";
-import { angularDistance, AT_MAP_CENTRE_DEG } from "@/lib/coordinates";
+import { angularDistance, centreRadiusDeg } from "@/lib/coordinates";
 import Field from "./Field";
 import Cockpit from "./Cockpit";
 import ChatPanel from "./ChatPanel";
@@ -81,9 +81,16 @@ export default function Nebo() {
     } catch {}
     const shared = parseFieldLink(location.search);
     if (shared) {
-      setLink(shared);
-      setQuery(shared.query);
-      setView("Field");
+      // Coordinates in the URL are also the cockpit's destination, so the Coords panel shows them.
+      if (shared.query.ra !== undefined && shared.query.dec !== undefined)
+        setSkyCoordinates({ ra: shared.query.ra, dec: shared.query.dec });
+      // `view=sky` (written by the sky explorer) only presets the destination; a field link opens
+      // the viewer straight away.
+      if (new URLSearchParams(location.search).get("view") !== "sky") {
+        setLink(shared);
+        setQuery(shared.query);
+        setView("Field");
+      }
     }
     setLoaded(true);
     const m = matchMedia("(prefers-reduced-motion: reduce)");
@@ -101,6 +108,20 @@ export default function Nebo() {
     }
     document.documentElement.dataset.reduced = String(reduced);
   }, [prefs, loaded, reduced]);
+  // Outside the field viewer (sky explorer, start screen) the address bar follows the Coords
+  // destination (`?ra=&dec=&view=sky`) and is cleared without one, so Back never leaves a field
+  // link behind that a reload would reopen. The field viewer writes its own link (Field.tsx).
+  useEffect(() => {
+    if (!loaded || view === "Field") return;
+    const url = skyCoordinates
+      ? `${location.pathname}?${new URLSearchParams({
+          ra: skyCoordinates.ra.toFixed(6),
+          dec: skyCoordinates.dec.toFixed(6),
+          view: "sky",
+        })}`
+      : location.pathname;
+    history.replaceState(history.state, "", url);
+  }, [loaded, view, skyCoordinates]);
   // A target link names the field once the catalogue arrives.
   useEffect(() => {
     if (link?.query.target && !selected) {
@@ -484,12 +505,16 @@ export default function Nebo() {
               }}
               onZoom={(action) => setSkyCommand({ id: Date.now(), action })}
               onView={(p) => {
-                // The console calls an object within 3′ "at the map centre": open that object, not a new
-                // patch beside it (the backend only reuses a patch within 30″). Typed coordinates are
-                // left to the backend's match (P0-6).
-                const centred = !skyCoordinates && targets.find(
-                  (t) => angularDistance(p.ra, p.dec, t.ra, t.dec) < AT_MAP_CENTRE_DEG,
-                );
+                // An object under the centre reticle (3′, or more when zoomed out: what the reticle
+                // covers on screen) opens as that object, not a new patch beside it (the backend only
+                // reuses a patch within 30″). Typed coordinates are left to the backend's match (P0-6).
+                const radius = centreRadiusDeg(skyView?.fov, window.innerWidth);
+                const centred = skyCoordinates
+                  ? undefined
+                  : targets
+                      .map((t) => ({ t, d: angularDistance(p.ra, p.dec, t.ra, t.dec) }))
+                      .filter((x) => x.d < radius)
+                      .sort((a, b) => a.d - b.d)[0]?.t;
                 if (selected) open(selected);
                 else if (centred) open(centred);
                 else {
