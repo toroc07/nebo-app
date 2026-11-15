@@ -22,7 +22,8 @@ from app.targets import TARGETS
 from tests.fakes import make_cutout_bytes, make_records
 from tests.memory_store import MemoryStore
 
-RA, DEC = 269.446223, 4.768780
+# A free field 1 deg east of Barnard's Star: coordinate searches here must not match a catalogue object.
+RA, DEC = 270.446223, 4.768780
 
 
 def wait_until_settled(service: TimelineService, patch, detector=3, size="medium", timeout_s=30.0):

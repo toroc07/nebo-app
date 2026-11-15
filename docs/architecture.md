@@ -548,6 +548,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Coordinate requests within 30″ of a catalogue object's 1990–2027 track resolve to
+  that object's patch. Typed catalogue coordinates of fast movers (WISE 0855 is 128″ from its
+  2026.2 position) used to start a new download instead of opening the preloaded field.
 - **2026-11-15** — Journey: a field opened by coordinates that lands on a catalogued object's patch
   (the 30″ reuse rule; `/timeline` returns `patch.target`) is named as that object in the viewer.
   A failed `/candidates` request no longer shows the generic 404 text "could not find this object".
