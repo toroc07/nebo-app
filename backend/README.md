@@ -453,10 +453,14 @@ are listed as `skip <id>` and left for a rerun.
   covers every frame of the epoch; `max_gap_days` and `wavelength_um` only the frames used in
   the co-add, so `max_gap_days` can exceed `EPOCH_GAP_DAYS` when unused frames sit in a gap.
 - per epoch: `quality`: `{frames_used, frames_available, clean_fraction, flagged_fraction,
-  saturated_frames, saturation_checked_frames}`. `clean_fraction` / `flagged_fraction` are the
+  saturated_frames, saturation_checked_frames, center_flags, center_flags_checked_frames}`. `clean_fraction` / `flagged_fraction` are the
   mean of the stored per-frame `clean_pixel_fraction` / `science_bad_fraction` over the frames
   used (`null` when none is stored); `saturated_frames` counts frames with OVERFLOW/SUR_ERROR in
-  the 5×5 box at the centre (frames never checked are not counted).
+  the 5×5 box at the centre (frames never checked are not counted). `center_flags` maps each
+  SPHEREx FLAGS bit name (e.g. `PERSIST`, `SNOWBALL`, `HALO`) set at the centre pixel to the
+  number of frames used that carry it, only for flags seen, most frequent first, decoded from the
+  stored `flags_bitmask_center` with the default bit numbers; `center_flags_checked_frames` counts
+  the frames with a stored value.
 - per epoch: `warnings`: list of `{code, text}`, empty when there is nothing to note. Codes:
   `few_frames` (fewer than `FEW_FRAMES_WARNING` = 4 frames used), `dense_field` (|`galactic_b`| <
   `DENSE_FIELD_GALACTIC_B_DEG` = 10°), `saturation` (`saturated_frames` > 0) and `mixed_bursts`

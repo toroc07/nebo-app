@@ -548,6 +548,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Contamination flags per epoch: `/timeline` epoch `quality` adds
+  `center_flags` (SPHEREx FLAGS bit name → frames whose centre pixel carries it, decoded from the
+  already stored `flags_bitmask_center`) and `center_flags_checked_frames`. The field viewer lists
+  them under "Flags at centre" with a plain-English meaning. No schema change.
 - **2026-11-15** — The Gaia/CatWISE cross-match for Model 1 is requested only when the field has an
   event to classify: fields without one answered in ~32 s per panel request while ESA Gaia and
   IRSA's CatWISE were down (every request retried the cross-match); now they answer without it.

@@ -141,9 +141,9 @@ def test_epoch_quality_averages_the_frames_inside_the_epoch():
     )
     exposures = [
         {"mjd_start": 61000.0, "clean_pixel_fraction": 0.9, "science_bad_fraction": 0.1,
-         "saturated_near_target": True},
+         "saturated_near_target": True, "flags_bitmask_center": (1 << 17) | (1 << 27)},
         {"mjd_start": 61004.0, "clean_pixel_fraction": 0.8, "science_bad_fraction": 0.2,
-         "saturated_near_target": False},
+         "saturated_near_target": False, "flags_bitmask_center": 1 << 17},  # PERSIST
         {"mjd_start": 61010.0, "clean_pixel_fraction": None, "science_bad_fraction": float("nan"),
          "saturated_near_target": None},  # unknown: skipped, never counted as clean
         {"mjd_start": 61300.0, "clean_pixel_fraction": 0.1, "science_bad_fraction": 0.9,
@@ -156,10 +156,13 @@ def test_epoch_quality_averages_the_frames_inside_the_epoch():
         "flagged_fraction": pytest.approx(0.15),
         "saturated_frames": 1,
         "saturation_checked_frames": 2,
+        "center_flags": {"PERSIST": 2, "SNOWBALL": 1},
+        "center_flags_checked_frames": 2,
     }
     empty = main._epoch_quality([], image)
     assert empty["clean_fraction"] is None and empty["flagged_fraction"] is None
     assert empty["saturated_frames"] == 0 and empty["saturation_checked_frames"] == 0
+    assert empty["center_flags"] == {} and empty["center_flags_checked_frames"] == 0
 
 
 def test_epoch_warnings_codes_and_thresholds():

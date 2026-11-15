@@ -187,11 +187,18 @@ def _epoch_quality(exposures: list[dict], image) -> dict:
     excludes them from photometry, SPHEREx Explanatory Supplement Table 16) over the frames used
     in the co-add. ``saturated_frames`` counts frames with OVERFLOW/SUR_ERROR in the photometry
     box around the object; frames never checked are not counted (see
-    ``saturation_checked_frames``).
+    ``saturation_checked_frames``). ``center_flags`` counts, per named FLAGS bit, the frames
+    whose centre pixel carries it (``center_flags_checked_frames``: frames with a stored value).
     """
     low, high = float(datetime_to_mjd(image.start_utc)), float(datetime_to_mjd(image.end_utc))
     inside = [e for e in exposures if low - 1e-4 <= e["mjd_start"] <= high + 1e-4]
     saturation = [e.get("saturated_near_target") for e in inside]
+    bitmasks = [int(e["flags_bitmask_center"]) for e in inside if e.get("flags_bitmask_center") is not None]
+    # shortcut: default bit numbers, not each file's MSKN header; upgrade if a release remaps bits.
+    counts = {
+        name: sum(1 for m in bitmasks if m & (1 << bit))
+        for name, bit in imaging.DEFAULT_FLAG_BITS.items()
+    }
     return {
         "frames_used": image.frames_used,
         "frames_available": image.frames_available,
@@ -199,6 +206,8 @@ def _epoch_quality(exposures: list[dict], image) -> dict:
         "flagged_fraction": _mean_fraction([e.get("science_bad_fraction") for e in inside]),
         "saturated_frames": sum(1 for s in saturation if s is True),
         "saturation_checked_frames": sum(1 for s in saturation if s is not None),
+        "center_flags": dict(sorted(((k, n) for k, n in counts.items() if n), key=lambda kv: -kv[1])),
+        "center_flags_checked_frames": len(bitmasks),
     }
 
 
