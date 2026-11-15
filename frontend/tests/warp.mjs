@@ -20,7 +20,7 @@ const targets = [
   },
 ];
 
-// "Begin exploring" opens the sky globe (Aladin). Its map servers are outside this test, so they
+// START on the home screen opens the sky globe (Aladin). Its map servers are outside this test, so they
 // are blocked (Aladin then logs errors, which are expected). The globe is "ready" as soon as
 // Aladin has started, and its code is only downloaded when the button is pressed: delaying every
 // script requested from then on by `scriptDelayMs` is how a slow globe is simulated, and the
@@ -48,11 +48,8 @@ async function run({
     route.abort(),
   );
   await page.goto(url);
-  await page.waitForFunction(() => document.documentElement.dataset.theme);
-  await page.getByRole("button", { name: /Start exploring/ }).click();
-  await page
-    .getByRole("heading", { level: 1, name: "Observe", exact: true })
-    .waitFor();
+  await page.waitForFunction(() => document.documentElement.dataset.reduced);
+  await page.getByRole("navigation", { name: "Start menu" }).waitFor();
   // Record when the overlay appears and disappears, with the clock of the page.
   await page.evaluate(() => {
     window.__events = [];
@@ -75,7 +72,10 @@ async function run({
     });
   }
   const clickedAt = await page.evaluate(() => performance.now());
-  await page.getByRole("button", { name: /Begin\s*exploring/ }).click();
+  await page
+    .getByRole("navigation", { name: "Start menu" })
+    .getByRole("button", { name: /^Start/ })
+    .click();
   return { page, errors, clickedAt };
 }
 
@@ -87,8 +87,9 @@ const events = (page) => page.evaluate(() => window.__events);
   const overlay = page.locator("[data-warp]");
   await overlay.waitFor({ timeout: 2000 });
   const [added] = (await events(page)).filter(([k]) => k === "added");
+  // START first switches the wall screen off, turns the camera and powers the cockpit up.
   assert.ok(
-    added[1] - clickedAt < 600,
+    added[1] - clickedAt < 4000,
     `appeared ${Math.round(added[1] - clickedAt)} ms after the click`,
   );
   assert.equal(await overlay.locator("canvas").count(), 1);
