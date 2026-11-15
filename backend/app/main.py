@@ -405,6 +405,55 @@ def timeline_diff(
     return Response(content=png, media_type="image/png", headers={"X-Diff-Limit": f"{limit:.6g}"})
 
 
+@app.get(f"{API_PREFIX}/timeline/rgb")
+def timeline_rgb(
+    r: int = Query(6, ge=1, le=6, description="Detector mapped to Red (long wavelength)."),
+    g: int = Query(3, ge=1, le=6, description="Detector mapped to Green (medium wavelength)."),
+    b: int = Query(1, ge=1, le=6, description="Detector mapped to Blue (short wavelength)."),
+    epoch: int = Query(0, ge=0, description="Epoch index."),
+    ra: float | None = Query(None, ge=0.0, lt=360.0),
+    dec: float | None = Query(None, ge=-90.0, le=90.0),
+    target: str | None = Query(None, pattern=r"^[a-z0-9-]{1,64}$"),
+    size: SizeName = Query(config.DEFAULT_SIZE),
+    service: TimelineService = Depends(get_service),
+) -> Response:
+    """False-color RGBA PNG combining three SPHEREx detectors (R=long, G=medium, B=short).
+
+    Requires all three detector timelines to be ``ready`` with float32 ``.npz`` data; never
+    starts a background build. Returns 404 with ``missing_detectors`` if any band is missing.
+    """
+    patch, _ = _resolve(service, ra, dec, target, None)
+    store = service.store
+    detectors = (r, g, b)
+    missing: list[int] = []
+    arrays: list[np.ndarray] = []
+    for det in detectors:
+        tl = store.get_timeline(patch.id, det)
+        if tl is None or tl.status != "ready":
+            missing.append(det)
+            continue
+        by_epoch = {img.epoch_index: img for img in store.list_images(tl.id, "large")}
+        if epoch not in by_epoch:
+            missing.append(det)
+            continue
+        npz = store.get_npz(by_epoch[epoch].id)
+        if npz is None:
+            missing.append(det)
+            continue
+        arrays.append(np.load(io.BytesIO(npz))["image"])
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "Missing ready detector timelines or float32 data for RGB composite.",
+                "missing_detectors": sorted(set(missing)),
+            },
+        )
+    side = imaging.grid_pixels(config.SIZES_DEG[size])
+    png = imaging.to_rgb_png(*(imaging.crop_center(x, side) for x in arrays))
+    return Response(content=png, media_type="image/png")
+
+
 @app.get(f"{API_PREFIX}/images/{{image_id}}.png")
 def get_image(image_id: int = Path(..., ge=1), store: Store = Depends(get_store)) -> Response:
     """A processed PNG. Ids change when a timeline is rebuilt, so it can be cached for long."""

@@ -28,10 +28,171 @@ export type Epoch = {
 };
 export type Timeline = {
   status: "ready";
-  patch: { ra: number; dec: number };
-  detector: { id: number; wavelength_range_um: number[] };
-  size: { side_arcmin: number; pixel_scale_arcsec: number };
+  patch: { id: number; ra: number; dec: number; target?: string | null };
+  detector: { id: number; bandpass?: string; wavelength_range_um: number[] };
+  size: { name?: string; side_arcmin: number; width_px?: number; height_px?: number; pixel_scale_arcsec: number };
   epochs: Epoch[];
+};
+
+export type SpectralChannelPoint = {
+  channel_id: number;
+  band: number;
+  lambda_c_um: number;
+  flux_mjy: number | null;
+  sigma_mjy: number | null;
+  is_blankch?: boolean;
+};
+
+export type SpectralIndexValue = {
+  index_code: string;
+  target_physics?: string;
+  value: number | null;
+  sigma: number | null;
+  snr?: number | null;
+  is_significant?: boolean;
+};
+
+export type PatchSpectrumResponse = {
+  patch_id: number;
+  epoch_index: number;
+  simulated?: boolean;
+  data_note?: string;
+  channels: SpectralChannelPoint[];
+  indices?: SpectralIndexValue[];
+};
+
+export type ImagePhotometryPoint = {
+  epoch_index: number;
+  mid_mjd: number;
+  flux_hat: number;
+  sigma_stat: number;
+  sigma_reported: number;
+  snr: number;
+  q_fit_epsf: number;
+  chi2_psf: number;
+  p_clean_flags: number;
+  f_artifact_flags: number;
+};
+
+export type PatchMetricsResponse = {
+  patch: { id: number; ra: number; dec: number; target?: string | null };
+  simulated?: boolean;
+  data_note?: string;
+  confidence: {
+    score: number;
+    grade?: string;
+    components?: Record<string, number>;
+  };
+  variability: {
+    chi2_var?: number;
+    chi2_red?: number;
+    stetson_j?: number;
+    eta?: number;
+    lomb_scargle_fap?: number;
+    is_variable?: boolean;
+  };
+  spectral_indices: SpectralIndexValue[];
+  image_photometry: ImagePhotometryPoint[];
+};
+
+export type Model1EventResponse = {
+  predicted_class: string;
+  probabilities: Record<string, number>;
+  temperature_t?: number;
+  treeshap_values?: {
+    base_value?: number;
+    per_feature?: Record<string, number>;
+    top_drivers?: Array<{
+      feature: string;
+      shap_value?: number;
+      contribution?: number;
+      direction?: string;
+    }>;
+  };
+  citizen_level1?: {
+    traffic_light?: string;
+    headline?: string;
+    confidence_score_pct?: number;
+    badge?: string;
+    explanation?: string;
+  };
+  simulated?: boolean;
+  data_note?: string;
+};
+
+export type Model2SpectrumResponse = {
+  predicted_class: string;
+  best_template_name: string;
+  chi2_reduced: number;
+  bayesian_posteriors: Record<string, number>;
+  citizen_level1?: {
+    probable_identity: string;
+    confidence_pct: number;
+    chemical_fingerprints: string[];
+    fit_quality: string;
+  };
+  simulated?: boolean;
+  data_note?: string;
+};
+
+export type Model3ForecastResponse = {
+  forecast_series?: Array<{
+    mjd: number;
+    flux_mean_mjy: number;
+    flux_std_mjy: number;
+  }>;
+  predicted_cone?: {
+    target_mjd: number;
+    horizon_days: number;
+    ra_pred_deg: number;
+    dec_pred_deg: number;
+    cone_radius_1s_arcsec: number;
+    cone_radius_3s_arcsec: number;
+  };
+  z_alert?: number;
+  mahalanobis_d2?: number;
+  alert_triggered?: boolean;
+  citizen_level1?: {
+    alert_status?: string;
+    alert_triggered?: boolean;
+    vetoed_by_model1?: boolean;
+    summary?: string;
+  };
+  simulated?: boolean;
+  data_note?: string;
+};
+
+export type CandidateDetection = {
+  x: number;
+  y: number;
+  ra: number;
+  dec: number;
+  snr: number;
+  delta_flux: number;
+  label: "catalogued_object" | "candidate_signal";
+  gaia_match?: { source_id: string; g_mag: number; dist_arcsec: number } | null;
+  wise_match?: { source_id: string; w1_mag: number; w2_mag: number; dist_arcsec: number } | null;
+};
+
+export type CandidatesResponse = {
+  patch_id: number;
+  detector: number;
+  size: string;
+  epoch_a: number;
+  epoch_b: number;
+  gaia_available: boolean;
+  wise_available: boolean;
+  gaia_complete_to_g: number | null;
+  candidates: CandidateDetection[];
+};
+
+export type CitizenVote = {
+  id: number;
+  patch_id: number;
+  epoch_index: number;
+  vote: string;
+  comment?: string | null;
+  created_at: string;
 };
 export type Building = {
   status: "building";
@@ -66,6 +227,33 @@ export async function read<T>(path: string, signal?: AbortSignal): Promise<T> {
   let r: Response;
   try {
     r = await fetch(origin + "/api/v1" + path, { signal });
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    throw new ApiError(0);
+  }
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    throw new ApiError(
+      r.status,
+      b.code,
+      Number(r.headers.get("Retry-After")) || 0,
+    );
+  }
+  return r.json();
+}
+export async function post<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  let r: Response;
+  try {
+    r = await fetch(origin + "/api/v1" + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
   } catch (e) {
     if (signal?.aborted) throw e;
     throw new ApiError(0);
@@ -175,4 +363,103 @@ export function releaseLabel(releases?: string[]) {
 }
 export function nextEpoch(index: number, count: number) {
   return count > 1 ? (index + 1) % count : 0;
+}
+
+function queryParams(query: Query, extra: Record<string, string | number>) {
+  const base = Object.fromEntries(
+    Object.entries(query).map(([k, v]) => [k, String(v)]),
+  );
+  return new URLSearchParams({
+    ...base,
+    ...Object.fromEntries(
+      Object.entries(extra).map(([k, v]) => [k, String(v)]),
+    ),
+  });
+}
+
+export function diffImageUrl(
+  query: Query,
+  opts: { a: number; b: number; detector: number; size: string },
+) {
+  return `${origin}/api/v1/timeline/diff?${queryParams(query, opts)}`;
+}
+
+export function rgbImageUrl(
+  query: Query,
+  opts: { r: number; g: number; b: number; epoch: number; size: string },
+) {
+  return `${origin}/api/v1/timeline/rgb?${queryParams(query, opts)}`;
+}
+
+export function fetchPatchSpectrum(
+  patchId: number,
+  epochIndex = -1,
+  signal?: AbortSignal,
+) {
+  return read<PatchSpectrumResponse>(
+    `/patches/${patchId}/spectrum?epoch_index=${epochIndex}`,
+    signal,
+  );
+}
+
+export function fetchPatchMetrics(
+  patchId: number,
+  detector?: number,
+  signal?: AbortSignal,
+) {
+  const qs = detector ? `?detector=${detector}` : "";
+  return read<PatchMetricsResponse>(`/patches/${patchId}/metrics${qs}`, signal);
+}
+
+export function fetchPatchCandidates(
+  patchId: number,
+  opts: {
+    detector: number;
+    size: string;
+    epoch_a: number;
+    epoch_b: number;
+    snr_threshold?: number;
+  },
+  signal?: AbortSignal,
+) {
+  const qs = new URLSearchParams(
+    Object.entries(opts).map(([k, v]) => [k, String(v)]),
+  );
+  return read<CandidatesResponse>(
+    `/patches/${patchId}/candidates?${qs}`,
+    signal,
+  );
+}
+
+export function fetchModel1Event(patchId: number, signal?: AbortSignal) {
+  return read<Model1EventResponse>(
+    `/patches/${patchId}/models/event`,
+    signal,
+  );
+}
+
+export function fetchModel2Spectrum(patchId: number, signal?: AbortSignal) {
+  return read<Model2SpectrumResponse>(
+    `/patches/${patchId}/models/spectrum`,
+    signal,
+  );
+}
+
+export function fetchModel3Forecast(patchId: number, signal?: AbortSignal) {
+  return read<Model3ForecastResponse>(
+    `/patches/${patchId}/models/forecast`,
+    signal,
+  );
+}
+
+export function fetchCitizenVotes(patchId: number, signal?: AbortSignal) {
+  return read<CitizenVote[]>(`/patches/${patchId}/votes`, signal);
+}
+
+export function submitCitizenVote(
+  patchId: number,
+  payload: { epoch_index: number; vote: string; comment?: string },
+  signal?: AbortSignal,
+) {
+  return post<CitizenVote>(`/patches/${patchId}/votes`, payload, signal);
 }

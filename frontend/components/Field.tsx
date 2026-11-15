@@ -29,6 +29,11 @@ import { decToParts, raToParts } from "@/lib/coordinates";
 import { pixelToSky } from "@/lib/lab/sky";
 import dynamic from "next/dynamic";
 import ConsoleSelect from "./ConsoleSelect";
+import EpochDiffTriplet from "./science/EpochDiffTriplet";
+import ModelsAndMetricsPanel from "./science/ModelsAndMetricsPanel";
+import RgbCompositeView from "./science/RgbCompositeView";
+import SpectrumChart from "./science/SpectrumChart";
+import sci from "./science/science.module.css";
 import s from "./field.module.css";
 
 // WebGL only exists in the browser: the wall tablet's 3D model is loaded on the client.
@@ -96,7 +101,8 @@ export default function Field({
     [playing, setPlaying] = useState(false),
     [interval, setIntervalMs] = useState(speed),
     [imageError, setImageError] = useState(false),
-    [imageLoading, setImageLoading] = useState(true);
+    [imageLoading, setImageLoading] = useState(true),
+    [scienceTab, setScienceTab] = useState<"none" | "diff" | "rgb" | "spectrum" | "models">("none");
   useEffect(() => {
     setDetector(recommended);
   }, [recommended]);
@@ -546,6 +552,63 @@ export default function Field({
                 </button>
               </div>
             </div>
+
+            {data?.patch.id && (
+              <div className={sci.scienceSection}>
+                <div className={sci.tabs} role="tablist" aria-label="Scientific analysis filters">
+                  {(
+                    [
+                      ["none", "Hide analysis"],
+                      ["diff", "Compare (3-Panel)"],
+                      ["rgb", "RGB Composite"],
+                      ["spectrum", "Spectrum (102 ch)"],
+                      ["models", "Models & Metrics"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={scienceTab === id}
+                      className={sci.tab}
+                      onClick={() => setScienceTab(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {scienceTab === "diff" && (
+                  <EpochDiffTriplet
+                    patchId={data.patch.id}
+                    query={query}
+                    detector={detector}
+                    size={size}
+                    epochs={data.epochs}
+                    currentEpoch={epoch}
+                    widthPx={data.size.width_px ?? pixels?.w}
+                    heightPx={data.size.height_px ?? pixels?.h}
+                  />
+                )}
+                {scienceTab === "rgb" && (
+                  <RgbCompositeView
+                    patchId={data.patch.id}
+                    query={query}
+                    size={size}
+                    epoch={epoch}
+                    onBuildDetector={(d) => setDetector(d)}
+                  />
+                )}
+                {scienceTab === "spectrum" && <SpectrumChart patchId={data.patch.id} />}
+                {scienceTab === "models" && (
+                  <ModelsAndMetricsPanel
+                    patchId={data.patch.id}
+                    detector={detector}
+                    epochIndex={epoch}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
