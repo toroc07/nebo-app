@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
-import { BookOpen, Rocket } from "lucide-react";
+import { ArrowLeft, BookOpen, Rocket, Users } from "lucide-react";
 import TutorialTour from "./TutorialTour";
 import s from "./home.module.css";
 
@@ -59,6 +59,37 @@ const MOTES: [number, number, number, number][] = [
   [8, 40, 6.2, 8.5],
 ];
 
+/*
+ * Crew roster. Short professional profiles, kept to a title (no invented bios or credentials).
+ */
+const CREW = [
+  {
+    name: "Jasen Mihovil Yukopila Escobar",
+    role: "Software Developer & Data Scientist",
+    photo: "/crew/jasen.webp",
+  },
+  {
+    name: "Alejandro Patron Montero",
+    role: "Full-Stack Developer",
+    photo: "/crew/alejandro.webp",
+  },
+  {
+    name: "Carlos Toro Torres",
+    role: "Backend Developer & Data Analyst",
+    photo: "/crew/carlos.webp",
+  },
+  {
+    name: "Shalom Jhoanna",
+    role: "Frontend Developer",
+    photo: "/crew/shalom.webp",
+  },
+  {
+    name: "Daryem Antonio Garcia Cardona",
+    role: "Backend Developer & Data Engineer",
+    photo: "/crew/daryem.webp",
+  },
+];
+
 export default function HomeScene({
   headingRef,
   onStart,
@@ -68,6 +99,7 @@ export default function HomeScene({
 }) {
   const [off, setOff] = useState(false);
   const [touring, setTouring] = useState(false);
+  const [showCrew, setShowCrew] = useState(false);
   const tutorialButton = useRef<HTMLButtonElement>(null);
   const opened = useRef(false);
   // Back on TUTORIAL after closing the tour (TutorialTour focuses its own step titles).
@@ -124,6 +156,26 @@ export default function HomeScene({
           height={393}
           draggable={false}
         />
+        {showCrew ? (
+          <section className={s.crew} aria-labelledby="crew-title">
+            <header className={s.crewHead}>
+              <h2 id="crew-title">Crew</h2>
+              <button type="button" className={s.crewBack} onClick={() => setShowCrew(false)} autoFocus>
+                <ArrowLeft aria-hidden="true" /> Back
+              </button>
+            </header>
+            <ul className={s.crewList}>
+              {CREW.map((m) => (
+                <li key={m.name} className={s.member}>
+                  <img src={m.photo} alt="" width={96} height={96} draggable={false} />
+                  <strong>{m.name}</strong>
+                  <span>{m.role}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <>
         <header className={s.header}>
           <p className={s.status}>
             <span aria-hidden="true" /> Landed · Earth · systems ready
@@ -148,7 +200,16 @@ export default function HomeScene({
               <small>Every section, step by step</small>
             </span>
           </button>
+          <button type="button" className={s.tutorial} onClick={() => setShowCrew(true)}>
+            <Users aria-hidden="true" />
+            <span>
+              <strong>Crew</strong>
+              <small>The team on board</small>
+            </span>
+          </button>
         </nav>
+          </>
+        )}
       </div>
       {touring && (
         <TutorialTour

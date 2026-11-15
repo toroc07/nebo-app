@@ -1005,7 +1005,7 @@ export default function Field({
                           : "Field chosen by coordinates"}
                     </dd>
                   </div>
-                  <div>
+                  <div className={s.wide}>
                     <dt>Band</dt>
                     <dd>
                       D{detector} · {data ? data.detector.wavelength_range_um.join("–") : band.range} µm
@@ -1024,19 +1024,19 @@ export default function Field({
                     </div>
                   )}
                   {current && (
-                    <div>
+                    <div className={s.wide}>
                       <dt>Images</dt>
                       <dd>{qualityLabel(current)}</dd>
                     </div>
                   )}
                   {warnings.length > 0 && (
-                    <div>
+                    <div className={s.wide}>
                       <dt>Notes</dt>
                       <dd>
                         {/* Amber chips: what may make this epoch less reliable, from the API. */}
                         <ul className={s.epochNotes} aria-label="Data quality notes for this epoch">
                           {warnings.map((w) => (
-                            <li key={w.code} title={w.text}>
+                            <li key={w.code}>
                               <b>{warningLabel(w.code)}</b> {w.text}
                             </li>
                           ))}

@@ -929,7 +929,7 @@
      * The image is the protagonist: it owns the whole left column, from the title rule to
      * the epoch controls. Detector and field size sit above the cards on the right.
      */
-    grid-template-columns: calc(528 * var(--s)) minmax(0, 1.25fr) minmax(0, 0.85fr);
+    grid-template-columns: calc(496 * var(--s)) minmax(0, 1.25fr) minmax(0, 0.85fr);
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       "viewer detector size"
@@ -938,9 +938,9 @@
     column-gap: calc(12 * var(--s));
     row-gap: calc(8 * var(--s));
   }
-  /* The image column keeps its 500 reference pixels; the other 28 are the gap to the pickers. */
+  /* The image column keeps 476 reference pixels; the other 20 are the gap to the data. */
   .viewer {
-    margin-right: calc(28 * var(--s));
+    margin-right: calc(20 * var(--s));
   }
   /* Detector and size share one row (label above each picker): the cards get the height. */
   .detector,
@@ -963,16 +963,133 @@
     padding-top: calc(2 * var(--s));
     gap: calc(8 * var(--s));
   }
+  /*
+   * Visual hierarchy of the data column, most important first:
+   *   1. the position (RA / Dec) as two large readouts, the latitudes as a quiet line under them;
+   *   2. the object: its name large, then the facts in one panel with small labels;
+   *   3. quality notes as an amber strip at the foot.
+   * No card frames; a small caption names each section.
+   */
+  .card {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
   .card h2 {
-    padding: calc(3 * var(--s)) calc(16 * var(--s));
-    font-size: calc(15.5 * var(--s));
+    gap: calc(6 * var(--s));
+    padding: 0 0 calc(4 * var(--s));
+    font-size: max(10px, calc(12 * var(--s)));
+    letter-spacing: 0.12em;
+    background: none;
+    border: 0;
+  }
+  .card h2 svg {
+    width: 1.2em;
+    height: 1.2em;
   }
   .card dl {
-    padding: 0 calc(16 * var(--s));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: calc(12 * var(--s));
+    padding: 0;
     font-size: calc(14.5 * var(--s));
   }
-  .card dl > div {
-    padding: calc(1.5 * var(--s)) 0;
+  .card dl > div,
+  .card dl > div + div {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    min-width: 0;
+    padding: calc(3 * var(--s)) 0;
+    border: 0;
+  }
+  .card dt {
+    gap: calc(5 * var(--s));
+    font-size: max(9px, calc(10.5 * var(--s)));
+    line-height: 1.15;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .card dt svg {
+    width: 1.2em;
+    height: 1.2em;
+  }
+  .card dd {
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  /* Sexagesimal values keep their units on one line. */
+  .card .sexagesimal {
+    white-space: nowrap;
+  }
+  .card .sexagesimal i {
+    margin: 0 0.3em 0 0.15em;
+  }
+
+  /* 1. Position: two glowing readouts. */
+  .card .coordList {
+    row-gap: calc(4 * var(--s));
+  }
+  .card .coordList > div:nth-child(-n + 2) {
+    padding: calc(4 * var(--s)) calc(12 * var(--s));
+    background: linear-gradient(180deg, rgb(63 210 255 / 0.12), rgb(8 26 40 / 0.55));
+    border: 1px solid rgb(63 210 255 / 0.35);
+    border-radius: calc(8 * var(--s));
+  }
+  .card .coordList > div:nth-child(-n + 2) dd {
+    font-size: calc(19 * var(--s));
+    font-weight: 500;
+    color: #fff;
+  }
+  .card .coordList > div:nth-child(3) {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: baseline;
+    gap: calc(12 * var(--s));
+    padding: 0 calc(4 * var(--s));
+  }
+  .card .coordList > div:nth-child(3) dd {
+    font-size: calc(13.5 * var(--s));
+    color: var(--muted);
+  }
+
+  /* 2. Object: one panel, the name on top, the facts under it. */
+  .card .objectList {
+    padding: calc(4 * var(--s)) calc(14 * var(--s));
+    background: rgb(8 26 40 / 0.45);
+    border: 1px solid rgb(63 210 255 / 0.22);
+    border-radius: calc(10 * var(--s));
+  }
+  .card .objectList > div:nth-child(1) dd {
+    font-size: calc(20 * var(--s));
+    font-weight: 600;
+    color: #fff;
+  }
+  .card .objectList > div:nth-child(2) dd {
+    color: var(--cyan);
+  }
+  .card .objectList > div:nth-child(n + 3) {
+    border-top: 1px solid rgb(63 210 255 / 0.12);
+  }
+  /* Long values take a full row with the label beside them. */
+  .card .objectList > .wide {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: baseline;
+    gap: calc(12 * var(--s));
+  }
+  .card .objectList > .wide dt {
+    flex: none;
+    min-width: calc(74 * var(--s));
+  }
+  .card .objectList > .wide dd {
+    flex: 1;
+    min-width: 0;
   }
   /* The four layer chips share one line. */
   .cards .layers {
@@ -984,54 +1101,6 @@
     gap: calc(4 * var(--s));
     font-size: max(11px, calc(12 * var(--s)));
     white-space: nowrap;
-  }
-  /* RA and Dec side by side (no icons: they would wrap), the latitudes underneath. */
-  .card .coordList {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: calc(14 * var(--s));
-  }
-  .card .coordList > div {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: calc(8 * var(--s));
-    white-space: nowrap;
-  }
-  .card .coordList dt svg {
-    display: none;
-  }
-  .card .coordList > div + div {
-    border-top: 0;
-  }
-  .card .coordList > div:nth-child(3) {
-    grid-column: 1 / -1;
-    border-top: 1px solid rgb(63 210 255 / 0.07);
-  }
-  .card .coordList .sexagesimal i {
-    margin: 0 0.3em 0 0.15em;
-  }
-  /* Name and type share a line; the longer rows below take the full width. */
-  .card .objectList {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: calc(14 * var(--s));
-  }
-  .card .objectList > div {
-    grid-column: 1 / -1;
-    grid-template-columns: calc(80 * var(--s)) minmax(0, 1fr);
-  }
-  .card .objectList > div:nth-child(-n + 2) {
-    grid-column: auto;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: calc(10 * var(--s));
-  }
-  .card .objectList > div:nth-child(2) {
-    border-top: 0;
-  }
-  /* One line per note; the full text is in the chip's tooltip. */
-  .card .epochNotes li {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
   }
   .timeline {
     grid-template-columns: calc(255 * var(--s)) calc(195 * var(--s)) minmax(0, 1fr) auto;
