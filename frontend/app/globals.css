@@ -525,30 +525,42 @@ footer .mono {
 .target-number {
   color: var(--muted);
 }
-.explorer-grid {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 16px;
-}
-.explorer-sidebar {
-  padding: 24px;
-  max-height: 800px;
-  overflow: auto;
-}
-.explorer-sidebar .target-row {
-  gap: 12px;
-}
-.sky-panel {
-  position: relative;
-  min-height: 520px;
-  background: #09111c;
-  color: #f6f4ed;
-}
-.aladin-host {
-  height: 100%;
-  min-height: 520px;
-  width: 100%;
-}
+/* In Explore the sky is the canvas; the flight deck is its only reserved band. */
+.app-shell:has(.explorer-grid:not([hidden])) { padding: 0; height: 100dvh; overflow: hidden; }
+.app-shell:has(.explorer-grid:not([hidden])) .header { display: none; }
+.app-shell:has(.explorer-grid:not([hidden])) .page-heading { position: absolute; z-index: 5; top: 50px; right: 16px; margin: 0; }
+.app-shell:has(.explorer-grid:not([hidden])) > footer { display: none; }
+.app-shell:has(.explorer-grid:not([hidden])) .view-content { height: 100dvh; min-height: 0; }
+.explorer-grid { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100dvh; min-height: 0; }
+.explorer-grid[hidden] { display: none; }
+.sky-panel { position: relative; min-height: 0; background: #09111c; color: #f6f4ed; }
+.aladin-host { height: 100%; min-height: 0; width: 100%; }
+.flight-console { position: relative; z-index: 4; padding: 14px 20px 12px; color: #dce8df; background: repeating-linear-gradient(90deg, transparent 0 120px, rgb(14 25 29 / .17) 120px 122px), linear-gradient(#7d888b, #536368 8%, #344347 55%, #253437); border-top: 5px solid #9ea9a8; box-shadow: inset 0 2px #d2dad4, 0 -8px 26px #061015; }
+.flight-console::before, .flight-console::after { content: ""; position: absolute; top: 7px; width: 7px; height: 7px; border-radius: 50%; background: #172327; border: 2px solid #b2beb9; box-shadow: inset 1px 1px #000; }
+.flight-console::before { left: 7px; } .flight-console::after { right: 7px; }
+.console-main { display: flex; align-items: stretch; gap: 12px; min-width: 0; }
+.console-identity, .console-position, .console-zoom { background: #172424; border: 2px solid #9aa8a3; box-shadow: inset 0 0 0 2px #253634, 2px 2px 0 #1b292b; padding: 7px 10px; }
+.console-identity { display: flex; flex-direction: column; min-width: 150px; justify-content: center; line-height: 1.2; }
+.console-identity .mono, .console-position span, .console-zoom > span { color: #aebdb4; font-size: .62rem; letter-spacing: .07em; }
+.console-identity strong { font-family: Barlow, sans-serif; color: #e9f2e8; font-size: 1.25rem; }
+.console-led { font: .65rem PlexMono, monospace; color: #a8e792; }
+.console-target { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; flex: 1 1 190px; gap: 4px; color: #e4ebe3; }
+.flight-console select, .flight-console input { min-height: 44px; background: #172424; color: #d7f4bd; border: 2px solid #a2b0a8; border-radius: 1px; font-family: PlexMono, monospace; }
+.console-switch, .console-action, .console-zoom button { min-height: 44px; padding: 8px 13px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; background: linear-gradient(#67767a, #34474c); color: #f1f5eb; border: 2px solid #a7b5af; border-bottom-color: #172629; border-right-color: #172629; border-radius: 2px; white-space: nowrap; font: 600 .85rem Plex, sans-serif; }
+.console-switch:active, .console-action:active, .console-zoom button:active { background: #243439; transform: translateY(1px); }
+.console-switch[aria-expanded="true"] { box-shadow: inset 0 0 0 2px #a8e792; }
+.console-action { background: linear-gradient(#c0d9a4, #82ab74); color: #13231b; border-color: #d9ead0 #445b43 #445b43 #d9ead0; font-weight: 700; }
+.console-position { display: flex; flex-direction: column; justify-content: center; min-width: 180px; }
+.console-position strong { color: #a8e792; font-size: .8rem; font-weight: 400; }
+.console-zoom { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.console-zoom > div { display: flex; gap: 3px; }
+.console-zoom button { min-height: 30px; padding: 2px 10px; }
+.console-coordinates { display: flex; align-items: end; gap: 10px; padding-top: 10px; }
+.console-coordinates label { font-size: .7rem; gap: 3px; }
+.console-coordinates input { width: 140px; }
+.console-coordinates p { margin: 0; color: #fff1db; }
+.console-status { margin: 6px 0 0; font-size: .75rem; }
+.console-status button { text-decoration: underline; background: transparent; }
 .sky-message {
   position: absolute;
   inset: 30% 24px auto;
@@ -719,9 +731,6 @@ footer .mono {
   .header {
     margin-bottom: 24px;
   }
-  .explorer-grid {
-    grid-template-columns: 1fr;
-  }
   .home-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -740,6 +749,26 @@ footer .mono {
   .explorer-sidebar {
     max-height: none;
   }
+}
+@media (max-width: 700px) {
+  .app-shell:has(.explorer-grid:not([hidden])) .page-heading { top: 54px; right: 6px; }
+  .flight-console { padding: 10px 8px 8px; }
+  .console-main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 5px; }
+  .console-identity { min-width: 0; grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; padding: 3px 8px; }
+  .console-identity strong { font-size: 1rem; }
+  .console-led { display: none; }
+  .console-target { min-width: 0; }
+  .console-target select { width: 100%; }
+  .console-position { display: none; }
+  .console-zoom { grid-column: 1 / 3; padding: 3px 8px; }
+  .console-zoom > span { display: none; }
+  .console-zoom > div { justify-content: space-between; }
+  .console-action { grid-column: 3; }
+  .console-switch, .console-action { padding-inline: 8px; }
+  .console-coordinates { flex-wrap: wrap; }
+  .console-coordinates label { flex: 1 1 90px; }
+  .console-coordinates input { width: 100%; }
+  .sky-help { display: none; }
 }
 @media (max-width: 600px) {
   .app-shell {
@@ -812,7 +841,7 @@ footer .mono {
   }
   .sky-panel,
   .aladin-host {
-    min-height: 400px;
+    min-height: 0;
   }
   .button-row {
     align-items: stretch;
