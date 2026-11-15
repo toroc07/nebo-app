@@ -554,25 +554,32 @@ class TimelineService:
             store.delete_timeline_exposures(timeline_id)
             processed: list[_Processed] = []
 
-            def download(items: list[tuple[int, int]]) -> None:
-                batch = [(epoch, records[i]) for epoch, i in items]
-                fresh = [p for p in self._downloads.map(process, batch) if p is not None]
+            def submit(items: list[tuple[int, int]]) -> list:
+                return [self._downloads.submit(process, (e, records[i])) for e, i in items]
+
+            def collect(futures: list) -> None:
+                fresh = [p for p in (f.result() for f in futures) if p is not None]
                 processed.extend(fresh)
                 rows = [p.exposure_row for p in fresh if p.exposure_row is not None]
                 if rows:
                     store.save_nasa_sector_exposures(rows)
 
-            # The previews (first light, then one frame per epoch) are saved as soon as they are
-            # downloaded, the last one included, so `preview_ready` is never skipped. The stage
-            # names what is already saved. The refining frames are fetched in one parallel batch
-            # and rendered once at the end: re-rendering and rewriting every image after each
-            # refining round multiplied the build time and the database writes.
-            for wave_stage, wave_items in waves:
+            # Every frame is queued up front (first light first, FIFO), so the pool never idles
+            # while a wave is rendered and saved: the preview frames download during first
+            # light's render. Each wave is saved as soon as its own frames are done, the last
+            # preview included, so `preview_ready` is never skipped. The refining frames are
+            # rendered once at the end: re-rendering after each round multiplied the build time.
+            queued = [(stage, submit(items)) for stage, items in waves]
+            for wave_stage, futures in queued:
+                if wave_stage == "refining" and processed:
+                    current_stage = "refining"
+                collect(futures)
                 if wave_stage == "refining":
                     continue
-                download(wave_items)
                 if processed:
-                    log.info("timeline %s: %s at +%.1fs", timeline_id, wave_stage, time.monotonic() - t0)
+                    log.info(
+                        "timeline %s: %s at +%.1fs", timeline_id, wave_stage, time.monotonic() - t0
+                    )
                     store.save_partial_timeline(
                         timeline_id,
                         render_epoch_images(records, epochs, processed),
@@ -583,11 +590,6 @@ class TimelineService:
                         frames_used=len(processed),
                     )
                     current_stage = wave_stage
-            refining = [item for stage, items in waves if stage == "refining" for item in items]
-            if refining:
-                if processed:
-                    current_stage = "refining"
-                download(refining)
             if not processed:
                 raise NoDataError("SPHEREx images were found but none could be downloaded.")
         else:
