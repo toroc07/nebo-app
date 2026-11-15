@@ -51,7 +51,12 @@
  */
 .space[data-live] {
   transform: scaleX(-1);
-  background: #000 var(--sky) right top / var(--sky-w) var(--sky-h) no-repeat;
+  /*
+   * The still keeps Aladin's alpha (faint sky ~14 % opaque): over the cockpit it is composited
+   * on .sky-panel's navy, which gives the map its slate-blue tone, so it must sit on the same
+   * colour here or the window turns grey-black and stops looking like the same sky.
+   */
+  background: #09111c var(--sky) right top / var(--sky-w) var(--sky-h) no-repeat;
 }
 
 /* ---------- Screen (shared) ---------- */

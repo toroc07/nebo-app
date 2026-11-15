@@ -88,7 +88,8 @@ export default function Sky({
       const node = host.current;
       if (!viewer.current || !node) return null;
       try {
-        const url = await viewer.current.getViewDataURL({ format: "image/jpeg", logo: false });
+        // PNG keeps the map's alpha: the room composites it on the sky panel's own navy.
+        const url = await viewer.current.getViewDataURL({ format: "image/png", logo: false });
         return { url, width: node.clientWidth, height: node.clientHeight };
       } catch {
         return null; // No still: the room keeps its painted window.
