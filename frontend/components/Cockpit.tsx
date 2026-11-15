@@ -24,6 +24,7 @@ export default function Cockpit({
   layers,
   onLayers,
   onCommand,
+  power = "on",
 }: {
   targets: Target[];
   selected: Target | null;
@@ -39,6 +40,11 @@ export default function Cockpit({
   layers: SkyLayers;
   onLayers: (l: SkyLayers) => void;
   onCommand: (move: SkyMove) => void;
+  /**
+   * The ship on the ground has its cockpit switched off (dark screens); "boot" plays the
+   * power-up just before the jump.
+   */
+  power?: "off" | "boot" | "on";
 }) {
   // "closing" keeps the hologram mounted while it dematerialises back into the beam.
   const [panel, setPanel] = useState<"closed" | "open" | "closing">("closed");
@@ -66,7 +72,7 @@ export default function Cockpit({
   }, [panel]);
 
   return (
-    <div className={s.cockpit} data-panel={panel}>
+    <div className={s.cockpit} data-panel={panel} data-power={power} inert={power === "off"}>
       {panel !== "closed" && (
         <>
           <div className={s.beam} data-state={panel} aria-hidden="true">

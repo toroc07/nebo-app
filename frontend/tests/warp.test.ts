@@ -195,7 +195,7 @@ const page = (found: Record<string, El | null>) => ({
 });
 const IMG = '[role="application"] img';
 const ALERT = 'main [role="alert"]';
-const STATUS = 'main [role="status"]';
+const STATUS = 'main [role="status"]:not([data-warp] *)';
 
 test("the viewer is ready once an epoch image has loaded", () => {
   const loaded = page({

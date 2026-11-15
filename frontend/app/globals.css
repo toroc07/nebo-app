@@ -525,9 +525,19 @@ footer .mono {
 .target-number {
   color: var(--muted);
 }
-/* The field console is a full-screen ship scene: the page chrome steps aside. */
+/* The field console and the start screen are full-screen ship scenes: the page chrome steps aside. */
 .app-shell:has([data-console="field"]) > header,
-.app-shell:has([data-console="field"]) > footer { display: none; }
+.app-shell:has([data-console="field"]) > footer,
+.app-shell:has([data-scene="home"]) > header,
+.app-shell:has([data-scene="home"]) > footer { display: none; }
+/* Landed: the cockpit glass is dark (shutters closed) until the jump's tunnel covers it. */
+.explorer-grid[data-glass="dark"] .sky-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: #02050e;
+}
 /* In Explore the sky is the canvas; the flight deck is its only reserved band. */
 .app-shell:has(.explorer-grid:not([hidden])) { padding: 0; height: 100dvh; overflow: hidden; }
 .app-shell:has(.explorer-grid:not([hidden])) .header { display: none; }
@@ -564,6 +574,12 @@ footer .mono {
   -webkit-mask-image: linear-gradient(90deg, transparent 25%, #000 28%, #000 63%, transparent 96%);
   mask-image: linear-gradient(90deg, transparent 25%, #000 28%, #000 63%, transparent 96%);
   pointer-events: none;
+}
+/* Start screen → cockpit: the painted join between the landed ship's wall and the cockpit. */
+.turn-corner[data-kind="launch"] {
+  background-image: url("/panels/home-corner.webp");
+  -webkit-mask-image: linear-gradient(90deg, transparent 4%, #000 34%, #000 66%, transparent 96%);
+  mask-image: linear-gradient(90deg, transparent 4%, #000 34%, #000 66%, transparent 96%);
 }
 /*
  * Behind the analysis screen the cockpit stays painted (the opaque screen covers it) and only

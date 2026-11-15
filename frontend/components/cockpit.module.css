@@ -818,6 +818,46 @@
   animation: none;
 }
 
+/* ---------- Power: switched off on the ground, booting before the jump ---------- */
+/*
+ * Off: the painted keys stay (they are physical), the live screens go dark, and the readouts keep
+ * their opaque boxes with no text, so the art's sample numbers never show through.
+ */
+.cockpit[data-power="off"] .console {
+  pointer-events: none;
+}
+.cockpit[data-power="off"] .screens > *,
+.cockpit[data-power="off"] .status,
+.cockpit[data-power="off"] .control {
+  opacity: 0;
+}
+.cockpit[data-power="off"] .position strong,
+.cockpit[data-power="off"] .fovLabel {
+  color: transparent;
+}
+/* Screens come on one after another, each with a short flicker, like real equipment. */
+.cockpit[data-power="boot"] .console > *,
+.cockpit[data-power="boot"] .screens > * {
+  animation: power-on 520ms steps(1, end) both;
+}
+.cockpit[data-power="boot"] .screens > :nth-child(3n + 1) { animation-delay: 60ms; }
+.cockpit[data-power="boot"] .screens > :nth-child(3n + 2) { animation-delay: 200ms; }
+.cockpit[data-power="boot"] .screens > :nth-child(3n) { animation-delay: 340ms; }
+@keyframes power-on {
+  0% { opacity: 0; }
+  20% { opacity: 0.9; }
+  30% { opacity: 0.15; }
+  45% { opacity: 1; }
+  55% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cockpit[data-power="boot"] .console > *,
+  .cockpit[data-power="boot"] .screens > * {
+    animation: none;
+  }
+}
+
 /* ---------- Holographic coordinate panel ---------- */
 .holo {
   position: absolute;

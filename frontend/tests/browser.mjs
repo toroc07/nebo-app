@@ -98,11 +98,10 @@ const pickFieldSize = async (label) => {
 await page.evaluate(() => document.fonts.ready);
 await page.waitForFunction(() => document.documentElement.dataset.theme);
 assert.equal(await page.locator(".nav").count(), 0);
+// The start screen is the ship on the ground: START and TUTORIAL on its wall screen.
 assert.equal(
-  await page
-    .locator(".home-grid > button, .home-grid .secondary-stack > button")
-    .count(),
-  4,
+  await page.getByRole("navigation", { name: "Start menu" }).getByRole("button").count(),
+  2,
 );
 assert.equal(
   await page.getByText("YOUR WINDOW TO THE UNIVERSE", { exact: true }).count(),
@@ -111,7 +110,7 @@ assert.equal(
 assert.equal(await page.getByText("The sky has", { exact: false }).count(), 0);
 assert.ok(
   await page
-    .locator(".panel-image")
+    .locator('[data-scene="home"] img')
     .evaluateAll((images) =>
       images.every((img) => img.complete && img.naturalWidth > 0),
     ),
@@ -127,8 +126,6 @@ assert.deepEqual(
   axe.map((v) => v.id),
   [],
 );
-await page.getByRole("link", { name: "Nebo, home" }).click();
-await page.getByRole("button", { name: /Start exploring/ }).click();
 await page.getByRole("button", { name: /Search by coordinates/ }).click();
 await page.getByLabel("Right ascension").fill("360");
 await page.getByLabel("Declination").fill("0");
@@ -167,15 +164,16 @@ mode = "error";
 await pickFieldSize("6 arcminutes");
 await page.getByText(/The database is not configured yet/).waitFor();
 // The field console replaces the site header (as in the design), so leave it with Back:
-// field → coordinates form → Observe → Home.
-for (let i = 0; i < 3; i++)
+// field → coordinates form → start screen.
+for (let i = 0; i < 2; i++)
   await page.getByRole("button", { name: "Back", exact: true }).click();
-await page.getByRole("navigation", { name: "Home panel" }).waitFor();
+await page.getByRole("navigation", { name: "Start menu" }).waitFor();
 await page.getByRole("button", { name: /Settings/ }).click();
 await page.getByLabel("Appearance").selectOption("light");
 await page.getByLabel("Reduce motion", { exact: true }).check();
 await page.reload();
-await page.getByRole("link", { name: "Nebo, home" }).click();
+// A reload opens on the start screen (the ship), which has no site header.
+await page.getByRole("navigation", { name: "Start menu" }).waitFor();
 await page.getByRole("button", { name: /Settings/ }).click();
 assert.equal(await page.getByLabel("Appearance").inputValue(), "light");
 assert.ok(await page.getByLabel("Reduce motion", { exact: true }).isChecked());
@@ -323,7 +321,7 @@ await page.screenshot({ path: out + "viewer-desktop.png" });
 mode = "ready";
 await page.setViewportSize({ width: 375, height: 812 });
 await page.getByRole("link", { name: "Back to the menu" }).click();
-await page.getByRole("navigation", { name: "Home panel" }).waitFor();
+await page.getByRole("navigation", { name: "Start menu" }).waitFor();
 // Back from a field returns to the screen it was opened from, not to a fixed one.
 const backButton = page.getByRole("button", { name: "Back", exact: true });
 const heading = (name) =>
@@ -334,8 +332,7 @@ await page.getByText(/^Observed: .+ UTC/).waitFor();
 await backButton.click();
 await heading("Featured objects").waitFor();
 await backButton.click();
-await page.getByRole("navigation", { name: "Home panel" }).waitFor();
-await page.getByRole("button", { name: /Start exploring/ }).click();
+await page.getByRole("navigation", { name: "Start menu" }).waitFor();
 await page.getByRole("button", { name: /Search by coordinates/ }).click();
 await page.getByLabel("Right ascension").fill("269.446");
 await page.getByLabel("Declination").fill("4.768");
@@ -351,7 +348,8 @@ for (const viewport of [
   { width: 375, height: 812 },
 ]) {
   await page.setViewportSize(viewport);
-  await page.getByRole("link", { name: "Nebo, home" }).click();
+  // Already on the start screen, which has no site header (and so no home link).
+  await page.getByRole("navigation", { name: "Start menu" }).waitFor();
   await page.evaluate(() => (document.documentElement.style.fontSize = "200%"));
   assert.ok(
     await page.evaluate(
