@@ -9,6 +9,7 @@ import {
   ApiError,
   diffImageUrl,
   rgbImageUrl,
+  stackImageUrl,
 } from "../lib/api";
 test("epoch dates show the whole span of the epoch, in UTC", () => {
   assert.equal(
@@ -213,4 +214,11 @@ test("science responses carry the fields the panels read", async () => {
   assert.deepEqual(spectrum.channels.filter((c) => c.is_blankch).map((c) => c.flux_mjy), [null, null]);
   assert.equal(typeof metrics.confidence.c_global, "number");
   assert.ok(model1.treeshap_values!.top_drivers!.every((d) => typeof d.phi === "number"));
+});
+test("stackImageUrl sends the epochs sorted and once each", () => {
+  const url = new URL(stackImageUrl({ target: "barnards-star" }, { epochs: [2, 0, 2], detector: 3, size: "medium" }));
+  assert.equal(url.pathname, "/api/v1/timeline/stack");
+  assert.equal(url.searchParams.get("epochs"), "0,2");
+  assert.equal(url.searchParams.get("detector"), "3");
+  assert.equal(url.searchParams.get("target"), "barnards-star");
 });

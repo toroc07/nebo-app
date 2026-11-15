@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Crosshair,
   Layers,
+  Layers2,
   Link2,
   Pause,
   Play,
@@ -25,6 +26,7 @@ import {
 import {
   timeline,
   imageUrl,
+  stackImageUrl,
   nextEpoch,
   epochDateRange,
   releaseLabel,
@@ -44,6 +46,7 @@ import { pixelToSky } from "@/lib/lab/sky";
 import { gaiaMarks, loadGaia } from "@/lib/lab/gaia";
 import {
   alignmentFor,
+  changesSummary,
   detailFor,
   isPreloaded,
   layerLine,
@@ -303,6 +306,9 @@ export default function Field({
   }, [current?.image_url, reload]);
   const [cursor, setCursor] = useState<{ ra: number; dec: number; x: number; y: number } | null>(null);
   const [difference, setDifference] = useState(false);
+  // Stack view: the inverse-variance co-add of the chosen epochs (fainter sources, no blink).
+  const [stack, setStack] = useState(false);
+  const [stackEpochs, setStackEpochs] = useState<number[]>([]);
   const [pixels, setPixels] = useState<{ w: number; h: number } | null>(null);
 
   const [phase, setPhase] = useState<"off" | "boot" | "on" | "shutdown">(() =>
@@ -375,6 +381,11 @@ export default function Field({
   // Epochs are compared only once every image is downloaded; partial ones are a preview.
   const building = !!progress;
   const canCompare = count > 1 && !imageError && !building;
+  // A new field or epoch count resets the stack to every epoch (and off when it cannot stack).
+  useEffect(() => {
+    setStackEpochs(Array.from({ length: count }, (_, i) => i));
+    if (count < 2) setStack(false);
+  }, [count, data?.patch.id]);
   const elapsed = buildStart.current ? Math.max(0, Math.floor((now - buildStart.current) / 1000)) : 0;
 
   // Catalog layers: off by default, each fetched the first time it is switched on for a field.
@@ -443,7 +454,9 @@ export default function Field({
         wiseLayer?.value ? wiseMarks(wiseLayer.value, epoch).length : undefined,
       ),
     layers.changes &&
-      layerLine("Changes (first→last epoch)", changesLayer, "changes", changesLayer?.value?.candidates.length) +
+      (changesLayer?.value
+        ? `Changes (first→last epoch, 5σ after flux and PSF matching): ${changesSummary(changesLayer.value)}`
+        : layerLine("Changes (first→last epoch)", changesLayer, "changes", undefined)) +
         ((changesLayer?.value?.candidates.length ?? 0) > MAX_CHANGE_LABELS
           ? ` · labels on cold candidates and the strongest; dots for the rest`
           : ""),
@@ -470,7 +483,18 @@ export default function Field({
     setCursor({ ...sky, x, y });
   }
   const reference = data?.epochs[0];
-  const showDifference = difference && !!reference && epoch > 0;
+  const stacking = stack && canCompare && stackEpochs.length >= 2;
+  const showDifference = !stacking && difference && !!reference && epoch > 0;
+  // The API takes each epoch's own index; the chips hold positions in the list.
+  const stackUrl = stacking
+    ? stackImageUrl(query, { epochs: stackEpochs.map((i) => data!.epochs[i]?.index ?? i), detector, size })
+    : "";
+  const stackNames = stackEpochs.map((i) => i + 1).join(", ");
+  function toggleStackEpoch(i: number) {
+    setStackEpochs((list) =>
+      list.includes(i) ? (list.length > 2 ? list.filter((e) => e !== i) : list) : [...list, i].sort((a, b) => a - b),
+    );
+  }
 
   // Coordinates within the patch-reuse radius of a catalogued object get that object's patch.
   const target = chosen ?? catalog.find((t) => t.slug === data?.patch.target) ?? null;
@@ -686,8 +710,12 @@ export default function Field({
                     <img
                       data-epoch
                       className={showDifference ? s.differenceLayer : undefined}
-                      src={currentUrl}
-                      alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}${showDifference ? ", shown as the difference from the first epoch" : ""}`}
+                      src={stacking ? stackUrl : currentUrl}
+                      alt={
+                        stacking
+                          ? `Infrared image of the field, epochs ${stackNames} stacked, detector ${detector}`
+                          : `Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}${showDifference ? ", shown as the difference from the first epoch" : ""}`
+                      }
                       width={420}
                       height={420}
                       style={
@@ -777,10 +805,41 @@ export default function Field({
                     >
                       <Contrast aria-hidden="true" /> Difference
                     </button>
+                    <button
+                      type="button"
+                      className={`${s.diffToggle} ${s.stackToggle}`}
+                      aria-pressed={stacking}
+                      disabled={!canCompare}
+                      title="Co-add the chosen epochs: less noise, but changes between them average out"
+                      onClick={() => {
+                        setPlaying(false);
+                        setStack((on) => !on);
+                      }}
+                    >
+                      <Layers2 aria-hidden="true" /> Stack
+                    </button>
+                    {stacking && (
+                      <div className={s.stackPicker} role="group" aria-label="Epochs in the stack (at least two)">
+                        {data.epochs.map((e, i) => (
+                          <button
+                            key={e.index}
+                            type="button"
+                            aria-pressed={stackEpochs.includes(i)}
+                            disabled={stackEpochs.includes(i) && stackEpochs.length <= 2}
+                            title={`Epoch ${i + 1}, ${epochDateRange(e.start_utc, e.end_utc)}`}
+                            onClick={() => toggleStackEpoch(i)}
+                          >
+                            E{i + 1}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <p className={s.readout} aria-live="off">
                       {cursor
                         ? `x ${cursor.x}, y ${cursor.y} · RA ${cursor.ra.toFixed(4)}° · Dec ${cursor.dec >= 0 ? "+" : "−"}${Math.abs(cursor.dec).toFixed(4)}°`
-                        : difference
+                        : stacking
+                          ? `Stack of epochs ${stackNames} · lower noise, changes between them averaged out`
+                          : difference
                           ? epoch === 0
                             ? "Epoch 1 is the reference: step to another epoch"
                             : "Difference from epoch 1 · bright = changed"

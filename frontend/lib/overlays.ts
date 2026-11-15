@@ -2,7 +2,7 @@
 // and suggested destinations (contracts: `/patches/{id}/wise`, `/patches/{id}/alignment` and
 // `/explore/suggested` in backend/README.md). Gaia stars come from lib/lab/gaia.ts.
 // Relative imports so the node test runner can load this file directly.
-import { read, type CandidateDetection } from "./api";
+import { read, type CandidateDetection, type CandidatesResponse } from "./api";
 import {
   FAST_MOVER_MAS_YR,
   type GaiaPosition,
@@ -216,12 +216,16 @@ export function detailFor(sel: Selection): {
       ],
       ["Signal", `SNR ${c.snr.toFixed(1)} · Δflux ${c.delta_flux.toFixed(2)}`],
       ["Status", changeLabel(c)],
+      ...(c.systematic
+        ? ([["Why", `Static star, flux B/A ${c.systematic.flux_ratio_b_over_a.toFixed(2)}: residual, not a change`]] as [string, string][])
+        : []),
     ],
   };
 }
 
 /** Known vs new: the badge text of a detected change. Never claims a discovery. */
 export function changeLabel(c: CandidateDetection): string {
+  if (c.classification === "catalogued_systematic") return "Catalogued · likely PSF/λ systematic";
   if (c.classification === "catalogued_object") return "Catalogued object";
   return c.gaia_match ? "Candidate signal" : "Cold candidate (no Gaia)";
 }
@@ -281,16 +285,31 @@ export function isPreloaded(d: { ra: number; dec: number }, patches: { ra: numbe
   return patches.some((p) => Math.hypot((((p.ra - d.ra + 540) % 360) - 180) * cosDec, p.dec - d.dec) * 3600 <= 30);
 }
 
+/**
+ * "3 changes · 11 likely systematic": counts over every detection (the API's `counts`), falling
+ * back to the listed candidates for an older API. "+" when the list was cut at the server cap.
+ */
+export function changesSummary(res: CandidatesResponse): string {
+  const listedSystematic = res.candidates.filter((c) => c.classification === "catalogued_systematic").length;
+  const changes = res.counts?.changes ?? res.candidates.length - listedSystematic;
+  const systematic = res.counts?.likely_systematic ?? listedSystematic;
+  const more = res.truncated && !res.counts ? "+" : "";
+  const text = `${changes}${more} ${changes === 1 ? "change" : "changes"}`;
+  return systematic ? `${text} · ${systematic} likely systematic` : text;
+}
+
 /** Changes that get a text badge; the rest are drawn as dots so the image stays readable. */
 export const MAX_CHANGE_LABELS = 8;
 
 /**
  * Keys ("x,y") of the changes to label: every cold candidate (the reason to look) plus the
- * strongest others by SNR, up to MAX_CHANGE_LABELS in total.
+ * strongest others by SNR, up to MAX_CHANGE_LABELS in total. Likely systematics stay dots.
  */
 export function labelledChanges(changes: CandidateDetection[]): Set<string> {
   const key = (c: CandidateDetection) => `${c.x},${c.y}`;
   const cold = changes.filter((c) => c.classification === "candidate_signal" && !c.gaia_match);
-  const rest = changes.filter((c) => !cold.includes(c)).sort((a, b) => b.snr - a.snr);
+  const rest = changes
+    .filter((c) => !cold.includes(c) && c.classification !== "catalogued_systematic")
+    .sort((a, b) => b.snr - a.snr);
   return new Set([...cold, ...rest].slice(0, Math.max(MAX_CHANGE_LABELS, cold.length)).map(key));
 }

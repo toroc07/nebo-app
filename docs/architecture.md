@@ -173,7 +173,7 @@ flowchart TB
 | Group | Endpoints |
 | --- | --- |
 | Health and catalogue | `GET /health`, `GET /targets`, `GET /patches`, `GET /catalogs/channels`, `GET /catalogs/spectral-indices` |
-| Images and timelines | `GET /timeline`, `GET /timeline/diff`, `GET /timeline/rgb`, `GET /images/{id}.png`, `GET /images/{id}.npz`, `GET /patches/{id}/sectors` |
+| Images and timelines | `GET /timeline`, `GET /timeline/diff`, `GET /timeline/stack`, `GET /timeline/rgb`, `GET /images/{id}.png`, `GET /images/{id}.npz`, `GET /patches/{id}/sectors` |
 | Gaia | `GET /patches/{id}/gaia` |
 | Science (simulated) | `GET /patches/{id}/spectrum`, `GET /patches/{id}/metrics`, `POST /patches/{id}/analyze` |
 | Models (simulated) | `POST /models/classify-event`, `POST /models/classify-spectrum`, `POST /models/forecast-temporal`, `GET /patches/{id}/models/{event,spectrum,forecast}` |
@@ -386,7 +386,7 @@ erDiagram
 | `targets` | Seed catalogue with proper motions | `db init`, `etl` (`upsert_targets`) | `/targets`, builds (proper motion) |
 | `patches` | One per sky position (reused within 30″) | `create_patch` | everything patch-scoped |
 | `timelines` | One per patch × detector: status, stage, progress; doubles as the build queue | claim, progress, partial/complete/fail | `/timeline`, `/patches`, worker |
-| `timeline_images` | PNG per epoch × size, NPZ for the large size | partial and final saves | `/timeline`, `/images`, `/timeline/diff`, `/metrics` |
+| `timeline_images` | PNG per epoch × size, NPZ for the large size | partial and final saves | `/timeline`, `/images`, `/timeline/diff`, `/timeline/stack`, `/metrics` |
 | `sector_coordinates` | Corners and bounds of each size and the fetch size | `create_patch` | `/patches/{id}/sectors` |
 | `nasa_sector_exposures` | Every IRSA exposure used: uri, release, times, WCS, photometry, cutout URL | builds | epoch `releases` and `coverage`, `/sectors` |
 | `api_query_cache` | IRSA TAP frame lists (`irsa_spherex_tap`) and Gaia cones (`gaia_dr3_tap`) | builds, `/gaia` | builds, `/gaia` |
@@ -453,7 +453,7 @@ graph TD
 | `TutorialTour` | Full-screen guided tutorial opened from TUTORIAL: 5 steps, each a screenshot of a section (`public/tutorial/*.webp`) with numbered callouts and leader lines |
 | `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), target markers, executes camera commands |
 | `Cockpit`, `CockpitScreens`, `CoordinatePanel` | Console over the sky: destinations, RA/Dec entry, zoom, layers, Earth sub-point globe, clock |
-| `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view |
+| `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view, epoch stack (`/timeline/stack`) |
 | `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
 | `ObservationLab`, `ImageViewport` | Lab viewer: nested 3′/6′/15′ levels, pan/zoom, Gaia rings, expected-position marker |
 | `Flight` | Short WebGL2 star burst (desktop only) |
@@ -563,6 +563,14 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — P1-5: `GET /timeline/stack?epochs=0,2` co-adds the chosen epochs (inverse
+  variance, float32 arrays) into a PNG with the timeline's shared stretch; the field viewer has a
+  "Stack" toggle with epoch chips. `/patches/{id}/candidates` now scales epoch B to A, matches the
+  PSFs and smooths both by 1 px before the 5σ difference (default was 4σ), and labels residuals on
+  static Gaia stars with consistent flux `catalogued_systematic`; it adds `counts`,
+  `normalisation`, `snr_threshold` and `normalise=false` (raw difference). On Barnard's Star D3
+  medium the raw 31–39 detections per epoch pair become 1–3 changes (Barnard's own dipole) plus
+  10–15 likely systematics; the UI greys the latter out.
 - **2026-11-15** — P1-1: `GET /patches/{id}/spectrum/measured` returns the spectrum measured from
   the stored exposures (one point per unsaturated exposure: λ at the object, 3×3 aperture flux in
   µJy, σ; plus the median per channel). The Spectrum tab shows it first, labelled Measured, above

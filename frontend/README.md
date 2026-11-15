@@ -64,7 +64,12 @@ fetched the first time it is switched on (right column, above the cards):
   W1−W2 are dashed pink rings ("cold candidate"), which pulse unless reduced motion is on.
 - **Changes** (`/patches/{id}/candidates`, first vs last epoch, read from `classification`):
   badges "Catalogued object", "Candidate signal" or "Cold candidate (no Gaia)". Cold candidates and
-  the strongest changes (8 in total) get a text badge; the rest are clickable dots.
+  the strongest changes (8 in total) get a text badge; the rest are clickable dots. Residuals on
+  static catalogued stars with consistent flux ("Catalogued · likely PSF/λ systematic") are grey
+  dots, and the status line counts them apart ("3 changes · 11 likely systematic").
+- **Stack** (button under Alignment, `/timeline/stack`): shows the co-add of the chosen epochs
+  (chips E1, E2…; two at least) instead of the current epoch. Less noise, but anything that changed
+  between those epochs is averaged out, so it replaces the blink rather than joining it.
 - **Alignment** (top-right of the image, `/patches/{id}/alignment`): per-epoch offset against slow
   Gaia stars. "Simulate an offset" shifts the last epoch by 2 px to show the warning; the banner
   always says "Simulation".

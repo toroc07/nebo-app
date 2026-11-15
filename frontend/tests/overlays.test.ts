@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { CandidateDetection } from "../lib/api";
+import type { CandidateDetection, CandidatesResponse } from "../lib/api";
 import type { GaiaStar } from "../lib/lab/gaia";
 import {
   alignmentFor,
   changeLabel,
+  changesSummary,
   detailFor,
   isPreloaded,
   labelledChanges,
@@ -170,4 +171,23 @@ test("labelledChanges labels every cold candidate and the strongest others", () 
   assert.equal(keys.size, MAX_CHANGE_LABELS);
   assert.ok(keys.has("99,0")); // the weak cold candidate still gets its badge
   assert.ok(keys.has("19,0") && !keys.has("0,0")); // strongest first
+});
+
+test("likely systematics are labelled as such, summarised apart and never badged", () => {
+  const change = (x: number, snr: number, classification: CandidateDetection["classification"]) =>
+    ({ x, y: 0, snr, classification, gaia_match: { source_id: "g", g_mag: 9, dist_arcsec: 1 } }) as CandidateDetection;
+  const systematic = change(1, 500, "catalogued_systematic");
+  assert.equal(changeLabel(systematic), "Catalogued · likely PSF/λ systematic");
+  const keys = labelledChanges([systematic, change(2, 10, "catalogued_object")]);
+  assert.ok(keys.has("2,0") && !keys.has("1,0"));
+
+  const res = {
+    candidates: [change(2, 10, "catalogued_object"), systematic],
+    truncated: false,
+    counts: { detected: 14, changes: 3, likely_systematic: 11 },
+  } as CandidatesResponse;
+  assert.equal(changesSummary(res), "3 changes · 11 likely systematic");
+  // Older API without counts: fall back to the listed candidates, "+" when cut at the cap.
+  assert.equal(changesSummary({ ...res, counts: undefined, truncated: true }), "1+ change · 1 likely systematic");
+  assert.equal(changesSummary({ ...res, counts: { detected: 1, changes: 1, likely_systematic: 0 } }), "1 change");
 });

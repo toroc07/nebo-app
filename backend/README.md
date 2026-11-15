@@ -269,12 +269,27 @@ Sources with no Gaia match within `gaia_match_radius_arcsec` (default `3.0"`) an
 reports the Gaia completeness limit used for the cross-match. Returns `502` (`code: "wise_unavailable"`)
 when IRSA CatWISE2020 does not answer.
 
-### `GET /patches/{id}/candidates?detector=3&size=medium&epoch_a=0&epoch_b=<last>&snr_threshold=4.0`
+### `GET /patches/{id}/candidates?detector=3&size=medium&epoch_a=0&epoch_b=<last>&snr_threshold=5.0&normalise=true`
 
-Detects significant point-like changes in `epoch_b - epoch_a` using the float32 `.npz` arrays,
-cross-matches each peak against Gaia DR3 (at both epochs) and CatWISE2020, and labels each as
-`"catalogued_object"` or `"candidate_signal"` (along with `gaia_complete_to_g`). Returns `404` if
-the timeline or `.npz` arrays are not ready.
+Detects significant point-like changes in `epoch_b - epoch_a` using the float32 `.npz` arrays.
+With `normalise=true` (default) epoch B is first scaled to A (summed aperture flux of the field's
+stars, outliers clipped) and the two PSFs are matched (a fitted Gaussian on the sharper epoch, then
+1 px on both); `normalise=false` is the raw difference. Peaks at `|ΔF|/σ ≥ snr_threshold` (default
+5, range 2–20) are cross-matched against Gaia DR3 (at both epochs) and CatWISE2020 and labelled:
+
+- `"catalogued_systematic"`: on a Gaia star that moves < 0.5 px between the epochs and whose
+  aperture flux agrees within 30 %: most likely a PSF/wavelength residual, not a change.
+  `systematic` gives `reason`, `shift_px` and `flux_ratio_b_over_a`.
+- `"catalogued_object"`: a Gaia/CatWISE source within 6.15″, or a residual within 2 px of a Gaia
+  star that moved between the epochs (one lobe of its motion dipole).
+- `"candidate_signal"`: nothing catalogued explains it.
+
+Body: `candidates` (changes first, likely systematics last, at most 25), `counts`
+(`detected`, `changes`, `likely_systematic` over every detection), `normalisation` (`flux_scale`,
+`scale_stars`, `psf_sigma_a_px`, `psf_sigma_b_px`, `psf_match_kernel_px`, `psf_matched_epoch`,
+`smoothing_sigma_px`, `noise_sigma`), `snr_threshold`, `truncated` (more detections than listed),
+`gaia_available`, `wise_available`, `gaia_complete_to_g`. Returns `404` if the timeline or `.npz`
+arrays are not ready.
 
 ### `GET /patches/{id}/alignment?detector=3&size=medium`
 
@@ -378,6 +393,15 @@ valid for bright sources; faint ones are dominated by sky background.
 PNG of epoch `b` minus epoch `a`. Red = brighter in `b`, blue = fainter, black = unchanged,
 transparent = no data. Header `X-Diff-Limit` is the brightness (MJy/sr) at full colour. The
 timeline must be ready (otherwise `404`); it never starts a build. Uses the float32 arrays.
+
+`GET /timeline/stack?epochs=0,2` (same `ra`/`dec`/`target`, `size`, `detector` as `/timeline`):
+PNG of the inverse-variance co-add of the listed epochs, with the timeline's shared
+`display_min/max` and the same hole filling as the epoch PNGs (so it can be compared with them).
+Stacking lowers the noise but averages away whatever changed between the epochs. `epochs` needs
+2–50 distinct indices of this timeline, else `422`. Headers `X-Stack-Epochs` (the epochs used,
+sorted) and `X-Stack-Frames` (SPHEREx frames behind them). Like `/timeline/diff`: the timeline must
+be ready (otherwise `404`), it never starts a build, and no `Cache-Control` is set (the URL stays
+the same when a timeline is rebuilt).
 
 `GET /timeline/rgb?r=6&g=3&b=1&epoch=0` (same `ra`/`dec`/`target`, `size` as `/timeline`):
 False-color RGBA PNG combining three SPHEREx detectors (`r`=long, `g`=medium, `b`=short

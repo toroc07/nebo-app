@@ -1304,11 +1304,52 @@
 .badgeNew {
   background: #ff6b9a;
 }
+/* Residual on a static catalogued star: muted, it is most likely not a change. */
+.badgeSystematic {
+  background: #8a9aa6;
+  opacity: 0.75;
+}
 .badge[aria-pressed="true"] {
   outline: 2px solid #fff;
 }
 .alignToggle {
   top: 40px;
+}
+.stackToggle {
+  top: 72px;
+}
+/* Epoch chips of the stack, under its toggle: pressed = included (two at least). */
+.stackPicker {
+  position: absolute;
+  top: 104px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 60%;
+}
+.stackPicker button {
+  min-width: 34px;
+  padding: 2px 7px;
+  font: 500 max(11px, calc(12 * var(--s))) Plex, sans-serif;
+  color: var(--ink);
+  background: rgb(4 14 22 / 0.78);
+  border: 1px solid rgb(63 210 255 / 0.4);
+  border-radius: 999px;
+}
+.stackPicker button[aria-pressed="true"] {
+  color: #02121c;
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+.stackPicker button:disabled {
+  cursor: not-allowed;
+}
+.stackPicker button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 .alignBanner {
   position: absolute;

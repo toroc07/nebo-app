@@ -85,6 +85,17 @@ def test_candidates_endpoint_separates_catalogued_and_candidate_signals(client, 
     classes = {c["classification"] for c in body["candidates"]}
     assert "catalogued_object" in classes
     assert "candidate_signal" in classes
+    assert body["snr_threshold"] == 5.0
+    assert body["counts"]["detected"] == len(body["candidates"])
+    assert body["counts"]["changes"] + body["counts"]["likely_systematic"] == body["counts"]["detected"]
+    assert body["normalisation"]["smoothing_sigma_px"] == 1.0
+
+    raw = http.get(
+        f"/api/v1/patches/{patch.id}/candidates",
+        params={"detector": 3, "size": "medium", "normalise": "false"},
+    ).json()
+    assert raw["normalisation"]["flux_scale"] == 1.0
+    assert raw["normalisation"]["smoothing_sigma_px"] == 0.0
 
 
 def test_alignment_endpoint_detects_offset_warning(client, monkeypatch):  # noqa: F811
