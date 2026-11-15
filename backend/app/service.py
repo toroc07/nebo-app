@@ -22,11 +22,14 @@ import requests
 from astropy.time import Time
 
 from . import config, ephemeris, imaging, irsa, science_catalogs
-from .store import EpochImage, ImageInfo, Patch, Store, Timeline
+from .store import EpochImage, ImageInfo, Patch, Store, Timeline, angular_separation_deg
 
 log = logging.getLogger(__name__)
 
 PATCH_MATCH_RADIUS_DEG = config.PATCH_MATCH_RADIUS_ARCSEC / 3600.0
+J2000_MJD = 51544.5
+# Every half Julian year from 1990 to 2027: where catalogue coordinates of moving objects may come from.
+TRACK_MJDS = [J2000_MJD + (year - 2000.0) * 365.25 for year in np.arange(1990.0, 2027.01, 0.5)]
 
 
 # Stored as the timeline error when IRSA itself fails (TAP and SIA both down), so clients can
@@ -363,6 +366,8 @@ class TimelineService:
     ) -> Patch:
         """The stored patch for a catalogue target or a position, created when missing."""
         with self._patch_lock:
+            if target_slug is None and ra is not None and dec is not None:
+                target_slug = self._catalogue_target_near(ra, dec)
             if target_slug is not None:
                 target = self.store.get_target(target_slug)
                 if target is None:
@@ -374,6 +379,22 @@ class TimelineService:
             return self.store.find_patch_near(
                 ra, dec, PATCH_MATCH_RADIUS_DEG
             ) or self.store.create_patch(ra, dec, None)
+
+    def _catalogue_target_near(self, ra: float, dec: float) -> str | None:
+        """Slug of a catalogue object whose track passes within the patch match radius of ``ra, dec``.
+
+        Fast movers drift arcminutes from the coordinates people type, and each catalogue gives
+        them at its own epoch (SIMBAD J2000, WISE ~2010.5, Gaia J2016), so the whole 1990-2027 track
+        is checked; the 0.5 yr step moves even Barnard's Star only ~5".
+        """
+        for target in self.store.list_targets():
+            pm_ra, pm_dec = target.get("pm_ra_mas_yr"), target.get("pm_dec_mas_yr")
+            mjds = TRACK_MJDS if pm_ra is not None and pm_dec is not None else [ephemeris.REFERENCE_MJD]
+            for mjd in mjds:
+                r, d = ephemeris.expected_position(target["ra"], target["dec"], pm_ra or 0.0, pm_dec or 0.0, mjd)
+                if angular_separation_deg(ra, dec, r, d) <= PATCH_MATCH_RADIUS_DEG:
+                    return target["slug"]
+        return None
 
     # ----- timelines --------------------------------------------------------------------
 

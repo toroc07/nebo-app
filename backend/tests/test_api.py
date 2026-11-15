@@ -14,7 +14,8 @@ from tests.fakes import make_cutout_bytes, make_records
 from tests.memory_store import MemoryStore
 from tests.test_service import wait_until_settled
 
-RA, DEC = 269.446223, 4.76878
+# A free field 1 deg east of Barnard's Star: coordinate searches here must not match a catalogue object.
+RA, DEC = 270.446223, 4.76878
 
 
 @pytest.fixture
@@ -30,6 +31,17 @@ def client():
     app.dependency_overrides[get_service] = lambda: service
     yield TestClient(app), service
     app.dependency_overrides.clear()
+
+
+def test_typed_j2000_coordinates_of_a_moving_target_open_its_patch(client):
+    # WISE 0855 as SIMBAD gives it (J2000): 128" from its 2026.2 position, outside the 30" reuse radius.
+    http, _ = client
+    by_target = http.get("/api/v1/timeline", params={"target": "wise-0855", "detector": 6}).json()
+    typed = http.get("/api/v1/timeline", params={"ra": 133.79512, "dec": -7.24514, "detector": 6}).json()
+    assert typed["patch"]["target"] == "wise-0855"
+    assert typed["patch"]["id"] == by_target["patch"]["id"]
+    far = http.get("/api/v1/timeline", params={"ra": 10.0, "dec": 10.0, "detector": 6}).json()
+    assert far["patch"]["target"] is None
 
 
 def test_targets_and_patches(client):
