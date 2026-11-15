@@ -39,13 +39,20 @@ def test_targets_and_patches(client):
     assert http.get("/api/v1/patches").json() == []
 
 
+def test_retry_after_is_short_only_in_early_stages():
+    from app.main import retry_after_for
+
+    assert retry_after_for("querying") == 2 and retry_after_for("first_light") == 2
+    assert retry_after_for("refining") == 5 and retry_after_for(None) == 5
+
+
 def test_timeline_202_then_200_with_images(client):
     http, service = client
     params = {"ra": RA, "dec": DEC, "size": "small", "detector": 3}
 
     first = http.get("/api/v1/timeline", params=params)
     assert first.status_code == 202
-    assert first.headers["Retry-After"] == "5"
+    assert first.headers["Retry-After"] == "2"  # early stage: poll fast
     body = first.json()
     assert body["status"] == "building" and body["detector"]["bandpass"] == "SPHEREx-D3"
 

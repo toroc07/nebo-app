@@ -11,6 +11,7 @@ import hashlib
 import logging
 import math
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -448,6 +449,7 @@ class TimelineService:
 
     def _build(self, patch: Patch, timeline: Timeline, refresh_frames: bool = False) -> None:
         store, timeline_id = self.store, timeline.id
+        t0 = time.monotonic()
         store.update_progress(timeline_id, "querying", 0, 0)
         tap_cache_key = hashlib.sha256(
             f"irsa_tap:{patch.ra:.6f}:{patch.dec:.6f}:D{timeline.detector}".encode()
@@ -519,7 +521,9 @@ class TimelineService:
             nonlocal done
             epoch, record = item
             try:
+                t_fetch = time.monotonic()
                 data = self._fetch_cutout(record.uri, patch.ra, patch.dec, config.FETCH_SIZE_DEG)
+                log.info("timeline %s: frame in %.1fs", timeline_id, time.monotonic() - t_fetch)
                 cutout = imaging.read_cutout(data, patch.ra, patch.dec)
                 source_position = (
                     ephemeris.expected_position(
@@ -568,6 +572,7 @@ class TimelineService:
                     continue
                 download(wave_items)
                 if processed:
+                    log.info("timeline %s: %s at +%.1fs", timeline_id, wave_stage, time.monotonic() - t0)
                     store.save_partial_timeline(
                         timeline_id,
                         render_epoch_images(records, epochs, processed),
@@ -590,6 +595,7 @@ class TimelineService:
             if not processed:
                 raise NoDataError("SPHEREx images were found but none could be downloaded.")
 
+        log.info("timeline %s: all frames at +%.1fs", timeline_id, time.monotonic() - t0)
         store.update_progress(timeline_id, "rendering", total_work, total_work)
         images = render_epoch_images(records, epochs, processed)
         # A rebuild can regroup the epochs, so the exposure rows are replaced in the same
