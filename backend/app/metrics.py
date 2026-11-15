@@ -671,9 +671,14 @@ def _eval_single_index(
 
 def compute_all_17_spectral_indices(spectrum: dict[str, Any]) -> list[dict[str, Any]]:
     """Compute all 17 SPHEREx spectral indices while strictly keeping BLANKCH 51-52 null."""
-    flux_mjy = list(spectrum.get("flux_mjy") or [None] * 102)
-    sigma_mjy = list(spectrum.get("sigma_reported_mjy") or [None] * 102)
-    valid_mask = list(spectrum.get("valid_mask") or [False] * 102)
+    # Always 102 entries, so a short or long list cannot index out of range (missing = invalid).
+    def channels(key: str, missing: Any) -> list[Any]:
+        values = list(spectrum.get(key) or [])[:102]
+        return values + [missing] * (102 - len(values))
+
+    flux_mjy = channels("flux_mjy", None)
+    sigma_mjy = channels("sigma_reported_mjy", None)
+    valid_mask = channels("valid_mask", False)
     for blank_ch in science_catalogs.BLANK_CHANNELS:
         idx = blank_ch - 1
         flux_mjy[idx] = None

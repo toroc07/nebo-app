@@ -228,3 +228,103 @@ def test_api_end_to_end_science_pipeline_and_votes():
         assert r_votes.json()[0]["vote"] == "MOVER"
     finally:
         main.app.dependency_overrides.clear()
+
+
+def _science_client():
+    store = MemoryStore()
+    store.upsert_targets(
+        [
+            {
+                "slug": "wise-0855",
+                "name": "WISE 0855-0714",
+                "ra": 133.75931,
+                "dec": -7.242145,
+                "kind": "brown_dwarf",
+                "note": "Coldest known brown dwarf.",
+                "pm_ra_mas_yr": -8123.7,
+                "pm_dec_mas_yr": 673.2,
+                "recommended_detector": 6,
+            }
+        ]
+    )
+    patch = store.create_patch(133.75931, -7.242145, "wise-0855")
+    main.app.dependency_overrides[main.get_store] = lambda: store
+    main._last_forced_analysis.clear()
+    return TestClient(main.app), store, patch
+
+
+def test_science_results_from_demo_profiles_are_labelled_simulated():
+    client, _, patch = _science_client()
+    try:
+        for path in ("spectrum", "metrics", "models/event", "models/spectrum", "models/forecast"):
+            body = client.get(f"/api/v1/patches/{patch.id}/{path}").json()
+            assert body["simulated"] is True, path
+            assert "Simulated" in body["data_note"], path
+        # Data the caller sends is labelled as such and not stored on the patch.
+        fv = models.DEMO_PROFILE_SPECS["artifact_injection"]["features"]
+        sent = client.post("/api/v1/models/classify-event", json={"patch_id": patch.id, "feature_vector": fv})
+        assert sent.json()["simulated"] is False
+        stored = client.get(f"/api/v1/patches/{patch.id}/models/event").json()
+        assert stored["predicted_class"] == "MOVING_OBJECT"
+    finally:
+        main.app.dependency_overrides.clear()
+
+
+def test_reads_reuse_stored_model_results():
+    client, _, patch = _science_client()
+    try:
+        first = client.get(f"/api/v1/patches/{patch.id}/metrics")
+        assert first.status_code == 200
+        ids = [client.get(f"/api/v1/patches/{patch.id}/models/{m}").json()["id"] for m in ("event", "spectrum", "forecast")]
+        client.get(f"/api/v1/patches/{patch.id}/metrics")
+        again = [client.get(f"/api/v1/patches/{patch.id}/models/{m}").json()["id"] for m in ("event", "spectrum", "forecast")]
+        assert again == ids
+    finally:
+        main.app.dependency_overrides.clear()
+
+
+def test_forced_analysis_has_a_cooldown():
+    client, _, patch = _science_client()
+    try:
+        url = f"/api/v1/patches/{patch.id}/analyze"
+        assert client.post(url, json={"force_recompute": True}).status_code == 200
+        busy = client.post(url, json={"force_recompute": True})
+        assert busy.status_code == 429 and int(busy.headers["Retry-After"]) > 0
+        # Reading the stored results is not limited.
+        assert client.post(url, json={}).status_code == 200
+    finally:
+        main.app.dependency_overrides.clear()
+
+
+def test_bad_model_inputs_are_rejected_not_500():
+    client, _, _ = _science_client()
+    try:
+        short = client.post(
+            "/api/v1/models/classify-spectrum",
+            json={"spectrum": {"flux_mjy": [1, 2], "valid_mask": [True, True]}},
+        )
+        assert short.status_code == 422
+        mismatch = client.post(
+            "/api/v1/models/forecast-temporal",
+            json={"times_mjd": [1.0, 2.0, 3.0], "fluxes_mjy": [1.0, 2.0, 3.0], "sigmas_mjy": [0.1]},
+        )
+        assert mismatch.status_code == 422
+        too_long = client.post(
+            "/api/v1/models/forecast-temporal",
+            json={"times_mjd": list(range(501)), "fluxes_mjy": [1.0] * 501},
+        )
+        assert too_long.status_code == 422
+    finally:
+        main.app.dependency_overrides.clear()
+    # The model itself also tolerates a short spectrum instead of raising IndexError.
+    assert models.run_model2_spectral_classifier({"flux_mjy": [1.0], "valid_mask": [True]})
+
+
+def test_vote_listing_never_exposes_voter_tokens():
+    client, _, patch = _science_client()
+    try:
+        client.post(f"/api/v1/patches/{patch.id}/votes", json={"vote": "MOVER", "voter_token": "secret-1"})
+        votes = client.get(f"/api/v1/patches/{patch.id}/votes").json()
+        assert len(votes) == 1 and "voter_token" not in votes[0]
+    finally:
+        main.app.dependency_overrides.clear()

@@ -119,7 +119,12 @@ class Store(Protocol):
         frames_used: int,
     ) -> None: ...
     def complete_timeline(
-        self, timeline_id: int, images: list[EpochImage], frames_found: int, frames_used: int
+        self,
+        timeline_id: int,
+        images: list[EpochImage],
+        frames_found: int,
+        frames_used: int,
+        exposures: list[dict[str, Any]] | None = None,
     ) -> None: ...
     def fail_timeline(self, timeline_id: int, error: str) -> None: ...
     def list_images(self, timeline_id: int, size: str) -> list[ImageInfo]: ...
@@ -567,11 +572,23 @@ class PostgresStore:
                 )
 
     def complete_timeline(
-        self, timeline_id: int, images: list[EpochImage], frames_found: int, frames_used: int
+        self,
+        timeline_id: int,
+        images: list[EpochImage],
+        frames_found: int,
+        frames_used: int,
+        exposures: list[dict[str, Any]] | None = None,
     ) -> None:
+        """Swap in the final images and, when given, this build's exposure rows, atomically:
+        a failure keeps the previous images and exposures together."""
         with self.pool.connection() as conn:
             with conn.transaction():
                 self._replace_timeline_images_conn(conn, timeline_id, images)
+                if exposures is not None:
+                    conn.execute(
+                        "DELETE FROM nasa_sector_exposures WHERE timeline_id = %s", (timeline_id,)
+                    )
+                    self._save_exposures_conn(conn, exposures)
                 conn.execute(
                     "UPDATE timelines SET status = 'ready', stage = 'done', error = NULL, "
                     "frames_found = %s, frames_used = %s, updated_at = now() WHERE id = %s",
@@ -732,6 +749,12 @@ class PostgresStore:
     def save_nasa_sector_exposures(self, exposures: list[dict[str, Any]]) -> int:
         if not exposures:
             return 0
+        with self.pool.connection() as conn:
+            return self._save_exposures_conn(conn, exposures)
+
+    def _save_exposures_conn(self, conn: Any, exposures: list[dict[str, Any]]) -> int:
+        if not exposures:
+            return 0
         sql = """
             INSERT INTO nasa_sector_exposures (
                 patch_id, timeline_id, detector, epoch_index, uri, release, plane_id,
@@ -824,9 +847,8 @@ class PostgresStore:
             )
             for e in exposures
         ]
-        with self.pool.connection() as conn:
-            with conn.cursor() as cur:
-                cur.executemany(sql, params)
+        with conn.cursor() as cur:
+            cur.executemany(sql, params)
         return len(params)
 
     def list_nasa_sector_exposures(

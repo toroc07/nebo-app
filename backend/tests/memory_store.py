@@ -204,8 +204,16 @@ class MemoryStore:
             )
 
     def complete_timeline(
-        self, timeline_id: int, images: list[EpochImage], frames_found: int, frames_used: int
+        self,
+        timeline_id: int,
+        images: list[EpochImage],
+        frames_found: int,
+        frames_used: int,
+        exposures: list[dict[str, Any]] | None = None,
     ) -> None:
+        if exposures is not None:
+            self.delete_timeline_exposures(timeline_id)
+            self.save_nasa_sector_exposures(exposures)
         with self._lock:
             self._replace_images_locked(timeline_id, images)
             self._update_locked(

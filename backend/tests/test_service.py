@@ -383,3 +383,22 @@ def test_exposure_photometry_is_skipped_when_the_aperture_is_saturated():
     row = _row(source_position=_star_position(), flag_value_at_star=1 << 26)  # BLOOM
     assert row["aperture_flux_ujy"] is None
     assert row["aperture_sigma_reported_ujy"] is None
+
+
+def test_failed_rebuild_keeps_the_old_exposures_with_the_old_images(monkeypatch):
+    from app import service as service_module
+
+    service, store = make_service(make_records([60914.0, 61110.0]))
+    patch = service.resolve_patch(target_slug="barnards-star")
+    timeline = service.build_now(patch, 3)
+    assert timeline is not None
+    before = store.list_nasa_sector_exposures(patch.id, detector=3)
+
+    def broken_render(*args, **kwargs):
+        raise RuntimeError("render failed")
+
+    service._query_frames = lambda *args: make_records([60914.0, 61110.0, 61300.0])
+    monkeypatch.setattr(service_module, "render_epoch_images", broken_render)
+    with pytest.raises(RuntimeError):
+        service.rebuild_now(patch, 3)
+    assert store.list_nasa_sector_exposures(patch.id, detector=3) == before

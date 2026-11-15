@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import io
 import logging
+import time
 from typing import Any, Literal
 
 import numpy as np
@@ -301,23 +302,34 @@ def get_timeline(
         return payload
     if view.status == "failed":
         return JSONResponse(status_code=502, content=payload)
+    # Opt-in only (wait_for): the answer is a preview that keeps improving, and its image ids are
+    # replaced by the next save, so the client must ask again after Retry-After.
     early_ready = (
         view.status == "building"
         and view.patch.target_slug is None
         and len(view.images) > 0
         and (
-            config.PROGRESSIVE_EARLY_READY
-            or wait_for == "first_light"
-            or (wait_for == "preview" and view.timeline.stage in ("preview_ready", "refining"))
+            wait_for == "first_light"
+            or (
+                wait_for == "preview"
+                and view.timeline.stage in ("preview_ready", "refining", "rendering")
+            )
         )
     )
     if early_ready:
-        return payload | {
-            "status": "ready",
-            "is_partial": True,
-            "refining": True,
-            "data": {"source": DATA_SOURCE, "processed_at": view.timeline.updated_at.isoformat()},
-        }
+        return JSONResponse(
+            content=payload
+            | {
+                "status": "ready",
+                "is_partial": True,
+                "refining": True,
+                "data": {
+                    "source": DATA_SOURCE,
+                    "processed_at": view.timeline.updated_at.isoformat(),
+                },
+            },
+            headers={"Retry-After": str(RETRY_AFTER_S)},
+        )
     return JSONResponse(
         status_code=202, content=payload, headers={"Retry-After": str(RETRY_AFTER_S)}
     )
@@ -433,20 +445,43 @@ class SpectrumClassifyRequest(BaseModel):
     spectrum: dict[str, Any] | None = None
 
 
+# The GP forecast costs O(n^3) in the number of points; a light curve longer than this is refused.
+MAX_FORECAST_POINTS = 500
+SPECTRUM_CHANNELS = 102
+SPECTRUM_LIST_KEYS = ("flux_mjy", "sigma_reported_mjy", "valid_mask")
+
+
 class ForecastRequest(BaseModel):
     patch_id: int | None = Field(default=None, ge=1)
     target: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
     scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
-    times_mjd: list[float] | None = None
-    fluxes_mjy: list[float] | None = None
-    sigmas_mjy: list[float] | None = None
+    times_mjd: list[float] | None = Field(default=None, max_length=MAX_FORECAST_POINTS)
+    fluxes_mjy: list[float] | None = Field(default=None, max_length=MAX_FORECAST_POINTS)
+    sigmas_mjy: list[float] | None = Field(default=None, max_length=MAX_FORECAST_POINTS)
     horizon_days: float = Field(default=180.0, gt=1.0, le=730.0)
     period_days: float | None = Field(default=None, gt=0.01)
 
 
 class AnalyzePatchRequest(BaseModel):
     scenario: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,64}$")
-    force_recompute: bool = True
+    force_recompute: bool = False
+
+
+def _simulated(row: dict) -> dict:
+    """Label a result derived from the built-in demonstration profiles, never from real data."""
+    return row | {"simulated": True, "data_note": models.SIMULATED_NOTE}
+
+
+def _from_user_input(row: dict) -> dict:
+    """A result computed from data the caller sent. It is returned, never stored on a patch:
+    anyone can call these endpoints, and a stored row would replace the patch's own result."""
+    return row | {"simulated": False, "data_note": "Computed from the data sent in the request."}
+
+
+# Recomputing a patch's science bundle is heavy and the API is public: one forced run per patch
+# in this window, per process.
+ANALYZE_COOLDOWN_S = 60.0
+_last_forced_analysis: dict[int, float] = {}
 
 
 class CitizenVoteRequest(BaseModel):
@@ -491,7 +526,7 @@ def get_patch_spectrum(
         spec = bundle["spectrum"]
     if spec is None:
         raise HTTPException(status_code=404, detail="Patch spectrum not found.")
-    return spec
+    return _simulated(spec)
 
 
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/metrics")
@@ -516,6 +551,11 @@ def get_patch_metrics(
                 image_photometry.append({"epoch_index": img_info.epoch_index, "mid_mjd": img_info.mid_mjd, **phot})
     return {
         "patch": bundle["patch"],
+        # Confidence, variability and indices are simulated; image_photometry is measured on
+        # this patch's SPHEREx images.
+        "simulated": True,
+        "data_note": models.SIMULATED_NOTE
+        + " image_photometry is measured on this patch's SPHEREx images.",
         "confidence": bundle["confidence"],
         "variability": bundle["variability"],
         "spectral_indices": bundle["spectrum"].get("indices", []),
@@ -532,6 +572,17 @@ def analyze_patch(
     """Run and persist the complete science pipeline (102 channels, 17 indices, Models 1, 2, 3)."""
     patch = _patch_or_404(store, patch_id)
     req = body or AnalyzePatchRequest()
+    if req.force_recompute or req.scenario:
+        now = time.monotonic()
+        last = _last_forced_analysis.get(patch_id)
+        if last is not None and now - last < ANALYZE_COOLDOWN_S:
+            wait = int(ANALYZE_COOLDOWN_S - (now - last)) + 1
+            raise HTTPException(
+                status_code=429,
+                detail=f"Patch analysed recently; retry in {wait} s.",
+                headers={"Retry-After": str(wait)},
+            )
+        _last_forced_analysis[patch_id] = now
     return models.analyze_patch_science(
         store,
         patch,
@@ -559,9 +610,10 @@ def classify_event(
         raise HTTPException(status_code=422, detail="Provide feature_vector, patch_id, or target.")
 
     result = models.run_model1_event_classifier(fv, temperature_t=body.temperature_t)
-    if patch is not None:
-        return store.save_model1_attribution(patch.id, -1, result)
-    return result
+    if body.feature_vector is not None:
+        return _from_user_input(result)
+    assert patch is not None
+    return _simulated(store.save_model1_attribution(patch.id, -1, result))
 
 
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/models/event")
@@ -574,7 +626,7 @@ def get_patch_event_model(
     row = store.get_model1_attribution(patch_id, epoch_index=-1)
     if row is None:
         row = models.analyze_patch_science(store, patch, force_recompute=False)["model1_event"]
-    return row
+    return _simulated(row)
 
 
 @app.post(f"{API_PREFIX}/models/classify-spectrum")
@@ -586,21 +638,31 @@ def classify_spectrum(
     store = service.store
     patch = _resolve_optional_patch(service, body.patch_id, body.target)
     if body.spectrum is not None:
-        result = models.run_model2_spectral_classifier(body.spectrum)
-        if patch is not None:
-            return store.save_model2_classification(patch.id, result)
-        return result
+        for key in SPECTRUM_LIST_KEYS:
+            values = body.spectrum.get(key)
+            if values is not None and (
+                not isinstance(values, list) or len(values) != SPECTRUM_CHANNELS
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"spectrum.{key} must be a list of {SPECTRUM_CHANNELS} values.",
+                )
+        try:
+            result = models.run_model2_spectral_classifier(body.spectrum)
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=f"Invalid spectrum: {error}") from None
+        return _from_user_input(result)
 
     if patch is not None:
         bundle = models.analyze_patch_science(
             store, patch, scenario=body.scenario, force_recompute=bool(body.scenario)
         )
-        return bundle["model2_spectrum"]
+        return _simulated(bundle["model2_spectrum"])
 
     scenario = body.scenario or body.target
     if scenario and scenario in models.DEMO_PROFILE_SPECS:
         spec = models.build_demo_spectrum_payload(scenario)
-        return models.run_model2_spectral_classifier(spec)
+        return _simulated(models.run_model2_spectral_classifier(spec))
     raise HTTPException(status_code=422, detail="Provide spectrum, patch_id, target, or scenario.")
 
 
@@ -614,7 +676,7 @@ def get_patch_spectrum_model(
     row = store.get_model2_classification(patch_id)
     if row is None:
         row = models.analyze_patch_science(store, patch, force_recompute=False)["model2_spectrum"]
-    return row
+    return _simulated(row)
 
 
 @app.post(f"{API_PREFIX}/models/forecast-temporal")
@@ -628,6 +690,8 @@ def forecast_temporal(
     if body.times_mjd is not None and body.fluxes_mjy is not None:
         if len(body.times_mjd) != len(body.fluxes_mjy) or len(body.times_mjd) < 2:
             raise HTTPException(status_code=422, detail="times_mjd and fluxes_mjy must match and have length >= 2.")
+        if body.sigmas_mjy is not None and len(body.sigmas_mjy) != len(body.fluxes_mjy):
+            raise HTTPException(status_code=422, detail="sigmas_mjy must have the same length as fluxes_mjy.")
         sigmas = body.sigmas_mjy or [
             science_catalogs.compute_reported_sigma(f, 0.015 * abs(f)) for f in body.fluxes_mjy
         ]
@@ -645,15 +709,13 @@ def forecast_temporal(
             model1_result=m1_row,
             model1_attribution_id=m1_row["id"] if m1_row else None,
         )
-        if patch is not None:
-            return store.save_model3_forecast(patch.id, result)
-        return result
+        return _from_user_input(result)
 
     if patch is not None:
         bundle = models.analyze_patch_science(
             store, patch, scenario=body.scenario, force_recompute=bool(body.scenario)
         )
-        return bundle["model3_forecast"]
+        return _simulated(bundle["model3_forecast"])
 
     raise HTTPException(status_code=422, detail="Provide times_mjd + fluxes_mjy, patch_id, or target.")
 
@@ -668,7 +730,7 @@ def get_patch_forecast_model(
     row = store.get_model3_forecast(patch_id)
     if row is None:
         row = models.analyze_patch_science(store, patch, force_recompute=False)["model3_forecast"]
-    return row
+    return _simulated(row)
 
 
 @app.post(f"{API_PREFIX}/patches/{{patch_id}}/votes")
@@ -694,6 +756,9 @@ def list_citizen_votes(
     epoch_index: int | None = Query(None, ge=-1),
     store: Store = Depends(get_store),
 ) -> list[dict]:
-    """List citizen-science votes recorded for a patch."""
+    """List citizen-science votes recorded for a patch (voter tokens are never listed)."""
     _patch_or_404(store, patch_id)
-    return store.list_citizen_votes(patch_id, epoch_index=epoch_index)
+    return [
+        {key: value for key, value in vote.items() if key != "voter_token"}
+        for vote in store.list_citizen_votes(patch_id, epoch_index=epoch_index)
+    ]

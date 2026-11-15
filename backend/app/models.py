@@ -405,9 +405,14 @@ def run_model2_spectral_classifier(
     computed_indices = indices if indices is not None else metrics.compute_all_17_spectral_indices(spectrum)
     idx_vals = _index_map(computed_indices)
 
-    flux_list = list(spectrum.get("flux_mjy") or [None] * 102)
-    sigma_list = list(spectrum.get("sigma_reported_mjy") or [None] * 102)
-    valid_list = list(spectrum.get("valid_mask") or [False] * 102)
+    # Always 102 entries, so a short or long list cannot index out of range (missing = invalid).
+    def channels(key: str, missing: Any) -> list[Any]:
+        values = list(spectrum.get(key) or [])[:102]
+        return values + [missing] * (102 - len(values))
+
+    flux_list = channels("flux_mjy", None)
+    sigma_list = channels("sigma_reported_mjy", None)
+    valid_list = channels("valid_mask", False)
 
     # Strictly mask BLANKCH 51 and 52 (Golden Rule #1)
     mask = np.zeros(102, dtype=bool)
@@ -943,6 +948,12 @@ def build_demo_spectrum_payload(scenario: str) -> dict[str, Any]:
     }
 
 
+SIMULATED_NOTE = (
+    "Simulated: the spectrum, light curve, confidence score and Model 1-3 results come from "
+    "built-in demonstration profiles, not from measurements of this patch."
+)
+
+
 def analyze_patch_science(
     store: Store,
     patch: Patch,
@@ -983,33 +994,48 @@ def analyze_patch_science(
         is_stationary=fv["z_dipole"] < 3.0,
     )
 
-    # 3. Model 1 -> Model 2 -> Model 3 (with Model 1 handshake)
-    m1_payload = run_model1_event_classifier(fv)
-    saved_m1 = store.save_model1_attribution(patch.id, -1, m1_payload)
-
-    m2_payload = run_model2_spectral_classifier(saved_spectrum, indices=indices)
-    m2_payload["spectrum_id"] = saved_spectrum["id"]
-    saved_m2 = store.save_model2_classification(patch.id, m2_payload)
-
-    target_row = store.get_target(patch.target_slug) if patch.target_slug else None
-    pm_ra = float((target_row or {}).get("pm_ra_mas_yr") or 0.0)
-    pm_dec = float((target_row or {}).get("pm_dec_mas_yr") or 0.0)
-    m3_payload = run_model3_temporal_forecast(
-        times_mjd,
-        fluxes_mjy,
-        sigmas_mjy,
-        ra_deg=patch.ra,
-        dec_deg=patch.dec,
-        pm_ra_mas_yr=pm_ra,
-        pm_dec_mas_yr=pm_dec,
-        period_days=spec_cfg.get("period_days"),
-        model1_result=m1_payload,
-        model1_attribution_id=saved_m1["id"],
+    # 3. Model 1 -> Model 2 -> Model 3 (with Model 1 handshake). Reads reuse the stored results:
+    # rerunning the models (the GP forecast included) and rewriting rows on every GET was costly.
+    stored = (
+        None
+        if force_recompute
+        else (
+            store.get_model1_attribution(patch.id, epoch_index=-1),
+            store.get_model2_classification(patch.id),
+            store.get_model3_forecast(patch.id),
+        )
     )
-    saved_m3 = store.save_model3_forecast(patch.id, m3_payload)
+    if stored is not None and all(row is not None for row in stored):
+        saved_m1, saved_m2, saved_m3 = stored
+    else:
+        m1_payload = run_model1_event_classifier(fv)
+        saved_m1 = store.save_model1_attribution(patch.id, -1, m1_payload)
+
+        m2_payload = run_model2_spectral_classifier(saved_spectrum, indices=indices)
+        m2_payload["spectrum_id"] = saved_spectrum["id"]
+        saved_m2 = store.save_model2_classification(patch.id, m2_payload)
+
+        target_row = store.get_target(patch.target_slug) if patch.target_slug else None
+        pm_ra = float((target_row or {}).get("pm_ra_mas_yr") or 0.0)
+        pm_dec = float((target_row or {}).get("pm_dec_mas_yr") or 0.0)
+        m3_payload = run_model3_temporal_forecast(
+            times_mjd,
+            fluxes_mjy,
+            sigmas_mjy,
+            ra_deg=patch.ra,
+            dec_deg=patch.dec,
+            pm_ra_mas_yr=pm_ra,
+            pm_dec_mas_yr=pm_dec,
+            period_days=spec_cfg.get("period_days"),
+            model1_result=m1_payload,
+            model1_attribution_id=saved_m1["id"],
+        )
+        saved_m3 = store.save_model3_forecast(patch.id, m3_payload)
 
     return {
         "patch": {"id": patch.id, "ra": patch.ra, "dec": patch.dec, "target": patch.target_slug},
+        "simulated": True,
+        "data_note": SIMULATED_NOTE,
         "scenario": profile_key,
         "confidence": conf,
         "variability": variability,

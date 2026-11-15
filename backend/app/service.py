@@ -549,25 +549,40 @@ class TimelineService:
         if is_progressive:
             store.delete_timeline_exposures(timeline_id)
             processed: list[_Processed] = []
-            for wave_idx, (wave_stage, wave_items) in enumerate(waves):
-                wave_work = [(epoch, records[i]) for epoch, i in wave_items]
-                wave_processed = [p for p in self._downloads.map(process, wave_work) if p is not None]
-                processed.extend(wave_processed)
-                wave_exposures = [p.exposure_row for p in wave_processed if p.exposure_row is not None]
-                if wave_exposures:
-                    store.save_nasa_sector_exposures(wave_exposures)
-                if processed and wave_idx < len(waves) - 1:
-                    current_stage = wave_stage
-                    partial_images = render_epoch_images(records, epochs, processed)
+
+            def download(items: list[tuple[int, int]]) -> None:
+                batch = [(epoch, records[i]) for epoch, i in items]
+                fresh = [p for p in self._downloads.map(process, batch) if p is not None]
+                processed.extend(fresh)
+                rows = [p.exposure_row for p in fresh if p.exposure_row is not None]
+                if rows:
+                    store.save_nasa_sector_exposures(rows)
+
+            # The previews (first light, then one frame per epoch) are saved as soon as they are
+            # downloaded, the last one included, so `preview_ready` is never skipped. The stage
+            # names what is already saved. The refining frames are fetched in one parallel batch
+            # and rendered once at the end: re-rendering and rewriting every image after each
+            # refining round multiplied the build time and the database writes.
+            for wave_stage, wave_items in waves:
+                if wave_stage == "refining":
+                    continue
+                download(wave_items)
+                if processed:
                     store.save_partial_timeline(
                         timeline_id,
-                        partial_images,
+                        render_epoch_images(records, epochs, processed),
                         stage=wave_stage,
                         done=done,
                         total=total_work,
                         frames_found=len(records),
                         frames_used=len(processed),
                     )
+                    current_stage = wave_stage
+            refining = [item for stage, items in waves if stage == "refining" for item in items]
+            if refining:
+                if processed:
+                    current_stage = "refining"
+                download(refining)
             if not processed:
                 raise NoDataError("SPHEREx images were found but none could be downloaded.")
         else:
@@ -575,14 +590,16 @@ class TimelineService:
             if not processed:
                 raise NoDataError("SPHEREx images were found but none could be downloaded.")
 
-            exposure_rows = [p.exposure_row for p in processed if p.exposure_row is not None]
-            # A rebuild can regroup the epochs: drop the rows of the previous build first.
-            store.delete_timeline_exposures(timeline_id)
-            if exposure_rows:
-                store.save_nasa_sector_exposures(exposure_rows)
-
         store.update_progress(timeline_id, "rendering", total_work, total_work)
         images = render_epoch_images(records, epochs, processed)
+        # A rebuild can regroup the epochs, so the exposure rows are replaced in the same
+        # transaction as the images; the progressive path saved its rows as it went.
         store.complete_timeline(
-            timeline_id, images, frames_found=len(records), frames_used=len(processed)
+            timeline_id,
+            images,
+            frames_found=len(records),
+            frames_used=len(processed),
+            exposures=None
+            if is_progressive
+            else [p.exposure_row for p in processed if p.exposure_row is not None],
         )

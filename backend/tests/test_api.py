@@ -211,9 +211,10 @@ def test_coordinate_timeline_202_includes_first_light_static_image_and_sector(cl
     # Waiting for full preview stays 202 while only epoch 0 has landed.
     assert http.get("/api/v1/timeline", params=params | {"wait_for": "preview"}).status_code == 202
 
-    # Env flag enables early-ready 200 for coordinate searches without changing Featured Objects.
-    monkeypatch.setattr(config, "PROGRESSIVE_EARLY_READY", True)
-    assert http.get("/api/v1/timeline", params=params).status_code == 200
+    # The early answer tells the client to ask again; without wait_for it stays 202, because the
+    # web client treats any 200 as final.
+    assert early.headers["Retry-After"]
+    assert http.get("/api/v1/timeline", params=params).status_code == 202
 
     release_rest.set()
     wait_until_settled(service, service.resolve_patch(ra=RA, dec=DEC), size="small")
@@ -225,9 +226,7 @@ def test_coordinate_timeline_202_includes_first_light_static_image_and_sector(cl
     assert all(e["frames_used"] == 2 for e in final_body["epochs"])
 
 
-def test_featured_object_ignores_early_ready_toggle(client, monkeypatch):
-    from app import config
-
+def test_featured_object_ignores_early_ready(client):
     http, service = client
     records = make_records([60914.0, 61110.0])
     release = threading.Event()
@@ -235,7 +234,6 @@ def test_featured_object_ignores_early_ready_toggle(client, monkeypatch):
     service._fetch_cutout = lambda uri, ra, dec, size: (
         release.wait(10) or make_cutout_bytes(ra, dec, shape=(211, 211))
     )
-    monkeypatch.setattr(config, "PROGRESSIVE_EARLY_READY", True)
     resp = http.get("/api/v1/timeline", params={"target": "barnards-star", "wait_for": "first_light"})
     assert resp.status_code == 202
     assert resp.json()["epochs"] == []

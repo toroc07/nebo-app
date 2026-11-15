@@ -79,11 +79,7 @@ PROGRESSIVE_COORDINATE_BUILD = os.environ.get("NEBO_PROGRESSIVE_COORDINATE_BUILD
     "false",
     "no",
 )
-# When true, GET /timeline for coordinate searches answers 200 as soon as the first static image is ready
-# while continuing co-add refinement in the background.
-PROGRESSIVE_EARLY_READY = os.environ.get("NEBO_PROGRESSIVE_EARLY_READY", "0").strip().lower() in (
-    "1",
-    "true",
-    "yes",
-)
+# There is deliberately no switch that makes every coordinate search answer 200 early: the web
+# client treats any 200 as final and would stop at the one-frame preview. Clients that can keep
+# polling ask for it per request with GET /timeline?wait_for=first_light|preview.
 
