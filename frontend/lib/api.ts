@@ -216,7 +216,9 @@ export class ApiError extends Error {
           ? "The database is not configured yet. Connect PostgreSQL to query the images."
           : "The service is unavailable. Try again in a few moments."
         : status === 502
-          ? "We could not prepare this field. Try another detector or try again in a minute."
+          ? code === "archive_unavailable"
+            ? "NASA's IRSA archive is not responding right now. This is on their side, not your field: try again in a few minutes."
+            : "We could not prepare this field. Try another detector or try again in a minute."
           : status === 404
             ? "We could not find this object. Go back to the catalog."
             : status === 422

@@ -4,10 +4,12 @@ import time
 
 import numpy as np
 import pytest
+import requests
 from PIL import Image
 
 from app import config, imaging
 from app.service import (
+    ARCHIVE_UNAVAILABLE,
     ServiceBusy,
     TargetNotFound,
     TimelineService,
@@ -162,6 +164,18 @@ def test_no_frames_fails_then_can_be_retried_after_the_cooldown():
 
     store.age_timeline(view.timeline.id, config.FAILED_RETRY_S + 1)
     assert service.timeline(patch, 3, "medium").status == "building"
+
+
+def test_irsa_outage_is_reported_as_archive_unavailable():
+    service, _ = make_service([])
+
+    def down(ra, dec, detector):
+        raise requests.HTTPError("502 Server Error: Proxy Error")
+
+    service._query_frames = down
+    patch = service.resolve_patch(ra=RA, dec=DEC)
+    view = wait_until_settled(service, patch)
+    assert view.status == "failed" and view.timeline.error == ARCHIVE_UNAVAILABLE
 
 
 def test_stale_build_is_taken_over():

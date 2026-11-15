@@ -34,6 +34,7 @@ from . import (
     wise,
 )
 from .service import (
+    ARCHIVE_UNAVAILABLE,
     ServiceBusy,
     TargetNotFound,
     TimelineService,
@@ -227,7 +228,10 @@ def timeline_payload(view: TimelineView, size: str, store: Store) -> dict:
     }
     timeline = view.timeline
     if view.status == "failed":
-        return base | {"error": timeline.error}
+        return base | {
+            "error": timeline.error,
+            "code": "archive_unavailable" if timeline.error == ARCHIVE_UNAVAILABLE else "build_failed",
+        }
 
     epochs = _epochs_payload(view, size, store)
     if view.status == "building":

@@ -202,7 +202,8 @@ after `Retry-After`: the images are replaced at each step and **their ids change
 `image_url` every time. The final answer is a normal `200` without `is_partial`. Coordinate
 searches only; label partial images as preliminary.
 
-**`502` — failed**: `{"status": "failed", ..., "error": "No SPHEREx images cover this position with this detector yet."}`.
+**`502` — failed**: `{"status": "failed", ..., "code": "build_failed", "error": "No SPHEREx images cover this position with this detector yet."}`.
+`code: "archive_unavailable"` when IRSA itself did not answer (TAP and SIA both failed): retry later.
 The same request is retried automatically after one minute.
 
 Other answers: `404` for an unknown target, `422` for invalid parameters, `503` when the
