@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ArrowLeft } from "lucide-react";
 import { read, type Target, type Query } from "@/lib/api";
+import { parseFieldLink, type FieldLink } from "@/lib/fieldLink";
 import Field from "./Field";
 import Cockpit from "./Cockpit";
 import ChatPanel from "./ChatPanel";
@@ -52,6 +53,8 @@ export default function Nebo() {
     [screenPowered, setScreenPowered] = useState(true),
     [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, grid: false }),
     [query, setQuery] = useState<Query | null>(null),
+    // A shared field link (?ra&dec|target&fov&det&epoch) opens the viewer directly.
+    [link, setLink] = useState<FieldLink | null>(null),
     [flight, setFlight] = useState(0),
     [skyMounted, setSkyMounted] = useState(false);
   const root = useRef<HTMLDivElement>(null),
@@ -75,6 +78,12 @@ export default function Nebo() {
           speed: [400, 800, 1500].includes(p.speed) ? p.speed : 800,
         });
     } catch {}
+    const shared = parseFieldLink(location.search);
+    if (shared) {
+      setLink(shared);
+      setQuery(shared.query);
+      setView("Field");
+    }
     setLoaded(true);
     const m = matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setSystemReduced(m.matches);
@@ -91,6 +100,13 @@ export default function Nebo() {
     }
     document.documentElement.dataset.reduced = String(reduced);
   }, [prefs, loaded, reduced]);
+  // A target link names the field once the catalogue arrives.
+  useEffect(() => {
+    if (link?.query.target && !selected) {
+      const t = targets.find((x) => x.slug === link.query.target);
+      if (t) setSelected(t);
+    }
+  }, [link, targets, selected]);
   const needsCatalog = ["Explore", "Field"].includes(view);
   useEffect(() => {
     if (!needsCatalog) return;
@@ -394,7 +410,9 @@ export default function Nebo() {
                 </h1>
               </div>
             )}
-            {view === "Field" && query && (
+            {view === "Field" && query &&
+              // A target link without det waits for the catalogue's recommended detector.
+              !(query.target && !selected && !link?.detector && !targets.length && !catalogError) && (
               <Field
                 query={query}
                 target={selected}
@@ -402,7 +420,9 @@ export default function Nebo() {
                 headingRef={heading}
                 onBack={back}
                 powered={screenPowered}
-                recommended={selected?.recommended_detector || 3}
+                recommended={(link?.query === query && link.detector) || selected?.recommended_detector || 3}
+                initialSize={link?.query === query ? link.size : undefined}
+                initialEpoch={link?.query === query ? link.epoch : undefined}
                 speed={prefs.speed}
                 reduced={reduced}
               />

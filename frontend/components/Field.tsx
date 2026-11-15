@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Crosshair,
   Layers,
+  Link2,
   Pause,
   Play,
   RotateCcw,
@@ -28,6 +29,7 @@ import {
   type Timeline,
   type Building,
 } from "@/lib/api";
+import { fieldLink } from "@/lib/fieldLink";
 import { decToParts, raToParts } from "@/lib/coordinates";
 import { pixelToSky } from "@/lib/lab/sky";
 import dynamic from "next/dynamic";
@@ -81,6 +83,8 @@ export default function Field({
   speed,
   reduced,
   powered = true,
+  initialSize = "medium",
+  initialEpoch = 0,
 }: {
   query: Query;
   target: Target | null;
@@ -95,9 +99,12 @@ export default function Field({
    * turns towards or away from it; switching it on plays the boot sequence.
    */
   powered?: boolean;
+  /** Field size and epoch index to open first (from a shared link). */
+  initialSize?: string;
+  initialEpoch?: number;
 }) {
   const [detector, setDetector] = useState(recommended),
-    [size, setSize] = useState("medium"),
+    [size, setSize] = useState(initialSize),
     [data, setData] = useState<Timeline | null>(null),
     [progress, setProgress] = useState<Building | null>(null),
     [error, setError] = useState(""),
@@ -114,7 +121,10 @@ export default function Field({
     [imageLoading, setImageLoading] = useState(true),
     [scienceTab, setScienceTab] = useState<"diff" | "rgb" | "spectrum" | "models">("diff"),
     // Science side panel; "closing" keeps it mounted while it slides out.
-    [analysis, setAnalysis] = useState<"closed" | "open" | "closing">("closed");
+    [analysis, setAnalysis] = useState<"closed" | "open" | "closing">("closed"),
+    [copied, setCopied] = useState(false);
+  // A shared link's epoch applies to the first finished timeline only.
+  const firstEpoch = useRef(initialEpoch);
   const analysisButton = useRef<HTMLButtonElement>(null),
     analysisHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -151,6 +161,9 @@ export default function Field({
         if (!abort.signal.aborted) {
           setData(d);
           setProgress(null);
+          // Applied on the finished timeline: partial epochs while building would clamp it.
+          if (firstEpoch.current) setEpoch(Math.min(firstEpoch.current, d.epochs.length - 1));
+          firstEpoch.current = 0;
         }
       })
       .catch((e: unknown) => {
@@ -359,6 +372,23 @@ export default function Field({
             <h1 id="field-title" ref={headingRef} tabIndex={-1}>
               {title}
             </h1>
+            <button
+              type="button"
+              className={s.copyLink}
+              onClick={async () => {
+                const url = fieldLink(location.origin + location.pathname, query, size, detector, epoch);
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                } catch {
+                  /* Clipboard blocked (insecure context): show the link so it can be copied by hand. */
+                  prompt("Copy this link", url);
+                }
+              }}
+            >
+              <Link2 aria-hidden="true" /> <span aria-live="polite">{copied ? "Copied" : "Copy link"}</span>
+            </button>
           </header>
 
           <div className={s.body}>

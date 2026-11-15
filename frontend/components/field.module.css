@@ -123,6 +123,28 @@
   padding-bottom: 12px;
   border-bottom: 1px solid rgb(63 210 255 / 0.55);
 }
+.copyLink {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  font: 500 max(13px, calc(14 * var(--s))) Plex, sans-serif;
+  color: var(--ink);
+  background: #071521;
+  border: 1.5px solid var(--cyan);
+  border-radius: 6px;
+}
+.copyLink svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+.copyLink:hover {
+  background: #0c2333;
+}
 .planet {
   flex: none;
   width: 40px;
