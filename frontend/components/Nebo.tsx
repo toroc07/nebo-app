@@ -26,6 +26,8 @@ type View = "Home" | "Explore" | "Field";
 // Saved by the old settings screen; still honoured if present (the field has its own speed control).
 type Prefs = { reduced: boolean; speed: number };
 const defaults: Prefs = { reduced: false, speed: 800 };
+// Retakes of the side-window sky still after View images, once the map's pending tiles have loaded.
+const SKY_RETAKE_MS = [1500, 4000];
 export default function Nebo() {
   const [view, setView] = useState<View>("Home"),
     [prefs, setPrefs] = useState(defaults),
@@ -227,8 +229,12 @@ export default function Nebo() {
     if (departing.current || destination === view || turn) return;
     // The analysis room's side window looks out on the same sky the cockpit was showing: take a
     // still of the live map now, before the camera turns (it arrives within a frame or two).
+    // The map stays mounted and painted under the room, so it is taken again once tiles that
+    // were still loading have arrived; otherwise those gaps would stay black in the window.
     if (view === "Explore" && destination === "Field") {
-      void captureSky.current?.().then((still) => still && setSkyBackdrop(still));
+      const take = () => void captureSky.current?.().then((still) => still && setSkyBackdrop(still));
+      take();
+      for (const ms of SKY_RETAKE_MS) launchTimers.current.push(window.setTimeout(take, ms));
     }
     const motion =
       loaded && !reduced && !matchMedia("(prefers-reduced-motion: reduce)").matches;
