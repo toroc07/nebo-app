@@ -133,8 +133,9 @@ def _epoch_coverage(exposures: list[dict], image) -> dict:
     """How long one epoch lasts, its longest internal gap and the wavelengths it covers.
 
     ``split_into_epochs`` cuts passes into spans shorter than ``EPOCH_MAX_SPAN_DAYS``; an epoch
-    longer than that had small spans folded into it, so it mixes separate observing bursts
-    (and, through the LVF filter, different wavelengths). The viewer warns about those.
+    longer than that had small spans folded into it, so it averages frames taken weeks apart.
+    The viewer warns about those. (Every epoch spans most of the detector's band through the LVF
+    filter, since frames are picked evenly across it; that is not what the flag means.)
 
     ``span_days`` comes from the image dates, i.e. every frame of the epoch. ``max_gap_days`` and
     ``wavelength_um`` come from the stored exposures, which are only the frames used in the

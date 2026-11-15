@@ -886,8 +886,8 @@ export default function Field({
                         {current?.coverage?.mixed_bursts && (
                           <span role="note" className={s.epochWarning}>
                             {" "}· Mixes separate observing bursts (consecutive frames used up to{" "}
-                            {Math.round(current.coverage.max_gap_days)} days apart): the stars were
-                            seen at different wavelengths within this epoch.
+                            {Math.round(current.coverage.max_gap_days)} days apart): this image
+                            averages frames taken weeks apart, so its date is less precise.
                           </span>
                         )}
                       </dd>

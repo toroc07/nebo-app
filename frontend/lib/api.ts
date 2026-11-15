@@ -38,7 +38,7 @@ export type EpochCoverage = {
    * failed downloads). Frames left out can sit in between, so this can exceed the 30-day split rule.
    */
   max_gap_days: number;
-  /** The epoch joins separate observing bursts (it is longer than one burst can be). */
+  /** The epoch joins separate observing bursts, so it averages frames taken weeks apart. */
   mixed_bursts: boolean;
   wavelength_um: { min: number; max: number } | null;
 };
