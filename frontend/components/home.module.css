@@ -38,12 +38,34 @@
   gap: calc(16 * var(--S));
   padding: calc(20 * var(--S)) calc(28 * var(--S));
   font-size: max(12px, calc(14 * var(--S)));
-  /* The art already draws the bezel and its cyan edge: this is only the lit glass inside it. */
-  background:
-    linear-gradient(rgb(63 210 255 / 0.035) 1px, transparent 1px) 0 0 / calc(22 * var(--S)) calc(22 * var(--S)),
-    radial-gradient(120% 100% at 50% 30%, rgb(10 34 52 / 0.92), rgb(3 10 17 / 0.96));
-  box-shadow: inset 0 0 calc(40 * var(--S)) rgb(63 210 255 / 0.14);
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.7);
+  /* Chamfered like the art's glass, so the lit area follows the bezel instead of a box. */
+  --cut: calc(16 * var(--S));
+  /* Own stacking context so the z-index:-1 glow stays above the art (also with no animation). */
+  isolation: isolate;
   animation: screen-boot 900ms ease-out 250ms both;
+}
+/* The art already draws the dark glass: this only lights it from behind (screen blend). */
+.screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: polygon(
+    var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)
+  );
+  background: radial-gradient(90% 80% at 35% 40%, rgb(63 210 255 / 0.13), transparent 70%);
+  mix-blend-mode: screen;
+}
+.logo {
+  display: block;
+  height: max(96px, calc(170 * var(--S)));
+  width: auto;
+  /* The PNG has wide transparent margins around the mark: pull them out of the layout. */
+  margin: calc(-20 * var(--S)) 0 calc(-30 * var(--S)) calc(-48 * var(--S));
+  filter: drop-shadow(0 0 calc(10 * var(--S)) rgb(160 120 255 / 0.45));
 }
 /* START pressed: the picture collapses to a line and goes dark before the camera turns. */
 .screen[data-off] {
@@ -61,9 +83,6 @@
   letter-spacing: 0.01em;
   color: #fff;
   text-shadow: 0 0 18px rgb(140 220 255 / 0.45);
-}
-.header h1 span {
-  color: var(--cyan);
 }
 .header h1:focus {
   outline: none;
@@ -171,6 +190,12 @@
     gap: 16px;
     padding: 20px;
     font-size: 14px;
+    --cut: 14px;
+  }
+  /* Here the panel is not on the art's screen, so it needs its own glass to stay legible. */
+  .screen::before {
+    background: radial-gradient(120% 100% at 50% 30%, rgb(10 34 52 / 0.88), rgb(3 10 17 / 0.94));
+    mix-blend-mode: normal;
   }
   .menu {
     grid-template-columns: 1fr;
