@@ -75,7 +75,8 @@ function humanKind(kind: string) {
  */
 export default function Field({
   query,
-  target,
+  target: chosen,
+  catalog = [],
   title,
   headingRef,
   onBack,
@@ -88,6 +89,8 @@ export default function Field({
 }: {
   query: Query;
   target: Target | null;
+  /** Catalogue, to name a field opened by coordinates that lands on a catalogued object. */
+  catalog?: Target[];
   title: string;
   headingRef?: Ref<HTMLHeadingElement>;
   onBack: () => void;
@@ -332,6 +335,8 @@ export default function Field({
   const reference = data?.epochs[0];
   const showDifference = difference && !!reference && epoch > 0;
 
+  // Coordinates within the patch-reuse radius of a catalogued object get that object's patch.
+  const target = chosen ?? catalog.find((t) => t.slug === data?.patch.target) ?? null;
   // The patch centre once the API answers; before that, the requested position.
   const center =
     data?.patch ??
@@ -356,7 +361,7 @@ export default function Field({
           <img className={s.headerArt} src="/panels/console-header.webp" alt="" aria-hidden="true" />
           {phase === "boot" && (
             <BootLog
-              name={title}
+              name={target?.name ?? title}
               band={`D${detector} · ${band.range} µm`}
               status={
                 error ? "service unavailable" : data ? `${count} epoch${count === 1 ? "" : "s"} ready` : "fetching…"
@@ -370,7 +375,7 @@ export default function Field({
           <header className={s.header}>
             <PlanetIcon />
             <h1 id="field-title" ref={headingRef} tabIndex={-1}>
-              {title}
+              {target?.name ?? title}
             </h1>
             <button
               type="button"

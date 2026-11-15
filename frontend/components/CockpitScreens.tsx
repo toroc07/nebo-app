@@ -16,6 +16,7 @@ import {
   hammerInverse,
   raToParts,
   subPoint,
+  AT_MAP_CENTRE_DEG,
 } from "@/lib/coordinates";
 import type { SkyLayers, SkyView } from "./Sky";
 import s from "./cockpit.module.css";
@@ -251,7 +252,7 @@ export default function CockpitScreens({
         <strong>{nearest?.t.name ?? "—"}</strong>
         <small>
           {nearest
-            ? nearest.d < 0.05
+            ? nearest.d < AT_MAP_CENTRE_DEG
               ? "At the map centre"
               : `${nearest.d.toFixed(nearest.d < 10 ? 2 : 1)}° from the map centre · go`
             : "Waiting for the map"}

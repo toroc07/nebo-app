@@ -7,6 +7,7 @@ import { useGSAP } from "@gsap/react";
 import { ArrowLeft } from "lucide-react";
 import { read, type Target, type Query } from "@/lib/api";
 import { parseFieldLink, type FieldLink } from "@/lib/fieldLink";
+import { angularDistance, AT_MAP_CENTRE_DEG } from "@/lib/coordinates";
 import Field from "./Field";
 import Cockpit from "./Cockpit";
 import ChatPanel from "./ChatPanel";
@@ -416,6 +417,7 @@ export default function Nebo() {
               <Field
                 query={query}
                 target={selected}
+                catalog={targets}
                 title={selected?.name || "Your observation field"}
                 headingRef={heading}
                 onBack={back}
@@ -481,7 +483,14 @@ export default function Nebo() {
               }}
               onZoom={(action) => setSkyCommand({ id: Date.now(), action })}
               onView={(p) => {
+                // The console calls an object within 3′ "at the map centre": open that object, not a new
+                // patch beside it (the backend only reuses a patch within 30″). Typed coordinates are
+                // left to the backend's match (P0-6).
+                const centred = !skyCoordinates && targets.find(
+                  (t) => angularDistance(p.ra, p.dec, t.ra, t.dec) < AT_MAP_CENTRE_DEG,
+                );
                 if (selected) open(selected);
+                else if (centred) open(centred);
                 else {
                   setQuery({ ra: p.ra, dec: p.dec });
                   go("Field");
