@@ -888,6 +888,8 @@ def get_patch_candidates(
         "wise_available": wise_available,
         "gaia_complete_to_g": g_complete,
         "candidates": candidates,
+        # Detection stops at the cap: there may be more changes than listed.
+        "truncated": len(detections) >= crossmatch.MAX_CANDIDATES,
     }
 
 

@@ -35,6 +35,7 @@ export default function EpochDiffTriplet({
   const [candidates, setCandidates] = useState<CandidateDetection[]>([]);
   const [gaiaComplete, setGaiaComplete] = useState<number | null>(null);
   const [candError, setCandError] = useState("");
+  const [truncated, setTruncated] = useState(false);
   const [diffError, setDiffError] = useState(false);
 
   const compareEpoch = currentEpoch === templateEpoch && epochs.length > 1
@@ -49,6 +50,7 @@ export default function EpochDiffTriplet({
     const abort = new AbortController();
     setCandError("");
     setCandidates([]);
+    setTruncated(false);
     fetchPatchCandidates(
       patchId,
       { detector, size, epoch_a: templateEpoch, epoch_b: compareEpoch },
@@ -56,6 +58,7 @@ export default function EpochDiffTriplet({
     )
       .then((res) => {
         setCandidates(res.candidates);
+        setTruncated(res.truncated);
         setGaiaComplete(res.gaia_complete_to_g);
       })
       .catch((e) => {
@@ -109,7 +112,8 @@ export default function EpochDiffTriplet({
             onChange={(e) => setShowCandidates(e.target.checked)}
           />
           {/* A failed request must not read as "no changes". */}
-          Show detected changes ({candError ? "unavailable" : candidates.length})
+          Show detected changes (
+          {candError ? "unavailable" : `${candidates.length}${truncated ? "+" : ""}`})
         </label>
       </div>
 

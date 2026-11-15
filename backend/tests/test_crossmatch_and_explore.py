@@ -81,6 +81,7 @@ def test_candidates_endpoint_separates_catalogued_and_candidate_signals(client, 
     assert r.status_code == 200
     body = r.json()
     assert body["gaia_available"] is True
+    assert body["truncated"] is False  # 2 changes, well under the cap
     classes = {c["classification"] for c in body["candidates"]}
     assert "catalogued_object" in classes
     assert "candidate_signal" in classes

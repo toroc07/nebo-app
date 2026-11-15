@@ -23,6 +23,9 @@ def _robust_sigma(values: np.ndarray) -> float:
     return max(1.4826 * mad, 1e-6)
 
 
+MAX_CANDIDATES = 25
+
+
 def detect_epoch_changes(
     image_a: np.ndarray,
     image_b: np.ndarray,
@@ -30,7 +33,7 @@ def detect_epoch_changes(
     *,
     snr_threshold: float = 4.0,
     min_separation_px: int = 3,
-    max_candidates: int = 25,
+    max_candidates: int = MAX_CANDIDATES,
 ) -> list[dict[str, Any]]:
     """Find significant point-like changes in ``image_b - image_a`` (FITS orientation)."""
     if image_a.shape != image_b.shape:
