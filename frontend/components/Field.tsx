@@ -586,7 +586,7 @@ export default function Field({
               </div>
             </div>
 
-            {data?.patch.id && (
+            {data?.patch.id && !building && (
               <div className={sci.scienceSection}>
                 <div className={sci.tabs} role="tablist" aria-label="Scientific analysis filters">
                   {(
