@@ -19,21 +19,138 @@ Earlier, the public found hundreds of such objects in NASA WISE data with tools 
 
 ## What Nebo does
 
+### Start and cockpit
+
+- **Launch sequence.** A start screen inside the ship, still landed on Earth, with the menu on
+  its wall screen; then the Nebo power-on and a hyperspace tunnel while the sky loads.
 - **Sky explorer.** A cockpit over an all-sky SPHEREx map (Aladin Lite with IRSA's SPHEREx
-  HiPS). Fly to featured targets or type RA/Dec.
-- **Field viewer and blink comparator.** For any position and detector (D1–D6 = six
-  wavelength bands), the backend fetches the real SPHEREx images from NASA/IPAC IRSA, groups
-  them into epochs, co-adds them and renders one image per epoch on a common grid (north up,
-  east left, 6.15″/px) with a shared stretch, so the differences you see are real.
-- **Fast first look.** Coordinate searches build in steps: a first image in tens of seconds,
-  all epochs soon after, refined images when the build ends.
-- **Gaia overlay.** ESA Gaia DR3 stars, propagated to each epoch, to tell catalogued stars
-  from uncatalogued movers.
+  HiPS), with Sky map, Objects, Catalogs and Tools screens. Pick a featured destination, type
+  RA/Dec or click the map to fly; zoom, jump back to the whole sky, and toggle the Nebo object
+  markers and the coordinate grid. The console shows the map centre, the nearest catalogued
+  object, the field of view and the UTC clock.
+- **Guided tour.** A step-by-step tutorial over annotated screenshots of the real interface.
+
+### Field viewer
+
+- **Real SPHEREx images per epoch.** For any position and detector (D1–D6 = six wavelength
+  bands) and a 3′, 6′ or 15′ field, the backend fetches the real SPHEREx images from NASA/IPAC
+  IRSA, groups them into epochs, co-adds them and renders one image per epoch on a common grid
+  (north up, east left, 6.15″/px) with a shared stretch, so the differences you see are real.
+- **Fast first look.** Coordinate searches build in steps (archive search, download, first
+  image, one image per epoch, refinement) with visible progress: a first image in tens of
+  seconds, all epochs soon after, refined images when the build ends.
+- **Blink comparator and stack.** Step through the epochs with the date strip, buttons or
+  arrow keys, or blink them at 0.4, 0.8 or 1.5 s per frame. The stack view co-adds the epochs
+  you choose (inverse-variance) to reveal fainter sources.
+- **Catalog layers.** ESA Gaia DR3 stars propagated to each epoch, CatWISE sources, detected
+  changes and the bad-pixel mask, to tell catalogued stars from uncatalogued movers; plus an
+  alignment check and per-epoch data-quality notes.
+- **Object panel and suggestions.** Name, type, band, instrument and image count of the
+  selected object, and suggested destinations (flagged when they need a fresh 1–3 min download).
+- **Shareable links.** Copy a link that reopens the same field, size and epoch.
+- **Object hologram.** A spinning 3D model of the observed object, captioned as an artist's
+  impression, not SPHEREx data.
+
+### Scientific analysis
+
+- **Compare (3-panel).** Two epochs and their difference image.
+- **RGB composite.** Any three detectors as colour channels, with presets (cold dust and brown
+  dwarfs, ices and gas, near-IR stars).
+- **Spectrum.** The spectrum measured from the field's exposures, over an illustrative model
+  with molecular lines (H₂O, CH₄, CO₂, CO…).
+- **Models and metrics.** Event and spectrum classifiers, a temporal forecast, saturation
+  checks and community votes (real change, moving object, artifact, uncertain).
+
+### Community
+
+- **Chat.** A public chat room per object (a general room otherwise); messages are filtered
+  and deleted after 24 h.
+
+### Honest by design
+
 - **Honest labels.** Observation dates and data releases (e.g. DR1, QR3) come from the archive;
   science-model outputs that are still simulated say so.
 
 Featured targets: Barnard's Star, ε Indi B, WISE 0855−0714 (visible only in detector 6),
 RW Aurigae and R Draconis.
+
+## How Nebo meets the judging criteria
+
+Space Apps judges every project, at the local event and at the global final, on the same five
+criteria. This is how Nebo answers each one.
+
+### Impact
+
+*Does it solve a real problem with a tangible benefit?*
+
+- **The problem:** SPHEREx data is public, but reaching it takes archive queries (TAP, SIA),
+  FITS files, alignment and Python. Comparing two visits of the same patch of sky is out of
+  reach for almost everyone.
+- **The benefit:** Nebo turns any sky position into aligned, blinkable epochs in a browser, with
+  nothing to install, and shows a first image in tens of seconds.
+- **Who it helps:** students, teachers, amateur astronomers and researchers. Public blinking of
+  NASA WISE data (WiseView, Backyard Worlds) has already found hundreds of brown dwarfs; Nebo
+  opens the same door for SPHEREx.
+- **A review pool, not just a viewer:** community votes (real change, moving object, artifact,
+  uncertain) and a chat room per object let many eyes check each candidate.
+
+### Creativity
+
+*How original and fresh is the approach?*
+
+- **A new tool for a new mission:** the blink comparator idea, rebuilt for SPHEREx and its
+  six detectors.
+- **A journey, not a form:** from the ship on Earth, through power-on and a hyperspace tunnel,
+  to the cockpit and the observation room. The animation accompanies the science and never
+  covers it.
+- **Beyond blinking:** RGB composites of SPHEREx detectors, measured spectra, difference images
+  and a 3D hologram of each object (clearly labelled as an artist's impression).
+
+### Validity
+
+*Is it scientifically and technically sound?*
+
+- **Real data, handled carefully:** every image comes from NASA/IPAC IRSA. Epochs are rendered
+  on a common grid (north up, east left, 6.15″/px) with one shared stretch per field size, so
+  the differences you see are real. Detectors are never mixed in a comparison.
+- **Catalogued vs uncatalogued:** Gaia DR3 stars propagated to each epoch and CatWISE sources
+  separate known objects from uncatalogued movements; the bad-pixel mask, saturation and
+  alignment checks flag artifacts.
+- **Honest output:** observation dates and data releases come from the archive, simulated model
+  outputs are labelled as such, and Nebo only ever speaks of *observed changes* and *candidate
+  signals*.
+- **Solid engineering:** a FastAPI + PostgreSQL backend that builds fields in stages (`202` with
+  progress, then `200`), deployed on Google Cloud Run and Vercel, and covered by 300+ automated
+  tests (204 backend, 112 frontend).
+
+### Relevance
+
+*Does it answer the chosen challenge directly?*
+
+- The challenge, "Planet X and SPHEREx", asks how to find faint objects that move between
+  SPHEREx visits. That is Nebo's core loop: pick a field, split it into epochs, blink, and check
+  whatever moves against Gaia and CatWISE.
+- The featured targets are real nearby movers that prove the method works: Barnard's Star,
+  ε Indi B and WISE 0855−0714, the coldest known brown dwarf, visible only in detector 6.
+
+### Presentation
+
+*Is the idea easy to grasp and exciting in 30 seconds / 7 slides?*
+
+- **One sentence:** "Blink the infrared sky: Nebo lets anyone watch SPHEREx catch things
+  moving."
+- **A 30-second demo:** launch → warp → choose WISE 0855−0714 → detector 6 → blink → the dot
+  moves.
+- **Seven slides:** problem, challenge, Nebo, live demo, the science behind it, honest limits,
+  what comes next.
+- **Self-explaining:** an in-app guided tour walks first-time users through every control.
+
+### Why Nebo
+
+Nebo is a working product on real SPHEREx data, not a mock-up. It puts the science first and
+tells the truth about what it shows, it is built for anyone from a curious student to a
+professional astronomer, and it grows with SPHEREx: every new visit of the sky adds an epoch to
+blink.
 
 ## Architecture at a glance
 
