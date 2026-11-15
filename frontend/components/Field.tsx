@@ -63,6 +63,9 @@ const bands = [
   { range: "4.42–5.00", use: "Coldest objects" },
 ];
 
+// Total wait for a field (builds plus automatic retries) before Nebo gives up and offers a choice.
+const WAIT_LIMIT_MS = 3 * 60 * 1000;
+
 /** `brown_dwarf_binary` → `Brown dwarf binary`. */
 function humanKind(kind: string) {
   const text = kind.replace(/_/g, " ").trim();
@@ -116,6 +119,8 @@ export default function Field({
     [autoRetry, setAutoRetry] = useState(false),
     // The visitor stopped waiting for this field (the server keeps building it).
     [stopped, setStopped] = useState(false),
+    // The field did not answer within WAIT_LIMIT_MS.
+    [timedOut, setTimedOut] = useState(false),
     [reload, setReload] = useState(0),
     [epoch, setEpoch] = useState(0),
     [playing, setPlaying] = useState(false),
@@ -137,10 +142,16 @@ export default function Field({
     setIntervalMs(speed);
   }, [speed]);
   const polling = useRef<AbortController | null>(null);
+  // The wait limit counts from the visitor's request; automatic retries do not restart it.
+  const waitStart = useRef(0),
+    autoReload = useRef(false);
   useEffect(() => {
     const abort = new AbortController();
     polling.current = abort;
+    if (!autoReload.current) waitStart.current = Date.now();
+    autoReload.current = false;
     setStopped(false);
+    setTimedOut(false);
     setAnalysis("closed");
     setData(null);
     setProgress(null);
@@ -300,8 +311,21 @@ export default function Field({
     setStopped(true);
   }
   useEffect(() => {
-    if (error && autoRetry && retryAt && now >= retryAt) setReload((n) => n + 1);
+    if (error && autoRetry && retryAt && now >= retryAt) {
+      autoReload.current = true;
+      setReload((n) => n + 1);
+    }
   }, [error, autoRetry, retryAt, now]);
+  // Give up after WAIT_LIMIT_MS without images; the server may still finish and cache the field.
+  useEffect(() => {
+    const waiting = !!progress || (!!error && autoRetry);
+    if (data || !waiting || now - waitStart.current < WAIT_LIMIT_MS) return;
+    polling.current?.abort();
+    setProgress(null);
+    setError("");
+    setAutoRetry(false);
+    setTimedOut(true);
+  }, [now, data, progress, error, autoRetry]);
   const count = data?.epochs.length ?? 0;
   // A refined timeline can have a different number of epochs than its preview.
   useEffect(() => {
@@ -436,7 +460,22 @@ export default function Field({
                 }}
               >
                 <span className={s.brackets} aria-hidden="true" />
-                {stopped ? (
+                {timedOut ? (
+                  <div className={s.message} role="alert">
+                    <strong>This field is taking too long</strong>
+                    <p>
+                      NASA&apos;s IRSA archive did not deliver the images within 3 minutes. Nebo may keep
+                      preparing them in the background, so trying again later can be much faster. For a quick
+                      demo, open one of the 5 catalogued targets.
+                    </p>
+                    <button type="button" className={s.retry} onClick={() => setReload((x) => x + 1)}>
+                      <RotateCcw aria-hidden="true" /> Retry
+                    </button>
+                    <button type="button" className={s.stop} onClick={onBack}>
+                      <ArrowLeft aria-hidden="true" /> Choose another object
+                    </button>
+                  </div>
+                ) : stopped ? (
                   <div className={s.message} role="status">
                     <strong>Stopped</strong>
                     <p>
@@ -445,6 +484,9 @@ export default function Field({
                     </p>
                     <button type="button" className={s.retry} onClick={() => setReload((x) => x + 1)}>
                       <RotateCcw aria-hidden="true" /> Try again
+                    </button>
+                    <button type="button" className={s.stop} onClick={onBack}>
+                      <ArrowLeft aria-hidden="true" /> Choose another object
                     </button>
                   </div>
                 ) : error ? (
@@ -469,6 +511,9 @@ export default function Field({
                         <Square aria-hidden="true" /> Stop retrying
                       </button>
                     )}
+                    <button type="button" className={s.stop} onClick={onBack}>
+                      <ArrowLeft aria-hidden="true" /> Choose another object
+                    </button>
                   </div>
                 ) : !data ? (
                   <div className={s.message} role="status">
@@ -476,14 +521,13 @@ export default function Field({
                     <p>
                       Nebo asks NASA/IPAC IRSA for every SPHEREx exposure of this point, downloads them and
                       stacks them into one image per epoch. A new field usually takes 1–3 minutes; after that
-                      it opens instantly. You can go back to the menu meanwhile.
+                      it opens instantly.
+                      {progress && " This field is not preloaded yet: for a quick demo, open one of the 5 catalogued targets."}
                     </p>
                     <BuildSteps progress={progress} />
                     {progress?.progress.stage === "waiting_for_archive" && (
                       <p className={s.reassure}>
-                        This is normal: NASA&apos;s archive is very busy at times and can need 2, 3 or even 4
-                        attempts. Nebo keeps trying on its own for up to 5 minutes; you don&apos;t need to do
-                        anything.
+                        This is normal. Nebo keeps trying on its own for up to 3 minutes.
                       </p>
                     )}
                     <BuildBar progress={progress} />

@@ -127,6 +127,7 @@ class Store(Protocol):
         exposures: list[dict[str, Any]] | None = None,
     ) -> None: ...
     def fail_timeline(self, timeline_id: int, error: str) -> None: ...
+    def record_build_attempt(self, timeline_id: int, attempt: int, stage: str, cause: str) -> None: ...
     def list_images(self, timeline_id: int, size: str) -> list[ImageInfo]: ...
     def get_png(self, image_id: int) -> bytes | None: ...
     def get_npz(self, image_id: int) -> bytes | None: ...
@@ -629,6 +630,14 @@ class PostgresStore:
                 "UPDATE timelines SET status = 'failed', error = %s, updated_at = now() "
                 "WHERE id = %s",
                 (error, timeline_id),
+            )
+
+    def record_build_attempt(self, timeline_id: int, attempt: int, stage: str, cause: str) -> None:
+        with self.pool.connection() as conn:
+            conn.execute(
+                "INSERT INTO timeline_build_attempts (timeline_id, attempt, stage, cause) "
+                "VALUES (%s, %s, %s, %s)",
+                (timeline_id, attempt, stage, cause[:500]),
             )
 
     # ----- images -----------------------------------------------------------------------

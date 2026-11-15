@@ -29,6 +29,7 @@ def _now() -> datetime:
 class MemoryStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self.attempts: list[tuple[int, int, str, str]] = []
         self.targets: dict[str, dict] = {}
         self.patches: dict[int, Patch] = {}
         self.timelines: dict[int, Timeline] = {}
@@ -225,6 +226,10 @@ class MemoryStore:
 
     def fail_timeline(self, timeline_id: int, error: str) -> None:
         self._update(timeline_id, status="failed", error=error)
+
+    def record_build_attempt(self, timeline_id: int, attempt: int, stage: str, cause: str) -> None:
+        with self._lock:
+            self.attempts.append((timeline_id, attempt, stage, cause[:500]))
 
     def age_timeline(self, timeline_id: int, seconds: float) -> None:
         """Test helper: pretend the last update happened ``seconds`` ago."""

@@ -196,6 +196,9 @@ def test_short_irsa_outage_is_waited_out_without_failing():
     assert wait_until_settled(service, patch).status == "ready"
     assert ("waiting_for_archive", 1) in stages and ("waiting_for_archive", 2) in stages
     assert sleeps == [15.0, 30.0]
+    # Each failed IRSA query is logged with its cause; the successful build adds nothing.
+    assert [(a, stage) for _, a, stage, _ in store.attempts] == [(1, "querying"), (2, "querying")]
+    assert all(cause.startswith("HTTPError: 502") for *_, cause in store.attempts)
 
 
 def test_long_irsa_outage_is_reported_as_archive_unavailable(monkeypatch):
@@ -206,6 +209,10 @@ def test_long_irsa_outage_is_reported_as_archive_unavailable(monkeypatch):
     view = wait_until_settled(service, patch)
     assert view.status == "failed" and view.timeline.error == ARCHIVE_UNAVAILABLE
     assert sleeps == [15.0, 30.0]  # A third wait (60 s) would pass the 100 s budget.
+    assert [(a, stage) for _, a, stage, _ in store.attempts] == [
+        (1, "querying"), (2, "querying"), (0, "failed"),
+    ]
+    assert store.attempts[-1][3].startswith("HTTPError: 502")
 
 
 def test_stale_build_is_taken_over():
