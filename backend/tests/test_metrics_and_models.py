@@ -7,7 +7,7 @@ import math
 import numpy as np
 from fastapi.testclient import TestClient
 
-from app import main, metrics, models, science_catalogs
+from app import imaging, main, metrics, models, science_catalogs
 from tests.memory_store import MemoryStore
 
 
@@ -47,6 +47,27 @@ def test_psf_photometry_is_stable_for_a_moving_star():
         var = 1.0 + img  # Poisson-like: the star dominates its own variance
         fluxes.append(metrics.extract_optimal_psf_photometry(img, var, center_xy=(cx, cy))["flux_hat"])
     assert max(fluxes) / min(fluxes) < 1.2, fluxes
+
+
+def test_psf_snr_is_measured_and_grows_with_exposures():
+    rng = np.random.default_rng(0)
+    star, _ = _make_gaussian_cutout(peak=500.0)
+    frame_var = np.full_like(star, 25.0)
+
+    def snr(n: int) -> float:
+        frames = [star + rng.normal(0.0, 5.0, star.shape) for _ in range(n)]
+        image, variance = imaging.coadd(frames, [frame_var] * n)
+        return metrics.extract_optimal_psf_photometry(image, variance, center_xy=(10, 10))["snr"]
+
+    one, eight = snr(1), snr(8)
+    assert eight > 2.0 * one  # ~sqrt(8) with real noise
+    assert abs(one - 1 / 0.03) > 1.0 and abs(eight - 1 / 0.03) > 1.0  # not the 3% floor cap
+
+
+def test_psf_photometry_without_variance_is_not_a_number():
+    img, _ = _make_gaussian_cutout()
+    phot = metrics.extract_optimal_psf_photometry(img, np.full_like(img, np.nan), center_xy=(10, 10))
+    assert phot["snr"] is None and phot["sigma_stat"] is None and phot["flux_hat"] is None
 
 
 def test_difference_snr_and_mahalanobis_displacement():

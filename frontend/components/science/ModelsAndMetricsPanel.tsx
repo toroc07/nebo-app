@@ -187,7 +187,7 @@ export default function ModelsAndMetricsPanel({
                 <tr>
                   <th>Epoch</th>
                   <th>Flux</th>
-                  <th>σ (3% floor)</th>
+                  <th>σ (measured)</th>
                   <th>SNR</th>
                   <th>Clean</th>
                 </tr>
@@ -196,9 +196,9 @@ export default function ModelsAndMetricsPanel({
                 {metricsData.image_photometry.map((row) => (
                   <tr key={row.epoch_index}>
                     <td>E{row.epoch_index + 1}</td>
-                    <td>{row.flux_hat.toFixed(3)}</td>
-                    <td>{row.sigma_reported.toFixed(3)}</td>
-                    <td>{row.snr.toFixed(1)}</td>
+                    <td>{row.flux_hat?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.sigma_stat?.toFixed(3) ?? "n/a"}</td>
+                    <td>{row.snr?.toFixed(1) ?? "n/a"}</td>
                     <td>{Math.round(row.p_clean_flags * 100)}%</td>
                   </tr>
                 ))}

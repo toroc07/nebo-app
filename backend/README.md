@@ -290,7 +290,8 @@ Simulated science profiles (`simulated: true`). Fields the web client reads (kee
 - `/metrics`: `confidence.c_global` (0-100) with `s_snr, s_dipole, s_flags, s_psf`; `variability`
   (`chi2_var_reduced, stetson_j, von_neumann_eta, lomb_scargle_power, is_variable`);
   `image_photometry[]` measured on the patch's float32 arrays (moving targets at their
-  proper-motion position for each epoch).
+  proper-motion position for each epoch). `snr` uses the measured `sigma_stat`;
+  `sigma_reported` adds the 3% floor. Fields are `null` when the epoch has no usable variance.
 - `/models/event`: `treeshap_values.top_drivers[]` of `{feature, phi}`.
 
 ### Database catalog hydration (`python -m app.db sync-catalogs`)

@@ -546,6 +546,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — `/metrics` `image_photometry`: `snr = flux_hat / sigma_stat` (noise
+  propagated from the co-add variance), no longer capped at 33.3 by the 3% floor; `sigma_reported`
+  keeps the floor. Epochs without usable pixels or variance return `null` (UI: "n/a").
 - **2026-11-15** — `/metrics` `image_photometry`: moving targets are measured at their
   proper-motion position for each epoch (sub-pixel), not at the image centre. Fixes Barnard's
   ×7 flux jump between epochs; the co-add was already a weighted mean.
