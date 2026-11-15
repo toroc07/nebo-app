@@ -1,7 +1,7 @@
 import pytest
 import requests
 
-from app import gaia
+from app import gaia, tap_fallback
 from tests.test_api import RA, DEC, client  # noqa: F401  (pytest fixture)
 
 CSV = """source_id,ra,dec,pmra,pmdec,parallax,phot_g_mean_mag,bp_rp
@@ -43,23 +43,42 @@ def test_star_without_proper_motion_stays_put():
     assert plain.position_at(gaia.REF_EPOCH_MJD + 3650) == (plain.ra, plain.dec)
 
 
-def test_query_cone_retries_then_raises(monkeypatch):
+@pytest.fixture(autouse=True)
+def fresh_services():
+    tap_fallback.reset()
+    yield
+    tap_fallback.reset()
+
+
+def test_query_cone_falls_back_to_gavo_then_remembers_both_down(monkeypatch):
     calls = []
-    monkeypatch.setattr(gaia.time, "sleep", lambda s: None)
 
     def fake_post(url, data, timeout):
-        calls.append(data["QUERY"])
+        calls.append((url, data["QUERY"]))
         return FakeResponse(503)
 
-    monkeypatch.setattr(gaia.requests, "post", fake_post)
+    monkeypatch.setattr(tap_fallback.requests, "post", fake_post)
     with pytest.raises(gaia.GaiaQueryError):
         gaia.query_cone(RA, DEC, 0.2)
-    assert len(calls) == gaia.QUERY_ATTEMPTS
-    assert "gaiadr3.gaia_source" in calls[0] and "phot_g_mean_mag < 18.00" in calls[0]
+    assert [url for url, _ in calls] == [gaia.TAP_SYNC_URL, gaia.GAVO_TAP_SYNC_URL]
+    assert "gaiadr3.gaia_source" in calls[0][1] and "phot_g_mean_mag < 18.00" in calls[0][1]
+    assert "gaia.dr3lite" in calls[1][1] and "AS bp_rp" in calls[1][1]
+    # Remembered as down: a second request fails at once instead of waiting on both again.
+    with pytest.raises(gaia.GaiaQueryError):
+        gaia.query_cone(RA, DEC, 0.2)
+    assert len(calls) == 2
+
+
+def test_query_cone_uses_gavo_when_esa_fails(monkeypatch):
+    def fake_post(url, data, timeout):
+        return FakeResponse(503) if url == gaia.TAP_SYNC_URL else FakeResponse(200, CSV)
+
+    monkeypatch.setattr(tap_fallback.requests, "post", fake_post)
+    assert len(gaia.query_cone(RA, DEC, 0.2)) == 2
 
 
 def test_query_cone_parses_answer(monkeypatch):
-    monkeypatch.setattr(gaia.requests, "post", lambda url, data, timeout: FakeResponse(200, CSV))
+    monkeypatch.setattr(tap_fallback.requests, "post", lambda url, data, timeout: FakeResponse(200, CSV))
     assert len(gaia.query_cone(RA, DEC, 0.2)) == 2
 
 

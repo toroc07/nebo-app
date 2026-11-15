@@ -1,12 +1,12 @@
 import pytest
 import requests
 
-from app import gaia, wise
+from app import gaia, tap_fallback, wise
 from tests.test_api import DEC, RA, client  # noqa: F811
 
 WISE_CSV = """source_id,ra,dec,pmra,pmdec,w1mpro,w2mpro,w1sigmpro,w2sigmpro
-0855m0714,133.782,-7.244,-8123.7,673.2,17.45,13.89,0.12,0.03
-bg1,133.790,-7.250,2.0,-1.5,14.10,14.05,0.02,0.03
+0855m0714,133.782,-7.244,-8.1237,0.6732,17.45,13.89,0.12,0.03
+bg1,133.790,-7.250,0.002,-0.0015,14.10,14.05,0.02,0.03
 ,1.0,2.0,0,0,10,10,0.1,0.1
 """
 
@@ -26,30 +26,48 @@ def test_wise_parse_csv_and_color():
     assert [s.source_id for s in sources] == ["0855m0714", "bg1"]
     bd, bg = sources
     assert bd.w1_w2_color == pytest.approx(3.56, abs=1e-3)
+    # CatWISE2020 gives arcsec/yr; WiseSource holds mas/yr like Gaia (WISE 0855: ~8.2"/yr).
     assert bd.pm_total_mas_yr == pytest.approx(8151.5, abs=0.5)
+    assert bg.pm_ra_mas_yr == pytest.approx(2.0)
     assert bg.w1_w2_color == pytest.approx(0.05, abs=1e-3)
 
 
-def test_wise_query_cone_retries_then_raises(monkeypatch):
+@pytest.fixture(autouse=True)
+def fresh_services():
+    tap_fallback.reset()
+    yield
+    tap_fallback.reset()
+
+
+def test_wise_query_cone_falls_back_to_noirlab_then_remembers_both_down(monkeypatch):
     calls = []
-    monkeypatch.setattr(wise.time, "sleep", lambda s: None)
 
     def fake_post(url, data, timeout):
-        calls.append(data["QUERY"])
+        calls.append((url, data["QUERY"]))
         return FakeResponse(503)
 
-    monkeypatch.setattr(wise.requests, "post", fake_post)
+    monkeypatch.setattr(tap_fallback.requests, "post", fake_post)
     with pytest.raises(wise.WiseQueryError):
         wise.query_cone(RA, DEC, 0.2)
-    assert len(calls) == wise.QUERY_ATTEMPTS
-    assert "catwise_2020" in calls[0]
+    assert [url for url, _ in calls] == [wise.TAP_SYNC_URL, wise.DATALAB_TAP_SYNC_URL]
+    assert "catwise_2020" in calls[0][1] and "q3c_radial_query" in calls[1][1]
+    # Both are remembered as down: the next layer request fails at once, without waiting.
+    with pytest.raises(wise.WiseQueryError):
+        wise.query_cone(RA, DEC, 0.2)
+    assert len(calls) == 2
 
+
+def test_wise_query_cone_uses_the_mirror_when_irsa_fails(monkeypatch):
+    def fake_post(url, data, timeout):
+        return FakeResponse(503) if url == wise.TAP_SYNC_URL else FakeResponse(200, WISE_CSV)
+
+    monkeypatch.setattr(tap_fallback.requests, "post", fake_post)
+    assert [s.source_id for s in wise.query_cone(RA, DEC, 0.2)] == ["0855m0714", "bg1"]
 
 
 def test_wise_query_cone_rejects_non_csv_answer(monkeypatch):
-    monkeypatch.setattr(wise.time, "sleep", lambda s: None)
     monkeypatch.setattr(
-        wise.requests, "post", lambda url, data, timeout: FakeResponse(200, "<html>Proxy Error</html>")
+        tap_fallback.requests, "post", lambda url, data, timeout: FakeResponse(200, "<html>Proxy Error</html>")
     )
     with pytest.raises(wise.WiseQueryError):
         wise.query_cone(RA, DEC, 0.2)
@@ -57,8 +75,9 @@ def test_wise_query_cone_rejects_non_csv_answer(monkeypatch):
 
 def test_wise_query_cone_accepts_header_only_answer(monkeypatch):
     header = WISE_CSV.splitlines()[0] + "\n"
-    monkeypatch.setattr(wise.requests, "post", lambda url, data, timeout: FakeResponse(200, header))
+    monkeypatch.setattr(tap_fallback.requests, "post", lambda url, data, timeout: FakeResponse(200, header))
     assert wise.query_cone(RA, DEC, 0.2) == []
+
 
 def test_wise_endpoint_crossmatches_gaia_and_flags_cold_candidate(client, monkeypatch):  # noqa: F811
     http, service = client

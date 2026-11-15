@@ -270,8 +270,11 @@ Catalogued **CatWISE2020** infrared sources (3.4 um W1, 4.6 um W2) on the patch 
 from epoch 2015.4 to each requested `mjd` and cross-matched against Gaia DR3 (`crossmatch_gaia=true`).
 Sources with no Gaia match within `gaia_match_radius_arcsec` (default `3.0"`) and
 `W1 - W2 >= cold_w1_w2_min` (default `1.0`) are flagged `cold_candidate: true`. `catalog.gaia_complete_to_g`
-reports the Gaia completeness limit used for the cross-match. Returns `502` (`code: "wise_unavailable"`)
-when IRSA CatWISE2020 does not answer.
+reports the Gaia completeness limit used for the cross-match. Proper motions are read from
+CatWISE's arcsec/yr and held in mas/yr. When IRSA does not answer, the same cone is asked to
+NOIRLab Astro Data Lab's copy of CatWISE2020; returns `502` (`code: "wise_unavailable"`) only
+when both fail. Gaia layers likewise fall back from ESA to GAVO (Heidelberg). A service that
+fails is skipped for 5 minutes, so a second switch-on answers at once (`app/tap_fallback.py`).
 
 ### `GET /patches/{id}/candidates?detector=3&size=medium&epoch_a=0&epoch_b=<last>&snr_threshold=5.0&normalise=true`
 

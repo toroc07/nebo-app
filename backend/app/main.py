@@ -7,6 +7,7 @@ import functools
 import hashlib
 import io
 import math
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import logging
 import os
@@ -926,10 +927,15 @@ def get_patch_gaia(
 # ----- CatWISE2020 infrared overlay, cold candidates, alignment & suggested targets ------
 
 
+# Part of the CatWISE cache key. v2: proper motions converted from CatWISE's arcsec/yr to mas/yr;
+# rows cached before (read as mas/yr, 1000x too small) are never read again.
+WISE_CACHE_VERSION = "v2"
+
+
 def _patch_wise_sources(store: Store, patch: Patch, w2_max: float) -> list[wise.WiseSource]:
     """CatWISE2020 sources around a patch, cached in api_query_cache."""
     key = hashlib.sha256(
-        f"catwise2020_cone:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{w2_max:.2f}"
+        f"catwise2020_cone:{WISE_CACHE_VERSION}:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{w2_max:.2f}"
         f":{wise.MAX_ROWS}".encode()
     ).hexdigest()
     cached = store.get_cached_api(key)
@@ -1125,29 +1131,35 @@ def get_patch_candidates(
     if epoch_a not in arrays or epoch_b not in arrays:
         raise HTTPException(status_code=404, detail="Float32 arrays (.npz) missing for requested epochs.")
 
-    wcs, _ = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
-    search = crossmatch.find_epoch_changes(
-        arrays[epoch_a], arrays[epoch_b], wcs, snr_threshold=snr_threshold, normalise=normalise
-    )
-    detections = [] if search is None else search.detections
+    # Both catalogues are network queries (cached once answered): ask them together, and while
+    # the difference is computed, instead of one after the other.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        gaia_job = pool.submit(_patch_gaia_sources, store, patch, gaia.DEFAULT_G_MAX)
+        wise_job = pool.submit(_patch_wise_sources, store, patch, wise.DEFAULT_W2_MAX)
 
-    gaia_sources: list[gaia.GaiaSource] = []
-    gaia_available = False
-    g_complete: float | None = None
-    try:
-        gaia_sources = _patch_gaia_sources(store, patch, gaia.DEFAULT_G_MAX)
-        gaia_available = True
-        g_complete, _ = _gaia_completeness(gaia_sources, gaia.DEFAULT_G_MAX)
-    except gaia.GaiaQueryError:
+        wcs, _ = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
+        search = crossmatch.find_epoch_changes(
+            arrays[epoch_a], arrays[epoch_b], wcs, snr_threshold=snr_threshold, normalise=normalise
+        )
+        detections = [] if search is None else search.detections
+
+        gaia_sources: list[gaia.GaiaSource] = []
         gaia_available = False
+        g_complete: float | None = None
+        try:
+            gaia_sources = gaia_job.result()
+            gaia_available = True
+            g_complete, _ = _gaia_completeness(gaia_sources, gaia.DEFAULT_G_MAX)
+        except gaia.GaiaQueryError:
+            gaia_available = False
 
-    wise_sources: list[wise.WiseSource] = []
-    wise_available = False
-    try:
-        wise_sources = _patch_wise_sources(store, patch, wise.DEFAULT_W2_MAX)
-        wise_available = True
-    except wise.WiseQueryError:
+        wise_sources: list[wise.WiseSource] = []
         wise_available = False
+        try:
+            wise_sources = wise_job.result()
+            wise_available = True
+        except wise.WiseQueryError:
+            wise_available = False
 
     candidates = crossmatch.classify_changes(
         detections,
@@ -1596,7 +1608,7 @@ def _resolve_patch_crossmatch(
             g_sources = []
 
     w_key = hashlib.sha256(
-        f"catwise2020_cone:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{wise.DEFAULT_W2_MAX:.2f}"
+        f"catwise2020_cone:{WISE_CACHE_VERSION}:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{wise.DEFAULT_W2_MAX:.2f}"
         f":{wise.MAX_ROWS}".encode()
     ).hexdigest()
     if store.get_cached_api(w_key) or not in_pytest or wise.query_cone.__module__ != "app.wise":

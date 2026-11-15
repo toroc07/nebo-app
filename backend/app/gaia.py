@@ -10,7 +10,8 @@ epoch's date before it is drawn. Very cold brown dwarfs (WISE 0855, Eps Indi B) 
 visible light to be in Gaia: an infrared source with no Gaia match is expected for them.
 
 Queries go to the ESA Gaia archive TAP service with requests (CSV output, explicit timeouts),
-like irsa.py does for IRSA.
+like irsa.py does for IRSA. Cone queries fall back to the GAVO data centre's copy of Gaia DR3
+(Heidelberg, ``gaia.dr3lite``) when ESA does not answer; see tap_fallback.py.
 """
 
 from __future__ import annotations
@@ -19,24 +20,21 @@ import csv
 import io
 import logging
 import math
-import time
 from dataclasses import dataclass
 
-import requests
-
-from . import ephemeris
+from . import ephemeris, tap_fallback
 
 log = logging.getLogger(__name__)
 
 TAP_SYNC_URL = "https://gea.esac.esa.int/tap-server/tap/sync"
+# Mirror of Gaia DR3 at the GAVO data centre (Heidelberg): same sources, positions and proper
+# motions in ``gaia.dr3lite``; BP-RP is computed from the two magnitudes there.
+GAVO_TAP_SYNC_URL = "https://dc.zah.uni-heidelberg.de/tap/sync"
 CATALOG_NAME = "Gaia DR3"
 PROVIDER = "gaia_dr3_tap"
 REF_EPOCH_YEAR = 2016.0
 REF_EPOCH_MJD = 51544.5 + (REF_EPOCH_YEAR - 2000.0) * 365.25  # J2016.0 = MJD 57388.5
 
-# (connect, read) seconds.
-QUERY_TIMEOUT_S = (10, 60)
-QUERY_ATTEMPTS = 2
 # SPHEREx pixels are 6.15": stars much fainter than this blend into the background, and a
 # 15' patch in the galactic plane holds thousands of them.
 DEFAULT_G_MAX = 18.0
@@ -118,6 +116,26 @@ ORDER BY phot_g_mean_mag
 """
 
 
+def build_gavo_cone_query(
+    ra: float, dec: float, radius_deg: float, g_max: float = DEFAULT_G_MAX, limit: int = MAX_ROWS
+) -> str:
+    """The same cone on GAVO's ``gaia.dr3lite`` (same columns, BP-RP from the magnitudes)."""
+    return f"""
+SELECT TOP {int(limit)} source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag,
+  phot_bp_mean_mag - phot_rp_mean_mag AS bp_rp
+FROM gaia.dr3lite
+WHERE 1 = CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra:.7f}, {dec:.7f}, {radius_deg:.6f}))
+  AND phot_g_mean_mag < {g_max:.2f}
+ORDER BY phot_g_mean_mag
+"""
+
+
+def _adql(url: str, name: str, query: str) -> tap_fallback.Service:
+    return tap_fallback.Service(
+        name, url, {"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "csv", "QUERY": query}
+    )
+
+
 def _opt_float(value: str | None) -> float | None:
     if value is None or not value.strip():
         return None
@@ -151,27 +169,21 @@ def parse_csv(text: str) -> list[GaiaSource]:
     return sources
 
 
-def _post_tap(query: str) -> list[GaiaSource]:
-    params = {"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "csv", "QUERY": query}
-    for attempt in range(QUERY_ATTEMPTS):
-        try:
-            response = requests.post(TAP_SYNC_URL, data=params, timeout=QUERY_TIMEOUT_S)
-            response.raise_for_status()
-            return parse_csv(response.text)
-        except requests.RequestException as error:
-            if attempt == QUERY_ATTEMPTS - 1:
-                raise GaiaQueryError(f"Gaia archive unavailable: {error}") from error
-            wait = 5.0 * 2**attempt
-            log.info("Gaia TAP query failed (%s), retrying in %.0f s", error, wait)
-            time.sleep(wait)
-    raise AssertionError("unreachable")
+def _ask(services: list[tap_fallback.Service]) -> list[GaiaSource]:
+    try:
+        return tap_fallback.query(services, parse_csv, header=COLUMNS[0])
+    except tap_fallback.TapUnavailable as error:
+        raise GaiaQueryError(f"Gaia archive unavailable: {error}") from error
 
 
 def query_cone(
     ra: float, dec: float, radius_deg: float, g_max: float = DEFAULT_G_MAX, limit: int = MAX_ROWS
 ) -> list[GaiaSource]:
-    """Gaia DR3 stars within ``radius_deg`` of (ra, dec), brightest first."""
-    return _post_tap(build_cone_query(ra, dec, radius_deg, g_max, limit))
+    """Gaia DR3 stars within ``radius_deg`` of (ra, dec), brightest first (ESA, else GAVO)."""
+    return _ask([
+        _adql(TAP_SYNC_URL, "ESA Gaia", build_cone_query(ra, dec, radius_deg, g_max, limit)),
+        _adql(GAVO_TAP_SYNC_URL, "GAVO Gaia", build_gavo_cone_query(ra, dec, radius_deg, g_max, limit)),
+    ])
 
 
 def build_suggested_query(
@@ -208,9 +220,9 @@ def query_suggested_destinations(
     g_max: float = 14.0,
     limit: int = 20,
 ) -> list[GaiaSource]:
-    """Fetch nearby or high-proper-motion Gaia DR3 stars to suggest in the explorer."""
-    return _post_tap(
-        build_suggested_query(
+    """Fetch nearby or high-proper-motion Gaia DR3 stars to suggest in the explorer (ESA only:
+    the query needs ESA's ``pm`` column; the endpoint has a curated fallback)."""
+    return _ask([_adql(TAP_SYNC_URL, "ESA Gaia", build_suggested_query(
             ra=ra,
             dec=dec,
             radius_deg=radius_deg,
@@ -218,8 +230,7 @@ def query_suggested_destinations(
             min_parallax_mas=min_parallax_mas,
             g_max=g_max,
             limit=limit,
-        )
-    )
+        ))])
 
 
 def separation_arcsec(ra1: float, dec1: float, ra2: float, dec2: float) -> float:

@@ -167,7 +167,9 @@ estimate, not a detection", never as a discovery.
 | `Retry-After` | 2 s while `queued/querying/downloading/first_light`, else 5 s; 30 s when busy or a catalogue is down | `main.retry_after_for` | Poll fast while early previews arrive, slower after |
 | Analyze cooldown | 60 s per patch → 429 | `main.py` | Protect the model endpoint |
 | Build limits | 6 parallel downloads, 2 concurrent builds, 6 pending | `config.py` | Stay polite with IRSA and inside the server's memory |
-| Timeouts | Cutout 180 s; TAP/SIA/Gaia/WISE 10 s connect, 60 s read | `config.py`, `irsa.py`, `gaia.py`, `wise.py` | |
+| Timeouts | Cutout 180 s; TAP/SIA 10 s connect, 60 s read; Gaia/CatWISE 5 s connect, 30 s read, one try per service | `config.py`, `irsa.py`, `tap_fallback.py` | A catalogue that is down says so in seconds, then the mirror answers |
+| Catalogue mirrors | Gaia DR3: ESA → GAVO (`gaia.dr3lite`); CatWISE2020: IRSA → NOIRLab Data Lab; a service that fails is skipped for 300 s | `tap_fallback.py`, `gaia.py`, `wise.py` | ESA and IRSA go down for hours; repeated layer switches answer at once instead of waiting again |
+| CatWISE proper motion | arcsec/yr in the catalogue → ×1000 to mas/yr | `wise.PM_TO_MAS_YR` | WISE 0855: pmra −7.9″/yr; read as mas/yr its 2015.4 → 2026 shift was 1000× too small |
 | Retries | Cutout: 4 retries, `min(5·2ⁿ, 60)·U(0.8, 1.2)`, honours Retry-After; TAP 2, SIA 3, hedge to SIA after 20 s | `irsa.py` | Exponential backoff with jitter; hedging cuts slow TAP tails |
 | IRSA outage | waits 15 / 30 / 60 s up to 150 s (`NEBO_ARCHIVE_WAIT_S`) | `service.py`, `config.py` | |
 | Stale / failed builds | re-claimed after 900 s; failed retried after 60 s | `config.py` | |

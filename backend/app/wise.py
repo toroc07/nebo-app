@@ -6,7 +6,11 @@ providing infrared photometry and proper motions for ~1.89 billion sources. Cold
 bright in W2 with very red W1 - W2 colours.
 
 Queries go to the NASA/IPAC IRSA TAP service with requests (CSV output, explicit timeouts),
-like gaia.py does for ESA Gaia DR3.
+like gaia.py does for ESA Gaia DR3, and fall back to NOIRLab Astro Data Lab's copy of the
+catalogue (``catwise2020.main``) when IRSA does not answer; see tap_fallback.py.
+
+CatWISE2020 gives proper motions in arcsec/yr (WISE 0855: pmra = -7.9, pmdec = 0.5); they are
+converted to mas/yr here, like Gaia's.
 """
 
 from __future__ import annotations
@@ -15,24 +19,23 @@ import csv
 import io
 import logging
 import math
-import time
 from dataclasses import dataclass
 
-import requests
-
-from . import ephemeris, gaia
+from . import ephemeris, gaia, tap_fallback
 
 log = logging.getLogger(__name__)
 
 TAP_SYNC_URL = "https://irsa.ipac.caltech.edu/TAP/sync"
+# Mirror of CatWISE2020 at NOIRLab Astro Data Lab (same columns; cones via q3c, not CONTAINS).
+DATALAB_TAP_SYNC_URL = "https://datalab.noirlab.edu/tap/sync"
+# CatWISE2020 proper motions are in arcsec/yr; WiseSource holds mas/yr.
+PM_TO_MAS_YR = 1000.0
 CATALOG_NAME = "CatWISE2020"
 PROVIDER = "catwise2020_tap"
 # CatWISE2020 astrometry is referenced to ~2015.4 (MJD ~57155.8).
 REF_EPOCH_YEAR = 2015.4
 REF_EPOCH_MJD = 51544.5 + (REF_EPOCH_YEAR - 2000.0) * 365.25
 
-QUERY_TIMEOUT_S = (10, 60)
-QUERY_ATTEMPTS = 2
 DEFAULT_W2_MAX = 17.5
 MAX_ROWS = 5000
 
@@ -110,6 +113,19 @@ ORDER BY w2mpro
 """
 
 
+def build_datalab_cone_query(
+    ra: float, dec: float, radius_deg: float, w2_max: float = DEFAULT_W2_MAX, limit: int = MAX_ROWS
+) -> str:
+    """The same cone on NOIRLab Data Lab, whose database answers cones with q3c."""
+    return f"""
+SELECT TOP {int(limit)} {", ".join(COLUMNS)}
+FROM catwise2020.main
+WHERE 't' = q3c_radial_query(ra, dec, {ra:.7f}, {dec:.7f}, {radius_deg:.6f})
+  AND w2mpro < {w2_max:.2f}
+ORDER BY w2mpro
+"""
+
+
 def _opt_float(value: str | None) -> float | None:
     if value is None or not value.strip():
         return None
@@ -118,6 +134,11 @@ def _opt_float(value: str | None) -> float | None:
     except ValueError:
         return None
     return number if math.isfinite(number) else None
+
+
+def _mas_yr(value: str | None) -> float | None:
+    arcsec_yr = _opt_float(value)
+    return None if arcsec_yr is None else arcsec_yr * PM_TO_MAS_YR
 
 
 def parse_csv(text: str) -> list[WiseSource]:
@@ -133,8 +154,8 @@ def parse_csv(text: str) -> list[WiseSource]:
                 source_id=source_id,
                 ra=ra,
                 dec=dec,
-                pm_ra_mas_yr=_opt_float(row.get("pmra")),
-                pm_dec_mas_yr=_opt_float(row.get("pmdec")),
+                pm_ra_mas_yr=_mas_yr(row.get("pmra")),
+                pm_dec_mas_yr=_mas_yr(row.get("pmdec")),
                 w1_mag=_opt_float(row.get("w1mpro")),
                 w2_mag=_opt_float(row.get("w2mpro")),
                 w1_sig=_opt_float(row.get("w1sigmpro")),
@@ -147,25 +168,30 @@ def parse_csv(text: str) -> list[WiseSource]:
 def query_cone(
     ra: float, dec: float, radius_deg: float, w2_max: float = DEFAULT_W2_MAX, limit: int = MAX_ROWS
 ) -> list[WiseSource]:
-    """CatWISE2020 sources within ``radius_deg`` of (ra, dec), brightest in W2 first."""
-    query = build_cone_query(ra, dec, radius_deg, w2_max, limit)
-    params = {"QUERY": query, "FORMAT": "csv"}
-    for attempt in range(QUERY_ATTEMPTS):
-        try:
-            response = requests.post(TAP_SYNC_URL, data=params, timeout=QUERY_TIMEOUT_S)
-            response.raise_for_status()
-            # IRSA can answer 200 with an HTML or VOTable error page; read as CSV it would be
-            # "no sources" and get cached for good. A real answer starts with the header row.
-            if not response.text.lstrip().startswith(COLUMNS[0]):
-                raise requests.RequestException("IRSA answer is not a CSV table")
-            return parse_csv(response.text)
-        except requests.RequestException as error:
-            if attempt == QUERY_ATTEMPTS - 1:
-                raise WiseQueryError(f"CatWISE2020 archive unavailable: {error}") from error
-            wait = 5.0 * 2**attempt
-            log.info("CatWISE2020 TAP query failed (%s), retrying in %.0f s", error, wait)
-            time.sleep(wait)
-    raise AssertionError("unreachable")
+    """CatWISE2020 sources within ``radius_deg`` of (ra, dec), brightest in W2 first (IRSA, else
+    NOIRLab Data Lab). A 200 answer that is not a CSV table (IRSA's HTML or VOTable error page)
+    counts as a failure: read as CSV it would be "no sources" and get cached for good."""
+    services = [
+        tap_fallback.Service(
+            "IRSA CatWISE",
+            TAP_SYNC_URL,
+            {"QUERY": build_cone_query(ra, dec, radius_deg, w2_max, limit), "FORMAT": "csv"},
+        ),
+        tap_fallback.Service(
+            "NOIRLab CatWISE",
+            DATALAB_TAP_SYNC_URL,
+            {
+                "REQUEST": "doQuery",
+                "LANG": "ADQL",
+                "FORMAT": "csv",
+                "QUERY": build_datalab_cone_query(ra, dec, radius_deg, w2_max, limit),
+            },
+        ),
+    ]
+    try:
+        return tap_fallback.query(services, parse_csv, header=COLUMNS[0])
+    except tap_fallback.TapUnavailable as error:
+        raise WiseQueryError(f"CatWISE2020 archive unavailable: {error}") from error
 
 
 def nearest(

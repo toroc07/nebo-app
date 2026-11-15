@@ -548,6 +548,12 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Catalogue layers: new `app/tap_fallback.py`. Gaia DR3 cones fall back to GAVO
+  (Heidelberg) and CatWISE2020 to NOIRLab Data Lab when ESA or IRSA do not answer; 5 s connect /
+  30 s read, one try per service, a failed service skipped for 5 min (was 10 s / 60 s, two tries,
+  up to ~66 s per request). `/candidates` asks Gaia and CatWISE in parallel while it computes the
+  difference. CatWISE proper motions are now read as arcsec/yr (×1000 to mas/yr); the CatWISE
+  cache key gains `v2` so rows cached before are not reused.
 - **2026-11-15** — The field room's side window shows the real sky: a still of the cockpit's
   Aladin map (`getViewDataURL`, taken on *View images*) behind the cut-out glass of
   `console-bg.webp`, mirrored to continue the cockpit view round the corner; the painted window
