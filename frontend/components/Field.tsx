@@ -939,7 +939,7 @@ export default function Field({
                 <h2 id="field-coordinates">
                   <Crosshair aria-hidden="true" /> Coordinates (ICRS)
                 </h2>
-                <dl>
+                <dl className={s.coordList}>
                   <div>
                     <dt>
                       <ArrowLeftRight aria-hidden="true" /> RA
@@ -981,7 +981,7 @@ export default function Field({
                 <h2 id="field-object">
                   <Layers aria-hidden="true" /> Object
                 </h2>
-                <dl>
+                <dl className={s.objectList}>
                   <div>
                     <dt>Name</dt>
                     <dd>{target?.name ?? name ?? "Custom position"}</dd>
@@ -1027,7 +1027,7 @@ export default function Field({
                         {/* Amber chips: what may make this epoch less reliable, from the API. */}
                         <ul className={s.epochNotes} aria-label="Data quality notes for this epoch">
                           {warnings.map((w) => (
-                            <li key={w.code}>
+                            <li key={w.code} title={w.text}>
                               <b>{warningLabel(w.code)}</b> {w.text}
                             </li>
                           ))}

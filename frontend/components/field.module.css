@@ -929,32 +929,23 @@
      * The image is the protagonist: it owns the whole left column, from the title rule to
      * the epoch controls. Detector and field size sit above the cards on the right.
      */
-    grid-template-columns: calc(500 * var(--s)) minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-columns: calc(528 * var(--s)) minmax(0, 1.25fr) minmax(0, 0.85fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "viewer detector"
-      "viewer size"
-      "viewer cards"
-      "timeline timeline";
-    column-gap: calc(40 * var(--s));
-    row-gap: calc(10 * var(--s));
+      "viewer detector size"
+      "viewer cards cards"
+      "timeline timeline timeline";
+    column-gap: calc(12 * var(--s));
+    row-gap: calc(8 * var(--s));
   }
-  /* Label beside the picker: two rows instead of four, so both cards fit beneath. */
+  /* The image column keeps its 500 reference pixels; the other 28 are the gap to the pickers. */
+  .viewer {
+    margin-right: calc(28 * var(--s));
+  }
+  /* Detector and size share one row (label above each picker): the cards get the height. */
   .detector,
   .size {
-    flex-direction: row;
-    align-items: center;
-    gap: calc(14 * var(--s));
-  }
-  .detector > span:first-child,
-  .size > span:first-child {
-    flex: none;
-    width: calc(96 * var(--s));
-  }
-  .detector > div,
-  .size > div {
-    flex: 1;
-    min-width: 0;
+    gap: calc(4 * var(--s));
   }
   /* Proportional on the console (mouse screens); the 42 px touch minimum is for phones. */
   .selectButton {
@@ -969,19 +960,78 @@
     width: calc(372 * var(--s));
   }
   .cards {
-    padding-top: calc(6 * var(--s));
-    gap: calc(10 * var(--s));
+    padding-top: calc(2 * var(--s));
+    gap: calc(8 * var(--s));
   }
   .card h2 {
-    padding: calc(6 * var(--s)) calc(18 * var(--s));
-    font-size: calc(17 * var(--s));
-  }
-  .card dl {
-    padding-block: calc(1 * var(--s));
+    padding: calc(3 * var(--s)) calc(16 * var(--s));
     font-size: calc(15.5 * var(--s));
   }
+  .card dl {
+    padding: 0 calc(16 * var(--s));
+    font-size: calc(14.5 * var(--s));
+  }
   .card dl > div {
-    padding: calc(2.5 * var(--s)) 0;
+    padding: calc(1.5 * var(--s)) 0;
+  }
+  /* The four layer chips share one line. */
+  .cards .layers {
+    flex-wrap: nowrap;
+    gap: calc(5 * var(--s));
+  }
+  .cards .layers button {
+    padding: calc(2 * var(--s)) calc(7 * var(--s));
+    gap: calc(4 * var(--s));
+    font-size: max(11px, calc(12 * var(--s)));
+    white-space: nowrap;
+  }
+  /* RA and Dec side by side (no icons: they would wrap), the latitudes underneath. */
+  .card .coordList {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: calc(14 * var(--s));
+  }
+  .card .coordList > div {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: calc(8 * var(--s));
+    white-space: nowrap;
+  }
+  .card .coordList dt svg {
+    display: none;
+  }
+  .card .coordList > div + div {
+    border-top: 0;
+  }
+  .card .coordList > div:nth-child(3) {
+    grid-column: 1 / -1;
+    border-top: 1px solid rgb(63 210 255 / 0.07);
+  }
+  .card .coordList .sexagesimal i {
+    margin: 0 0.3em 0 0.15em;
+  }
+  /* Name and type share a line; the longer rows below take the full width. */
+  .card .objectList {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: calc(14 * var(--s));
+  }
+  .card .objectList > div {
+    grid-column: 1 / -1;
+    grid-template-columns: calc(80 * var(--s)) minmax(0, 1fr);
+  }
+  .card .objectList > div:nth-child(-n + 2) {
+    grid-column: auto;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: calc(10 * var(--s));
+  }
+  .card .objectList > div:nth-child(2) {
+    border-top: 0;
+  }
+  /* One line per note; the full text is in the chip's tooltip. */
+  .card .epochNotes li {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .timeline {
     grid-template-columns: calc(255 * var(--s)) calc(195 * var(--s)) minmax(0, 1fr) auto;
