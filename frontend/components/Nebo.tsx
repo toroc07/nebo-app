@@ -16,6 +16,7 @@ import HomeScene from "./HomeScene";
 import type { SkyCommand, SkyLayers, SkySnapshot, SkyView } from "./Sky";
 import { launchWarp, warp } from "@/lib/warp";
 import NeboBoot from "./NeboBoot";
+import NeboShutdown from "./NeboShutdown";
 const Sky = dynamic(() => import("./Sky"), {
   ssr: false,
   loading: () => <p className="sky-loading">Loading sky…</p>,
@@ -53,6 +54,8 @@ export default function Nebo() {
     // START sequence: the Nebo power-on plays in the glass, then the approach tunnel. The whole
     // app is inert from START until the tunnel has finished.
     [appBoot, setAppBoot] = useState(false),
+    // Reverse of the above: leaving the explorer for the start menu plays the power-off first.
+    [shutdown, setShutdown] = useState(false),
     [locked, setLocked] = useState(false),
     [screenPowered, setScreenPowered] = useState(true),
     [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, grid: false }),
@@ -409,12 +412,22 @@ export default function Nebo() {
     setQuery({ target: t.slug });
     go("Field");
   }
-  const back = () =>
-    go(
-      view === "Field"
-        ? fieldOrigin.current
-        : "Home",
-    );
+  // The shutdown overlay lives in the cockpit, which stays mounted behind the start menu: clear
+  // it once the view has actually changed (it is kept up until then so the glass never flashes).
+  useEffect(() => {
+    if (view === "Home") setShutdown(false);
+  }, [view]);
+  function shutDownToMenu() {
+    if (shutdown || turn || departing.current) return;
+    setLocked(true);
+    setShutdown(true);
+  }
+  const back = () => {
+    if (view === "Field") return go(fieldOrigin.current);
+    const motion = loaded && !reduced && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (view === "Explore" && motion) return shutDownToMenu();
+    go("Home");
+  };
   return (
     <div
       className="app-shell"
@@ -492,6 +505,14 @@ export default function Nebo() {
                   onDone={() => {
                     setAppBoot(false);
                     powerUpAndJump();
+                  }}
+                />
+              )}
+              {shutdown && (
+                <NeboShutdown
+                  onDone={() => {
+                    setLocked(false);
+                    go("Home");
                   }}
                 />
               )}

@@ -3,7 +3,7 @@ import "./globals.css";
 import AudioControl from "@/components/AudioControl";
 import WarpOverlay from "@/components/WarpOverlay";
 export const metadata: Metadata = {
-  title: "Nebo — The sky has more to tell",
+  title: "Nebo",
   description: "Explore the sky and compare SPHEREx infrared images over time.",
 };
 export default function Layout({ children }: { children: React.ReactNode }) {

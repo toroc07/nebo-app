@@ -1,0 +1,239 @@
+/*
+ * Power-off of the Nebo app inside the cockpit glass (components/NeboShutdown.tsx). Same layer
+ * as the power-on (z-index 5 in the sky panel) but a different gesture: systems drop offline,
+ * the rings spin down, and the picture collapses to a line and a dot. Total length: 2.7 s.
+ */
+.shutdown {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #e8f6fb;
+  /* Opaque from the first frames so the sky is covered; stays black at the end. */
+  background: #02050e;
+  pointer-events: none;
+  animation: fade-in 220ms ease-out both;
+}
+
+.crt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: -6vh;
+  text-align: center;
+  background: repeating-linear-gradient(0deg, rgb(63 210 255 / 0.03) 0 1px, transparent 1px 3px);
+  /* Warm-down tint, then the collapse. */
+  animation:
+    cool 1200ms ease-in 450ms both,
+    crt-off 650ms cubic-bezier(0.7, 0, 0.84, 0) 1750ms both;
+}
+
+.logo {
+  width: clamp(90px, 10vw, 150px);
+  height: auto;
+  filter: drop-shadow(0 0 14px rgb(63 210 255 / 0.7));
+  animation: logo-off 900ms ease-in 900ms both;
+}
+
+.word {
+  margin: 4px 0 12px;
+  font:
+    italic 700 clamp(1.3rem, 2.2vw, 1.9rem) / 1 Barlow,
+    sans-serif;
+  letter-spacing: 0.34em;
+  padding-left: 0.34em;
+  color: #fff;
+  text-shadow: 0 0 10px rgb(63 210 255 / 0.9);
+  animation: word-off 500ms ease-in 150ms both;
+}
+
+.checks {
+  display: grid;
+  gap: 4px;
+  min-width: min(420px, 70vw);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  font:
+    0.72rem PlexMono,
+    monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fb6c8;
+}
+.checks li {
+  opacity: 0;
+  animation: check-in 200ms ease-out both;
+}
+.tick {
+  color: #ffb347;
+}
+
+/* Three dashed rings spinning in opposite directions; they decelerate and contract to the core. */
+.rings {
+  width: clamp(70px, 7vw, 110px);
+  height: auto;
+  margin: 0 0 12px;
+  overflow: visible;
+}
+.rings circle {
+  fill: none;
+  stroke: #3fd2ff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px #3fd2ff);
+  transform-origin: 50px 50px;
+}
+.ringOuter {
+  stroke-dasharray: 60 36 20 36;
+  animation: spin-down 1500ms ease-out 300ms both;
+}
+.ringMid {
+  stroke: #ffb347 !important;
+  stroke-dasharray: 40 22;
+  animation: spin-down-rev 1500ms ease-out 300ms both;
+}
+.ringInner {
+  stroke-dasharray: 18 14;
+  animation: spin-down 1500ms ease-out 300ms both;
+}
+.core {
+  fill: #bff3ff !important;
+  stroke: none !important;
+  animation: core-dim 1500ms ease-in 300ms both;
+}
+
+/* The last glow of the tube once the picture has collapsed. */
+.dot {
+  position: absolute;
+  left: 50%;
+  top: calc(50% - 3vh);
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 12px 3px #bff3ff,
+    0 0 40px 10px rgb(63 210 255 / 0.55);
+  opacity: 0;
+  animation: dot-fade 450ms ease-out 2250ms both;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes check-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes spin-down {
+  from {
+    transform: rotate(0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: rotate(540deg) scale(0.55);
+    opacity: 0.35;
+  }
+}
+@keyframes spin-down-rev {
+  from {
+    transform: rotate(0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: rotate(-540deg) scale(0.4);
+    opacity: 0.25;
+  }
+}
+@keyframes core-dim {
+  to {
+    opacity: 0.2;
+  }
+}
+@keyframes word-off {
+  from {
+    opacity: 0;
+    letter-spacing: 0.7em;
+  }
+  to {
+    opacity: 1;
+    letter-spacing: 0.34em;
+  }
+}
+@keyframes logo-off {
+  0% {
+    opacity: 1;
+  }
+  25% {
+    opacity: 0.3;
+  }
+  45% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0.18;
+  }
+}
+@keyframes cool {
+  to {
+    filter: saturate(0.5) brightness(0.85);
+  }
+}
+@keyframes crt-off {
+  0% {
+    transform: scale(1, 1);
+    filter: brightness(1);
+  }
+  55% {
+    transform: scale(1, 0.006);
+    filter: brightness(4);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0, 0.006);
+    filter: brightness(6);
+    opacity: 0;
+  }
+}
+@keyframes dot-fade {
+  /* Starts hidden: with fill-mode "both" a first keyframe at opacity 1 would show during the delay. */
+  0% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
