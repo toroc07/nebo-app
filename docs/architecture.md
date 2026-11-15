@@ -546,6 +546,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Field: the science analysis tabs open in a slide-in side panel (Analysis
+  pill on the image; full-screen sheet on narrow screens) instead of inline in the console grid;
+  a field load can be stopped (polling stops, the server build continues and is cached), and the
+  NASA retry stage explains that 2–4 attempts are normal.
 - **2026-11-15** — IRSA outages: the build waits in `waiting_for_archive` (backoff, up to
   `NEBO_ARCHIVE_WAIT_S` = 300 s) instead of failing; a final outage is `502`
   `code: "archive_unavailable"`, which the Field retries automatically.
