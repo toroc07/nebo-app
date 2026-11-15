@@ -104,6 +104,9 @@ export function subPoint(raDeg: number, decDeg: number, date: Date): { lat: numb
   return { lat: decDeg, lon: wrap180(raDeg - gmstDeg(date)) };
 }
 
+/** A catalogued object this close to the map centre counts as "at the map centre" (3′, a small field). */
+export const AT_MAP_CENTRE_DEG = 0.05;
+
 /** Great-circle separation between two sky positions, in degrees (haversine, stable at small angles). */
 export function angularDistance(ra1: number, dec1: number, ra2: number, dec2: number): number {
   const h =

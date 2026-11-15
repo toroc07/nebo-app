@@ -19,7 +19,9 @@ once and stored in PostgreSQL, so the frontend gets them instantly afterwards.
 
    The frontend calls again after `Retry-After` seconds and shows the progress meanwhile.
 
-A request within 30 arcsec of an existing patch reuses it. Each patch is downloaded once at
+A request within 30 arcsec of an existing patch reuses it. Coordinates within 30 arcsec of a catalogue object's track
+(1990-2027, from its proper motion) open that object's patch, so typing the J2000 or WISE-epoch
+position of a fast mover like WISE 0855 opens the preloaded field. Each patch is downloaded once at
 the largest size; the other sizes are central crops, so switching size is instant.
 
 ## Setup

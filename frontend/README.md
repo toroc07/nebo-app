@@ -38,6 +38,17 @@ node tests/browser.mjs
 
 The tests intercept the API and save results and screenshots to `artifacts/nebo` in the workspace. For another URL use `NEBO_TEST_URL`. The report for this session is in `artifacts/nebo/verification.md`.
 
+## Field links
+
+`/?ra=133.795&dec=-7.245&fov=6&det=6` (or `/?target=wise-0855`) skips the menu and the map and
+opens that field in the viewer. `ra`/`dec` are ICRS degrees; `fov` is 3, 6 or 15 arcminutes
+(default 6); `det` is 1–6 (`detector` also works; default: the object's recommended detector,
+else 3); `epoch` is 1-based like the viewer (default 1, clamped to the last one). Any invalid value
+ignores the whole link and the app starts at Home. Coordinates within 30″ of a catalogued object open that object's field
+and show its name and type (from `patch.target` in `/timeline`), whether they come from a link,
+the RA/Dec form or the map centre. "Copy link" in the viewer writes the current
+field as such a link; a field that is not cached shows the usual building screen.
+
 ## Observation viewer
 
 `/lab/observation` (opened by URL) is a full-screen viewer of the SPHEREx epochs. Zoom with

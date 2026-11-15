@@ -50,9 +50,20 @@ def _seed_ready_timeline(service, patch, detector=3, size="medium", shift_epoch1
     t1 = datetime(2026, 1, 1, tzinfo=timezone.utc)
     mjd0 = ephemeris.REFERENCE_MJD - 180.0
     mjd1 = ephemeris.REFERENCE_MJD
+    # Like the real build: float32 arrays live only on the largest size, the others are crops.
+    big = imaging.grid_pixels(max(config.SIZES_DEG.values()))
+    start = (big - side) // 2
+
+    def on_large_grid(npz: bytes) -> bytes:
+        canvas = np.full((big, big), 1.0, dtype=np.float32)
+        canvas[start : start + side, start : start + side] = np.load(__import__("io").BytesIO(npz))["image"]
+        return imaging.to_npz(canvas, np.ones_like(canvas))
+
     imgs = [
-        EpochImage(0, size, t0, t0, mjd0, 4, 4, side, side, 0.0, 50.0, b"png0", npz0),
-        EpochImage(1, size, t1, t1, mjd1, 4, 4, side, side, 0.0, 50.0, b"png1", npz1),
+        EpochImage(0, size, t0, t0, mjd0, 4, 4, side, side, 0.0, 50.0, b"png0", None),
+        EpochImage(1, size, t1, t1, mjd1, 4, 4, side, side, 0.0, 50.0, b"png1", None),
+        EpochImage(0, "large", t0, t0, mjd0, 4, 4, big, big, 0.0, 50.0, b"png0", on_large_grid(npz0)),
+        EpochImage(1, "large", t1, t1, mjd1, 4, 4, big, big, 0.0, 50.0, b"png1", on_large_grid(npz1)),
     ]
     service.store.complete_timeline(tl.id, imgs, 8, 8)
     return gaia_stars
@@ -70,6 +81,7 @@ def test_candidates_endpoint_separates_catalogued_and_candidate_signals(client, 
     assert r.status_code == 200
     body = r.json()
     assert body["gaia_available"] is True
+    assert body["truncated"] is False  # 2 changes, well under the cap
     classes = {c["classification"] for c in body["candidates"]}
     assert "catalogued_object" in classes
     assert "candidate_signal" in classes

@@ -1449,8 +1449,8 @@ class PostgresStore:
                 "UPDATE patches SET gaia_crossmatch_json = %s, wise_crossmatch_json = %s "
                 "WHERE id = %s",
                 (
-                    Jsonb(gaia_json) if gaia_json is not None else None,
-                    Jsonb(wise_json) if wise_json is not None else None,
+                    self._jsonb(gaia_json) if gaia_json is not None else None,
+                    self._jsonb(wise_json) if wise_json is not None else None,
                     patch_id,
                 ),
             )

@@ -194,6 +194,8 @@ export type CandidatesResponse = {
   wise_available: boolean;
   gaia_complete_to_g: number | null;
   candidates: CandidateDetection[];
+  // true when detection hit the server cap: show "N+".
+  truncated: boolean;
 };
 
 export type CitizenVote = {

@@ -176,3 +176,10 @@ def test_dequeue_takes_a_queued_timeline_once(store):
     assert dequeued[1].detector == 3 and store.get_timeline(patch.id, 3).stage == "querying"
     again = store.dequeue_timeline()  # Other queued rows may exist, but not this one.
     assert again is None or again[0].id != patch.id
+
+
+def test_patch_crossmatch_saves_json(store):
+    # Used to raise NameError (Jsonb was never imported in this method).
+    patch = store.create_patch(201.234, -12.5, None)
+    store.created_patches.append(patch.id)
+    store.save_patch_crossmatch(patch.id, {"n": 3, "g_complete": float("nan")}, None)

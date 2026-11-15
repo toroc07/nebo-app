@@ -462,7 +462,9 @@ stateDiagram-v2
   }
   Home --> Explore: START or Launch (warp to the cockpit)
   Explore --> Field: View images (object, RA and Dec, or map centre)
+  [*] --> Field: shared link (?ra&dec or ?target)
   Field --> Explore: Back
+  Field --> Home: Back (opened from a link)
   Explore --> Home: Back
   note right of Explore
     /lab/observation is a separate route,
@@ -547,21 +549,19 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
-- **2026-11-15** — Models 1–2: probabilities shrunk toward uniform (no 0%/100%; weights are
-  uncalibrated). The science panel labels each model "Model estimate, not a detection", shows Model
-  1 as a high/medium/low level and hides Model 3's alert status while it runs on a simulated profile.
-- **2026-11-15** — Saturation: `nasa_sector_exposures.saturated_near_target` (OVERFLOW/SUR_ERROR
-  in the 5×5 photometry box at the object's propagated position). `/metrics` `image_photometry`
-  adds tri-state `saturated` plus `saturated_frames`, `checked_frames`, `total_frames`,
-  `saturated_frac`; saturated epochs return `snr`/`sigma`
-  as `null` and the UI shows the flux as an approximate lower limit (≥). Older rows:
-  `python -m app.backfill_saturation [--download]`.
-- **2026-11-15** — `/metrics` `image_photometry`: `snr = flux_hat / sigma_stat` (noise
-  propagated from the co-add variance), no longer capped at 33.3 by the 3% floor; `sigma_reported`
-  keeps the floor. Epochs without usable pixels or variance return `null` (UI: "n/a").
-- **2026-11-15** — `/metrics` `image_photometry`: moving targets are measured at their
-  proper-motion position for each epoch (sub-pixel), not at the image centre. Fixes Barnard's
-  ×7 flux jump between epochs; the co-add was already a weighted mean.
+- **2026-11-15** — Coordinate requests within 30″ of a catalogue object's 1990–2027 track resolve to
+  that object's patch. Typed catalogue coordinates of fast movers (WISE 0855 is 128″ from its
+  2026.2 position) used to start a new download instead of opening the preloaded field.
+- **2026-11-15** — Journey: a field opened by coordinates that lands on a catalogued object's patch
+  (the 30″ reuse rule; `/timeline` returns `patch.target`) is named as that object in the viewer.
+  A failed `/candidates` request no longer shows the generic 404 text "could not find this object".
+- **2026-11-15** — Journey: a shared link `/?ra=&dec=` or `/?target=` (with optional `fov` 3/6/15,
+  `det` 1–6, `epoch` 1-based) opens the field viewer directly; invalid links start at Home. The
+  viewer's "Copy link" button writes that link. Parsing in `frontend/lib/fieldLink.ts`.
+- **2026-11-15** — `/candidates` and `/alignment` crop the largest size's float32 arrays to the
+  requested size (only `large` stores `.npz`); before, any other size always answered 404 and the
+  UI showed it as "0 detected changes". The UI now says "unavailable" on a failed request.
+  `/candidates` adds `truncated` (detection hit the 25 cap); the UI shows "25+".
 - **2026-11-15** — Science API contract: `/patches/{id}/spectrum` adds a derived `channels[]`;
   the frontend types follow the backend names (`c_global`, `phi`, variability keys). Each science
   tab renders inside an error boundary.
