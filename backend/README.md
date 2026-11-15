@@ -282,6 +282,25 @@ Checks astrometric alignment per epoch against slow Gaia DR3 reference stars (`p
 returning `stars_used`, `median_dx_px`, `median_dy_px`, `rms_arcsec`, and `status`
 (`"ok"`, `"offset_warning"`, or `"insufficient_stars"`).
 
+### Target position validation (`python -m app.position_report`)
+
+Offline check, not an endpoint. For each catalogue target × chosen detector × epoch it reads
+`GET /timeline` (`expected_position`: catalogue position propagated with proper motion to the
+epoch's `mid_mjd`) and the epoch's float32 `.npz`, fits a 2D Gaussian to the finite pixels near
+the expected pixel (`measure_centroid`; NaN saturated cores are fitted from the wings, S/N < 5
+counts as not detected) and writes [`docs/position-validation.md`](../docs/position-validation.md):
+expected vs measured pixel, offset in px and ″, S/N or "saturated", pass if ≤ 1 px. The `.npz`
+keeps FITS row order (row 0 = south), so rows are flipped to the PNG frame before comparing.
+Only GET requests; nothing is written but the report.
+
+```bash
+python -m app.position_report --all-detectors        # public API, docs/position-validation.md
+python -m app.position_report --api http://127.0.0.1:8000/api/v1 --out /tmp/report.md
+```
+
+The Gaia check above validates the image WCS with field stars; this one validates the target
+ephemeris on the object itself. `--all-detectors` adds a D1-D6 cross-check table.
+
 ### `GET /explore/suggested?ra=<deg>&dec=<deg>&radius_deg=30&limit=12`
 
 Returns nearby (`parallax > 50 mas`) or fast-moving (`pm > 500 mas/yr`) Gaia DR3 stars propagated

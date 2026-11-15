@@ -563,6 +563,11 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — P1-6: offline target position validation. `python -m app.position_report`
+  (read-only client of the public API: `/targets`, `/timeline` `expected_position`, epoch `.npz`)
+  fits each catalogue target in every epoch and writes `docs/position-validation.md`. First run:
+  29/29 detections within 1 px (worst 0.64 px, WISE 0855 D5, blended); 1 non-detection
+  (WISE 0855 D6 epoch 1). No endpoint, table or pipeline change.
 - **2026-11-15** — P1-1: `GET /patches/{id}/spectrum/measured` returns the spectrum measured from
   the stored exposures (one point per unsaturated exposure: λ at the object, 3×3 aperture flux in
   µJy, σ; plus the median per channel). The Spectrum tab shows it first, labelled Measured, above
