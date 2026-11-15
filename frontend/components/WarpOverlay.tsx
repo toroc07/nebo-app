@@ -4,6 +4,7 @@
 // viewer (the animation never restarts), and it takes itself down once the viewer has data.
 // The timing is in lib/warp.ts and the star field in lib/warp-render.ts; this file only draws.
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   MOTION,
   REDUCED,
@@ -31,7 +32,15 @@ export default function WarpOverlay() {
     setActive(warp.isActive());
     return warp.subscribe(() => setActive(warp.isActive()));
   }, []);
-  return active ? <Scene /> : null;
+  if (!active) return null;
+  // Seen from the cockpit, the tunnel is drawn INSIDE the sky panel: the page container is its
+  // own stacking context, so a page-level layer could never sit between the sky and the cockpit.
+  // Inside the panel it covers the map and stays behind the cockpit art and console.
+  const host =
+    warp.timeline()?.view === "cockpit"
+      ? document.querySelector<HTMLElement>(".explorer-grid:not([hidden]) .sky-panel")
+      : null;
+  return host ? createPortal(<Scene />, host) : <Scene />;
 }
 
 function Scene() {
@@ -39,6 +48,8 @@ function Scene() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const copy = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState("");
+  // Framing is fixed for the whole flight: read once from the launch.
+  const [view] = useState(() => warp.timeline()?.view ?? "fullscreen");
   // Read once: a preference changed mid-flight is not worth restarting the animation for.
   const [reduced] = useState(
     () =>
@@ -67,8 +78,9 @@ function Scene() {
     const resize = () => {
       // Capped: the tunnel is soft, and a 4K canvas would cost frames for no visible gain.
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      w = window.innerWidth;
-      h = window.innerHeight;
+      // The element's own box: the whole window, or the sky panel when framed by the cockpit.
+      w = el.clientWidth || window.innerWidth;
+      h = el.clientHeight || window.innerHeight;
       cv.width = Math.round(w * dpr);
       cv.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -174,6 +186,7 @@ function Scene() {
       className={s.warp}
       tabIndex={-1}
       data-warp
+      data-view={view}
       data-reduced={reduced}
       style={{ opacity: 0 }}
     >

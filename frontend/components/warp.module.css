@@ -8,6 +8,21 @@
   outline: none;
 }
 
+/*
+ * Seen from the cockpit: rendered inside the sky panel (see WarpOverlay.tsx), so the tunnel fills
+ * only the glass while the hull and the console stay in front. The status moves up into the glass,
+ * where the console would otherwise hide it.
+ */
+.warp[data-view="cockpit"] {
+  position: absolute;
+  /* Above the map and the dark glass (z-index 3), inside the sky panel's isolated stack. */
+  z-index: 4;
+}
+.warp[data-view="cockpit"] .copy {
+  bottom: auto;
+  top: 14vh;
+}
+
 /* Scaled up while arriving (set from code), as if the camera were flying through. */
 .canvas {
   position: absolute;

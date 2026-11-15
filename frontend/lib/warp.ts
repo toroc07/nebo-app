@@ -51,6 +51,12 @@ export const LOOK_UP_Y = 0.3;
 /** Where "Begin exploring" is taking the user: the sky globe, or the observation viewer. */
 export type WarpTarget = "explore" | "viewer";
 
+/**
+ * How the tunnel is framed: over the whole page, or only inside the cockpit glass (drawn behind
+ * the cockpit art, so the hull and the console stay in front of it, as seen from the ship).
+ */
+export type WarpView = "fullscreen" | "cockpit";
+
 export type Timeline = {
   /** Where the transition is heading; decides what "ready" means. */
   target: WarpTarget;
@@ -58,6 +64,8 @@ export type Timeline = {
   launchedAt: number;
   /** When the viewer first reported it was ready; null while it is still loading. */
   readyAt: number | null;
+  /** Framing of the tunnel; full screen when absent. */
+  view?: WarpView;
 };
 
 export type Frame = {
@@ -180,7 +188,8 @@ export function isDestinationReady(
 
 /** The destination's own loading message ("Loading…", "Building: downloading 3/24"), if it shows one. */
 export function viewerStatus(doc: Queryable): string {
-  return (doc.querySelector('main [role="status"]')?.textContent ?? "").trim();
+  // Not the tunnel's own label: seen from the cockpit, the tunnel is drawn inside <main> too.
+  return (doc.querySelector('main [role="status"]:not([data-warp] *)')?.textContent ?? "").trim();
 }
 
 // --- controller ------------------------------------------------------------------------------
@@ -193,9 +202,9 @@ export class WarpController {
   private listeners = new Set<Listener>();
 
   /** Starts the transition. Ignored while one is already running. */
-  launch(now: number, target: WarpTarget): void {
+  launch(now: number, target: WarpTarget, view: WarpView = "fullscreen"): void {
     if (this.tl) return;
-    this.tl = { target, launchedAt: now, readyAt: null };
+    this.tl = { target, launchedAt: now, readyAt: null, view };
     this.emit();
   }
 
@@ -238,8 +247,8 @@ export class WarpController {
 export const warp = new WarpController();
 
 /** Starts the transition now. Safe to call on the server: it does nothing there. */
-export function launchWarp(target: WarpTarget): void {
+export function launchWarp(target: WarpTarget, view: WarpView = "fullscreen"): void {
   if (typeof performance !== "undefined") {
-    warp.launch(performance.now() / 1000, target);
+    warp.launch(performance.now() / 1000, target, view);
   }
 }

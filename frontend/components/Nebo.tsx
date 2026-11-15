@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import Field from "./Field";
 import Cockpit from "./Cockpit";
+import HomeScene from "./HomeScene";
 import type { SkyCommand, SkyLayers, SkyView } from "./Sky";
 import { launchWarp } from "@/lib/warp";
 const Sky = dynamic(() => import("./Sky"), {
@@ -88,7 +89,11 @@ export default function Nebo() {
     [skyCommand, setSkyCommand] = useState<SkyCommand | null>(null),
     [skyView, setSkyView] = useState<SkyView | null>(null),
     // First-person turn between the cockpit (right = towards the analysis wall) and back.
-    [turn, setTurn] = useState<"right" | "left" | null>(null),
+    // "launch" = from the start screen to the cockpit (first leg of the journey).
+    [turn, setTurn] = useState<"right" | "left" | "launch" | null>(null),
+    // On the ground the cockpit is switched off and its glass is dark until the jump.
+    [cockpitPower, setCockpitPower] = useState<"off" | "boot" | "on">("on"),
+    [glassDark, setGlassDark] = useState(false),
     [screenPowered, setScreenPowered] = useState(true),
     [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, grid: false }),
     [query, setQuery] = useState<Query | null>(null),
@@ -105,6 +110,9 @@ export default function Nebo() {
     departing = useRef(false),
     pending = useRef<Destination | null>(null);
   const reduced = prefs.reduced || systemReduced;
+  useEffect(() => {
+    if (loaded && view === "Home") setSkyMounted(true);
+  }, [loaded, view]);
   const turnRef = useRef(turn);
   turnRef.current = turn;
   useEffect(() => {
@@ -177,9 +185,12 @@ export default function Nebo() {
         !loaded ||
         reduced ||
         matchMedia("(prefers-reduced-motion: reduce)").matches ||
-        turnRef.current
-      )
+        turnRef.current ||
+        skipEntrance.current
+      ) {
+        skipEntrance.current = false;
         return;
+      }
       const menu = root.current?.querySelector(".panel-menu");
       if (main) main.dataset.transition = "entering";
       const timeline = gsap.timeline({
@@ -356,16 +367,50 @@ export default function Nebo() {
       exit.to(main, { opacity: 0, y: -6, duration: 0.18 });
     }
   });
-  // Layout effect: the walls must be rotated into place before the first frame is painted,
-  // or the newly mounted screen would flash at full size for one frame.
+  // Timers of the launch sequence (power-up, jump), cleared if the page leaves mid-way.
+  const launchTimers = useRef<number[]>([]);
+  useEffect(() => () => launchTimers.current.forEach(clearTimeout), []);
+  // Set before a view change that the camera already animated, so the generic fade-in is skipped.
+  const skipEntrance = useRef(false);
+
+  /** After the pan to the cockpit: screens power up, then the jump runs inside the glass. */
+  function powerUpAndJump() {
+    const later = (ms: number, fn: () => void) => launchTimers.current.push(window.setTimeout(fn, ms));
+    setCockpitPower("boot");
+    // The tunnel starts once the screens are on (power-on is 520 ms + staggered delays).
+    later(900, () => {
+      setCockpitPower("on");
+      launchWarp("explore", "cockpit");
+    });
+    // The tunnel's own fade-in is 0.35 s; lift the dark glass only once it is covered.
+    later(900 + 450, () => setGlassDark(false));
+  }
+
+  // Layout effect: the strip must be in place before the first frame is painted, or the newly
+  // shown wall would flash at its final position for one frame.
   useLayoutEffect(() => {
     if (!turn) return;
     const explorer = root.current?.querySelector<HTMLElement>(".explorer-grid");
     const field = root.current?.querySelector<HTMLElement>('[data-console="field"]');
+    const home = root.current?.querySelector<HTMLElement>('[data-scene="home"]');
     const corner = root.current?.querySelector<HTMLElement>(".turn-corner");
+    // Each turn pans across [left wall · painted corner · right wall]; the camera faces the left
+    // wall at the start of a turn to the right, and the right wall at the start of a turn left.
+    const [leftWall, rightWall] = turn === "launch" ? [home, explorer] : [explorer, field];
     const finish = () => {
-      if (explorer && field) gsap.set([explorer, field], { clearProps: "transform" });
-      if (turn === "right") {
+      // Only the walls that stay get their position reset. The one being left (the start
+      // screen, or the analysis screen on the way back) keeps its off-screen offset until React
+      // unmounts it; resetting it here put it back at x = 0, over everything, for one frame.
+      const leaving = turn === "launch" ? home : turn === "left" ? field : null;
+      [leftWall, rightWall].forEach((wall) => {
+        if (wall && wall !== leaving) gsap.set(wall, { clearProps: "transform" });
+      });
+      skipEntrance.current = true;
+      if (turn === "launch") {
+        setView("Explore");
+        setTurn(null);
+        powerUpAndJump();
+      } else if (turn === "right") {
         setTurn(null);
         setScreenPowered(true);
       } else {
@@ -374,33 +419,45 @@ export default function Nebo() {
         setScreenPowered(true);
       }
     };
-    if (!explorer || !field || !corner) return finish();
+    if (!leftWall || !rightWall || !corner) return finish();
     /*
-     * The turn is a camera pan across one continuous strip: cockpit · connecting wall · analysis
-     * screen. The middle panel (turn-corner.webp) was painted to join the two views, so the
-     * pan never shows a seam or the space behind the walls. Flat translations only: no 3D,
-     * which clipped the walls and needed dark masks at their edges.
+     * The turn is a camera pan across one continuous strip. The middle panel was painted to join
+     * the two views (turn-corner.webp, home-corner.webp), so the pan never shows a seam or the
+     * space behind the walls. Flat translations only: no 3D, which clipped the walls.
      */
     const vw = window.innerWidth;
-    // turn-corner.webp is 1536 × 1024: its left 600 px repeat the cockpit's right edge, its right
-    // 600 px the room's left edge (both at their on-screen scale for 16:9), and the 336 px
-    // between were painted to join them. It overlays both live views where they match.
+    // Both corner images are 1536 × 1024: the left 600 px repeat the left wall's right edge,
+    // the right 600 px the right wall's left edge (at their on-screen scale for 16:9), and the
+    // 336 px between were painted to join them. They overlay the live views where they match.
     const scale = corner.offsetHeight / 1024;
     const overlap = 600 * scale;
     const gap = 336 * scale;
-    const right = turn === "right";
-    // Strip offsets from the cockpit's x: corner at vw − overlap, screen at vw + gap.
-    const start = right ? 0 : -(vw + gap);
-    const end = right ? -(vw + gap) : 0;
+    const towardRight = turn !== "left";
+    // Strip offsets from the left wall's x: corner at vw − overlap, right wall at vw + gap.
+    const start = towardRight ? 0 : -(vw + gap);
+    const end = towardRight ? -(vw + gap) : 0;
     const timeline = gsap.timeline({ onComplete: finish, defaults: { duration: 1.25, ease: "power2.inOut" } });
     timeline
-      .fromTo(explorer, { x: start }, { x: end }, 0)
+      .fromTo(leftWall, { x: start }, { x: end }, 0)
       .fromTo(corner, { x: start + vw - overlap }, { x: end + vw - overlap }, 0)
-      .fromTo(field, { x: start + vw + gap }, { x: end + vw + gap }, 0);
+      .fromTo(rightWall, { x: start + vw + gap }, { x: end + vw + gap }, 0);
     return () => {
       timeline.kill();
     };
   }, [turn]);
+
+  /** START on the ground: dark cockpit, pan to it, power up, jump. */
+  function startJourney() {
+    if (turn || departing.current) return;
+    const motion = loaded && !reduced && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!motion || !root.current?.querySelector(".explorer-grid")) {
+      go("Explore");
+      return;
+    }
+    setCockpitPower("off");
+    setGlassDark(true);
+    setTurn("launch");
+  }
   // A field can be opened from Featured objects, the sky explorer or the coordinates form. Back
   // returns to whichever one it was opened from: the last screen that was not a field.
   const fieldOrigin = useRef<View>("Observe");
@@ -416,9 +473,7 @@ export default function Nebo() {
     go(
       view === "Field"
         ? fieldOrigin.current
-        : ["Explore", "Coordinates"].includes(view)
-          ? "Observe"
-          : "Home",
+        : "Home",
     );
   function illuminatePanels(event: PointerEvent<HTMLElement>) {
     if (event.pointerType !== "mouse") return;
@@ -534,80 +589,14 @@ export default function Nebo() {
       </header>
       <main id="content" tabIndex={-1} className="view-content">
         {view === "Home" ? (
-          <>
-            <h1 className="sr-only" ref={heading} tabIndex={-1}>
-              Home
-            </h1>
-            <nav
-              className="home-grid panel-menu"
-              aria-label="Home panel"
-              onPointerMove={illuminatePanels}
-              onPointerLeave={clearPanelLight}
-            >
-              <button
-                className="tile primary-tile image-tile"
-                onClick={() => go("Observe")}
-              >
-                <PanelImage src="/panels/deep-field.png" />
-                <div className="tile-top">
-                  <span className="mono">01 / EXPLORE</span>
-                  <Compass size={27} />
-                </div>
-                <div className="tile-bottom">
-                  <h2>
-                    Observe
-                    <br />
-                    the sky
-                  </h2>
-                  <span className="tile-link">
-                    Start exploring <ArrowUpRight size={24} />
-                  </span>
-                </div>
-              </button>
-              <div className="secondary-stack">
-                <button
-                  className="tile featured-tile image-tile"
-                  onClick={() => go("Featured objects")}
-                >
-                  <PanelImage src="/panels/nebula.png" />
-                  <div className="tile-top">
-                    <span className="mono">02 / DISCOVER</span>
-                    <ArrowUpRight size={24} />
-                  </div>
-                  <div className="tile-bottom">
-                    <h2>Featured objects</h2>
-                    <span className="tile-link">
-                      View objects <ArrowRight size={18} />
-                    </span>
-                  </div>
-                </button>
-                <button
-                  className="tile tutorial-tile image-tile"
-                  onClick={() => go("Tutorial")}
-                >
-                  <PanelImage src="/panels/telescope.jpg" />
-                  <BookOpen size={30} />
-                  <div>
-                    <h2>Tutorial</h2>
-                    <span>Your first trip, step by step</span>
-                  </div>
-                  <ArrowUpRight size={24} />
-                </button>
-              </div>
-              <button
-                className="tile settings-tile image-tile"
-                onClick={() => go("Settings")}
-              >
-                <PanelImage src="/panels/controls.svg" />
-                <SlidersHorizontal size={24} aria-hidden="true" />
-                <div>
-                  <h2>Settings</h2>
-                  <span>Appearance and motion</span>
-                </div>
-                <ArrowUpRight size={24} aria-hidden="true" />
-              </button>
-            </nav>
-          </>
+          <HomeScene
+            headingRef={heading}
+            onStart={startJourney}
+            onTutorial={() => go("Tutorial")}
+            onFeatured={() => go("Featured objects")}
+            onCoordinates={() => go("Coordinates")}
+            onSettings={() => go("Settings")}
+          />
         ) : (
           <>
             {/* The field console draws its own Back button and title inside the ship screen. */}
@@ -869,13 +858,14 @@ export default function Nebo() {
             )}
           </>
         )}
-        {turn && <div className="turn-corner" aria-hidden="true" />}
+        {turn && <div className="turn-corner" data-kind={turn === "launch" ? "launch" : "turn"} aria-hidden="true" />}
         {skyMounted && (
           <div
-            hidden={view !== "Explore" && view !== "Field" && !turn}
+            hidden={!["Explore", "Field", "Home"].includes(view) && !turn}
             className="explorer-grid"
-            inert={view === "Field" && !turn}
-            aria-hidden={view === "Field" && !turn ? true : undefined}
+            data-glass={glassDark ? "dark" : undefined}
+            inert={view !== "Explore" && !turn}
+            aria-hidden={view !== "Explore" && !turn ? true : undefined}
           >
             {/*
               * While the analysis screen is up, the cockpit stays mounted and painted behind it
@@ -923,6 +913,7 @@ export default function Nebo() {
               layers={skyLayers}
               onLayers={setSkyLayers}
               onCommand={(c) => setSkyCommand({ id: Date.now(), ...c })}
+              power={cockpitPower}
             />
           </div>
         )}

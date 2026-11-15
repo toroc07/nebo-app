@@ -34,6 +34,7 @@ export type SkyCommand =
   // Sets an exact field of view (FOV gauge).
   | { id: number; action: "fov"; fov: number };
 const SKY_FRAME = 40; // ~1.86 µm, inside detector 3
+const SPHEREX_HIPS = "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube";
 export default function Sky({
   targets,
   selected,
@@ -83,6 +84,13 @@ export default function Sky({
         api.current = A;
         viewer.current = A.aladin(node, {
           target: "269.446 4.769",
+          // Start on the SPHEREx cube and an empty HiPS list: Aladin's defaults (DSS and its
+          // catalogue of surveys) would be fetched from other servers, which fails offline and
+          // reports page errors, only to be replaced by the SPHEREx layer below.
+          survey: SPHEREX_HIPS,
+          hipsList: [],
+          // No startup telemetry to the Aladin servers.
+          log: false,
           fov: 180,
           projection: "AIT",
           // The cockpit is the interface: Aladin's own widgets (frame picker, coordinate box,
@@ -104,7 +112,7 @@ export default function Sky({
         // HiPS cubes load through newImageSurvey, as in the Aladin Lite 3D examples.
         viewer.current!.setImageLayer(
           viewer.current!.newImageSurvey(
-            "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube",
+            SPHEREX_HIPS,
             // Aladin starts at the middle frame (50), which is blank and has no tiles.
             { successCallback: (survey) => survey.setSliceNumber(SKY_FRAME) },
           ),
