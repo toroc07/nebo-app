@@ -164,7 +164,7 @@
 }
 .menu {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: calc(12 * var(--S));
 }
 .start,
@@ -223,6 +223,87 @@
   outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
+/* Crew roster: replaces the menu inside the same wall screen. */
+.crew {
+  display: flex;
+  flex-direction: column;
+  gap: calc(12 * var(--S));
+}
+.crewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: max(60px, calc(120 * var(--S))); /* keeps clear of the logo */
+}
+.crewHead h2 {
+  margin: 0;
+  font: 600 max(20px, calc(30 * var(--S))) / 1 Barlow, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.crewBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  color: var(--ink);
+  font: max(11px, calc(12 * var(--S))) PlexMono, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: rgb(10 30 46 / 0.75);
+  border: 1px solid rgb(63 210 255 / 0.35);
+  border-radius: calc(5 * var(--S));
+}
+.crewBack svg {
+  width: 14px;
+  height: 14px;
+}
+.crewBack:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgb(63 210 255 / 0.4);
+}
+.crewBack:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+.crewList {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: calc(10 * var(--S));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6 * var(--S));
+  padding: calc(10 * var(--S)) calc(6 * var(--S));
+  text-align: center;
+  background: rgb(10 30 46 / 0.65);
+  border: 1px solid rgb(63 210 255 / 0.3);
+  border-radius: calc(5 * var(--S));
+}
+.member img {
+  width: calc(78 * var(--S));
+  min-width: 52px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1.5px solid var(--cyan);
+  box-shadow: 0 0 12px rgb(63 210 255 / 0.45);
+}
+.member strong {
+  font: 600 max(11px, calc(12.5 * var(--S))) / 1.2 Plex, sans-serif;
+  color: #fff;
+}
+.member span {
+  font: max(10px, calc(11 * var(--S))) / 1.25 PlexMono, monospace;
+  color: #8fe0f5;
+}
+
 /* Menu <-> tutorial and step changes: a short CRT re-tune of the screen content. */
 @keyframes screen-boot {
   0% { opacity: 0; filter: brightness(2.2); clip-path: inset(49% 0 49% 0); }
@@ -257,6 +338,23 @@
   }
   .menu {
     grid-template-columns: 1fr;
+  }
+  .crewList {
+    grid-template-columns: 1fr;
+    max-height: 60dvh;
+    overflow-y: auto;
+  }
+  .member {
+    flex-direction: row;
+    flex-wrap: wrap;
+    text-align: left;
+  }
+  .member img {
+    width: 52px;
+  }
+  .member strong,
+  .member span {
+    flex: 1 1 calc(100% - 70px);
   }
 }
 @media (prefers-reduced-motion: reduce) {
