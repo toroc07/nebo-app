@@ -97,6 +97,7 @@ const CREW = [
     name: "Katlyn Gutierrez Cardona",
     role: "Storyteller & Communications",
     photo: "/crew/katlyn.webp",
+    github: "devkatlyn",
   },
 ];
 
