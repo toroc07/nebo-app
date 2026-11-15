@@ -547,6 +547,8 @@ export default function ImageViewport({
               <img
                 src={src}
                 alt={alt}
+                width={level.width}
+                height={level.height}
                 className={s.image}
                 style={{
                   left: offset.x,

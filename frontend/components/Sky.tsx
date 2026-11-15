@@ -13,7 +13,10 @@ type Viewer = {
   ) => unknown;
   setImageLayer: (layer: unknown) => void;
 };
-type SkyCommand = { id: number; action: "in" | "out" | "all" };
+export type SkyCommand =
+  | { id: number; action: "in" | "out" | "all" }
+  // Re-centres on a position the map already knows, e.g. after the user dragged away.
+  | { id: number; action: "center"; ra: number; dec: number };
 const SKY_FRAME = 40; // ~1.86 µm, inside detector 3
 export default function Sky({
   targets,
@@ -121,6 +124,12 @@ export default function Sky({
   }, [coordinates, ready]);
   useEffect(() => {
     if (!command || !ready) return;
+    if (command.action === "center") {
+      viewer.current?.gotoRaDec(command.ra, command.dec);
+      viewer.current?.setFoV(8);
+      fieldOfView.current = 8;
+      return;
+    }
     fieldOfView.current = command.action === "all" ? 180 : Math.max(0.1, Math.min(180, fieldOfView.current * (command.action === "in" ? 0.5 : 2)));
     viewer.current?.setFoV(fieldOfView.current);
   }, [command, ready]);
@@ -151,7 +160,7 @@ export default function Sky({
         </div>
       )}
       <p className="sky-help">
-        Drag to move around the sky. Use the console below to choose a destination.
+        Drag to move around the sky. Use the console to choose a destination.
       </p>
     </>
   );
