@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import io
 import math
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -577,15 +577,7 @@ def model1_features(
             unavailable.append(name)
         else:
             fv[name] = value
-    if gaia_info and gaia_info.get("dist_arcsec") is not None:
-        fv["gaia_match_dist_arcsec"] = gaia_info["dist_arcsec"]
-        fv["gaia_pm_total_mas_yr"] = gaia_info.get("pm_total_mas_yr") or 0.0
-    else:
-        unavailable += ["gaia_match_dist_arcsec", "gaia_pm_total_mas_yr"]
-    if wise_info and wise_info.get("w1_w2_color") is not None:
-        fv["wise_w1_w2_color"] = wise_info["w1_w2_color"]
-    else:
-        unavailable.append("wise_w1_w2_color")
+    add_catalogue_features(fv, unavailable, gaia_info, wise_info)
     bands = (spectrum or {}).get("band_coadd_flux_mjy") or {}
     b6 = (bands.get("band_6") or {}).get("flux_mjy")
     b2 = (bands.get("band_2") or {}).get("flux_mjy")
@@ -610,6 +602,26 @@ def model1_features(
         "field_stars": field["n_stars"] if field else 0,
         "features_unavailable": unavailable,
     }
+
+
+CATALOGUE_FEATURES = ("gaia_match_dist_arcsec", "gaia_pm_total_mas_yr", "wise_w1_w2_color")
+
+
+def add_catalogue_features(
+    fv: dict, unavailable: list[str], gaia_info: dict | None, wise_info: dict | None
+) -> None:
+    """Fill the Gaia DR3 / CatWISE features in place; missing ones are listed in ``unavailable``
+    (and left out, so the model uses its neutral value)."""
+    unavailable[:] = [name for name in unavailable if name not in CATALOGUE_FEATURES]
+    if gaia_info and gaia_info.get("dist_arcsec") is not None:
+        fv["gaia_match_dist_arcsec"] = round(float(gaia_info["dist_arcsec"]), 6)
+        fv["gaia_pm_total_mas_yr"] = round(float(gaia_info.get("pm_total_mas_yr") or 0.0), 6)
+    else:
+        unavailable += ["gaia_match_dist_arcsec", "gaia_pm_total_mas_yr"]
+    if wise_info and wise_info.get("w1_w2_color") is not None:
+        fv["wise_w1_w2_color"] = round(float(wise_info["w1_w2_color"]), 6)
+    else:
+        unavailable.append("wise_w1_w2_color")
 
 
 # Model 2's templates are idealised shapes; a reduced chi-square above this means none of them
@@ -660,12 +672,14 @@ def analyze(
     force_recompute: bool = False,
     gaia_info: dict | None = None,
     wise_info: dict | None = None,
+    crossmatch: Callable[[], tuple[dict | None, dict | None]] | None = None,
 ) -> dict[str, Any]:
     """Spectrum, 17 indices, light curve, variability, confidence and Models 1-3, all measured.
 
     Model results are stored under ``MEASURED_VERSION`` and reused while ``force_recompute`` is
     false; the spectrum and the light curve are recomputed from the stored exposures each time
-    (one query, no image).
+    (one query, no image). ``crossmatch`` returns the Gaia/CatWISE match on demand: it is only
+    called when Model 1 has an event to classify (given ``gaia_info``/``wise_info`` win).
     """
     from . import models  # models imports this module lazily too
 
@@ -715,6 +729,11 @@ def analyze(
                     f"(change {fv['z_mono']:+.1f}σ, no dipole above 3σ): there is no event to classify."
                 )
             else:
+                # The catalogue cross-match is a network query (slow, and often down): asked only
+                # now that there is an event to classify, never for a field without one.
+                if crossmatch is not None and gaia_info is None and wise_info is None:
+                    gaia_info, wise_info = crossmatch()
+                    add_catalogue_features(fv, info["features_unavailable"], gaia_info, wise_info)
                 payload = models.run_model1_event_classifier(fv, model_version=MEASURED_VERSION)
                 payload["researcher_level2"] = dict(payload.get("researcher_level2") or {}) | {
                     "measurement": info

@@ -548,6 +548,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — The Gaia/CatWISE cross-match for Model 1 is requested only when the field has an
+  event to classify: fields without one answered in ~32 s per panel request while ESA Gaia and
+  IRSA's CatWISE were down (every request retried the cross-match); now they answer without it.
 - **2026-11-15** — `timeline_images.updated_at` (`ADD COLUMN IF NOT EXISTS`, set on every upsert):
   image rows now keep their id across partial and final saves, so `/timeline` versions
   `image_url`, `npz_url` and `mask_url` with `?v=`; without it a refined image kept the URL (and

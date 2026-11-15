@@ -345,7 +345,8 @@ asks for a `scenario`, and then say `simulated: true`. Model results are stored 
   brightness (a still star's residual from the wavelength sweep); the object's centroid shift
   between the first and last epochs where it is detected (P1-6 centroids), used when it beats
   the dipole; PSF width, concentration and background gradient relative to the field's stars;
-  flag fractions of the exposures; Gaia DR3 / CatWISE when the cross-match answers (else
+  flag fractions of the exposures; Gaia DR3 / CatWISE when the cross-match answers (asked only
+  once there is an event to classify, so a field without one never waits for those services; else
   neutral and listed in `researcher_level2.measurement.features_unavailable`). Model 1 only runs
   when there is an event (dipole or centroid shift ≥ 3σ, or a brightness change ≥ 4σ that is not
   on a saturated core).

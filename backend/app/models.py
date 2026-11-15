@@ -988,6 +988,7 @@ def analyze_patch_science(
     force_recompute: bool = True,
     gaia_info: dict[str, Any] | None = None,
     wise_info: dict[str, Any] | None = None,
+    crossmatch: Any = None,
 ) -> dict[str, Any]:
     """Spectrum, 17 indices, metrics and Models 1-3 for a patch.
 
@@ -999,7 +1000,12 @@ def analyze_patch_science(
         from . import real_science
 
         return real_science.analyze(
-            store, patch, force_recompute=force_recompute, gaia_info=gaia_info, wise_info=wise_info
+            store,
+            patch,
+            force_recompute=force_recompute,
+            gaia_info=gaia_info,
+            wise_info=wise_info,
+            crossmatch=crossmatch,
         )
     profile_key = scenario if scenario in DEMO_PROFILE_SPECS else "barnards-star"
     spec_cfg = DEMO_PROFILE_SPECS[profile_key]

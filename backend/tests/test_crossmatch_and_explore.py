@@ -184,8 +184,14 @@ def test_model1_uses_real_gaia_and_wise_crossmatch_when_available(client, monkey
         lambda *a, **k: [wise.WiseSource("w0855", 133.759, -7.242, -8123.7, 673.2, 17.45, 13.89)],
     )
 
+    # Measured data with a mover, so Model 1 has an event and asks for the cross-match.
+    from tests.test_real_science import seed_exposures, seed_moving_timeline
+
+    seed_exposures(service.store, patch)
+    seed_moving_timeline(service.store, patch, shift_px=2.0)
     r = http.post("/api/v1/models/classify-event", json={"patch_id": patch.id})
-    assert r.status_code == 200
+    assert r.status_code == 200 and r.json()["available"] is True
+    assert r.json()["feature_vector"]["wise_w1_w2_color"] == 3.56
     saved = service.store.patch_crossmatches.get(patch.id)
     assert saved is not None
     assert saved["wise_crossmatch_json"]["w1_w2_color"] == 3.56

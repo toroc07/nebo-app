@@ -1376,15 +1376,17 @@ def _science_part(bundle: dict, key: str) -> dict:
 
 
 def _patch_science(store: Store, patch: Patch) -> dict:
-    """The measured science bundle of a patch. The Gaia/CatWISE cross-match (a network query, then
-    cached) is only resolved when Model 1 has not been computed for the patch yet."""
-    cached = store.get_model1_attribution(patch.id, -1, real_science.MEASURED_VERSION)
-    gaia_info, wise_info = (None, None) if cached else _resolve_patch_crossmatch(store, patch)
-    if gaia_info is not None or wise_info is not None:
-        store.save_patch_crossmatch(patch.id, gaia_info, wise_info)
-    return models.analyze_patch_science(
-        store, patch, force_recompute=False, gaia_info=gaia_info, wise_info=wise_info
-    )
+    """The measured science bundle of a patch. The Gaia/CatWISE cross-match is a network query
+    (tens of seconds when those services are down), so it is handed over as a function: the
+    analysis only calls it when Model 1 has an event to classify and no stored result."""
+
+    def crossmatch() -> tuple[dict | None, dict | None]:
+        gaia_info, wise_info = _resolve_patch_crossmatch(store, patch)
+        if gaia_info is not None or wise_info is not None:
+            store.save_patch_crossmatch(patch.id, gaia_info, wise_info)
+        return gaia_info, wise_info
+
+    return models.analyze_patch_science(store, patch, force_recompute=False, crossmatch=crossmatch)
 
 
 def _from_user_input(row: dict) -> dict:

@@ -195,3 +195,26 @@ def test_reads_reuse_the_stored_measured_results():
         assert again == ids
     finally:
         main.app.dependency_overrides.clear()
+
+
+def test_the_catalogue_cross_match_is_only_asked_when_there_is_an_event():
+    """Gaia/CatWISE are slow network queries: a field without a change must not wait for them."""
+    store = MemoryStore()
+    patch = store.create_patch(RA, DEC, None)
+    seed_exposures(store, patch)
+    seed_moving_timeline(store, patch, shift_px=0.0)  # nothing moves: no event
+    calls = []
+    bundle = real_science.analyze(store, patch, crossmatch=lambda: calls.append(1) or (None, None))
+    assert bundle["model1_event"] is None and "no event" in bundle["unavailable"]["model1_event"]
+    assert calls == []
+
+    moving = store.create_patch(RA + 1, DEC, None)
+    seed_exposures(store, moving)
+    seed_moving_timeline(store, moving, shift_px=2.0)
+    gaia = {"dist_arcsec": 0.4, "pm_total_mas_yr": 1200.0}
+    bundle = real_science.analyze(store, moving, crossmatch=lambda: calls.append(1) or (gaia, None))
+    assert calls == [1]
+    features = bundle["model1_event"]["feature_vector"]
+    assert features["gaia_pm_total_mas_yr"] == 1200.0
+    unavailable = bundle["model1_event"]["researcher_level2"]["measurement"]["features_unavailable"]
+    assert "gaia_match_dist_arcsec" not in unavailable and "wise_w1_w2_color" in unavailable
