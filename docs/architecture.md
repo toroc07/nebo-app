@@ -428,8 +428,8 @@ graph TD
 
 | Component | Role |
 | --- | --- |
-| `Nebo` | Root state machine (`view`), preferences in `localStorage`, loads `/targets` and `/patches`, orchestrates GSAP transitions |
-| `HomeScene` | Start screen menu painted into the background art |
+| `Nebo` | Root state machine (`view`: Home, Explore, Field), loads `/targets`, orchestrates the GSAP camera turns and the warp |
+| `HomeScene` | Start screen inside the landed ship: menu (START, TUTORIAL) and the 4-step tutorial drawn on the wall screen, falling leaves in the forest window |
 | `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), target markers, executes camera commands |
 | `Cockpit`, `CockpitScreens`, `CoordinatePanel` | Console over the sky: destinations, RA/Dec entry, zoom, layers, Earth sub-point globe, clock |
 | `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view |
@@ -443,27 +443,25 @@ graph TD
 ```mermaid
 stateDiagram-v2
   [*] --> Home
-  Home --> Explore: Start (warp to the cockpit)
-  Home --> Tutorial
-  Home --> Featured
-  Home --> Coordinates
-  Home --> Settings
-  Tutorial --> Observe
-  Observe --> Explore: Begin exploring
-  Observe --> Coordinates
-  Featured --> Field: open a target
-  Coordinates --> Field: valid RA and Dec
-  Explore --> Field: View images
+  state Home {
+    [*] --> Menu
+    Menu --> Tutorial: TUTORIAL
+    Tutorial --> Menu: Menu or Esc
+  }
+  Home --> Explore: START or Launch (warp to the cockpit)
+  Explore --> Field: View images (object or RA and Dec)
   Field --> Explore: Back
-  Field --> Featured: Back
-  Field --> Coordinates: Back
+  Explore --> Home: Back
   note right of Explore
     /lab/observation is a separate route,
     opened by URL; its back link goes to /
   end note
 ```
 
-Reduced motion (`prefers-reduced-motion` or the setting) skips every animation.
+Reduced motion (`prefers-reduced-motion`) skips every animation, including the leaves. The blink
+speed is set in the field console. Destinations come only from the cockpit (Objects tab or the
+RA/Dec panel); the older menu screens (Observe, Featured objects, coordinate form, Settings) were
+removed.
 
 ### Data flow
 
@@ -520,9 +518,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 - `Field.tsx` maps only `queued`, `querying`, `downloading`, `rendering`; the stages
   `first_light`, `preview_ready`, `refining` fall back to a generic label, and the frontend does
   not use `wait_for` yet, so users wait for the full build before seeing an image.
-- `frontend/README.md` mentions DSS2 (the code uses only the SPHEREx HiPS).
-  `docs/observation-lab.md` and `frontend/README.md` say "Begin exploring" opens the lab and that
-  the demo is the default source; today the lab is URL-only and defaults to the API.
+- `docs/observation-lab.md` says "Begin exploring" opens the lab and that the demo is the default
+  source; today the lab is URL-only and defaults to the API.
+- `frontend/tests/browser.mjs` no longer covers the field console or the lab: they were reached
+  through the removed coordinate form; a new path through the cockpit is needed.
 - `gcs_media_assets` and several columns (`targets.gaia_*`, `targets.wise_*`,
   `patches.gaia_crossmatch_json`, `timeline_images.gcs_uri`) are never written.
 - Queue mode has no backpressure, and a worker killed mid-build leaves the timeline in a
@@ -537,6 +536,10 @@ Newest first. One line per change that affects this document.
 - **2026-11-15** — Public chat: `chat_messages` table, `GET/POST /chat/{room}/messages` with
   server-side filters (banned words, links and personal data, 3 s anti-flood, 24 h retention)
   and the `ChatPanel` in the sky explorer.
+- **2026-11-15** — Frontend: removed the legacy menu UI (Observe, Featured objects, coordinate
+  form, Settings, site header/footer, landscape background and their assets); the tutorial now
+  lives on the home wall screen; journey is Home ⇄ Explore ⇄ Field. Logo recoloured to the ship
+  palette (cyan + amber) and used as favicon (`app/icon.png`).
 - **2026-11-15** — First version of this document (deployment, backend, build pipeline, DB,
   frontend, data sources).
 - **2026-11-15** — Faster coordinate searches (PR #15): stage-based `Retry-After` (2/5 s), all
