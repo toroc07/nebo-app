@@ -431,7 +431,8 @@ graph TD
 | Component | Role |
 | --- | --- |
 | `Nebo` | Root state machine (`view`: Home, Explore, Field), loads `/targets`, orchestrates the GSAP camera turns and the warp |
-| `HomeScene` | Start screen inside the landed ship: menu (START, TUTORIAL) and the 4-step tutorial drawn on the wall screen, falling leaves in the forest window |
+| `HomeScene` | Start screen inside the landed ship: menu (START, TUTORIAL) and falling leaves in the forest window |
+| `TutorialTour` | Full-screen guided tutorial opened from TUTORIAL: 5 steps, each a screenshot of a section (`public/tutorial/*.webp`) with numbered callouts and leader lines |
 | `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), target markers, executes camera commands |
 | `Cockpit`, `CockpitScreens`, `CoordinatePanel` | Console over the sky: destinations, RA/Dec entry, zoom, layers, Earth sub-point globe, clock |
 | `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view |
@@ -450,7 +451,7 @@ stateDiagram-v2
   state Home {
     [*] --> Menu
     Menu --> Tutorial: TUTORIAL
-    Tutorial --> Menu: Menu or Esc
+    Tutorial --> Menu: Menu, × or Esc
   }
   Home --> Explore: START or Launch (warp to the cockpit)
   Explore --> Field: View images (object or RA and Dec)
@@ -539,6 +540,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Journey: TUTORIAL opens `TutorialTour`, a full-screen guided tour with
+  screenshots of Home, Cockpit, target selection and Field, with numbered callouts and leader lines
+  (replaces the 4 text cards on the wall screen). Field screenshots use the synthetic demo data.
 - **2026-11-15** — START sequence: pan → `NeboBoot` power-on → cockpit power-up → approach
   tunnel; every control is locked (`inert` on the app shell) until the tunnel finishes
   (warp controller), with a 25 s safety unlock. The RA / Dec key is now labelled Coords, and
