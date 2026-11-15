@@ -546,6 +546,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — `/candidates` and `/alignment` crop the largest size's float32 arrays to the
+  requested size (only `large` stores `.npz`); before, any other size always answered 404 and the
+  UI showed it as "0 detected changes". The UI now says "unavailable" on a failed request.
 - **2026-11-15** — Science API contract: `/patches/{id}/spectrum` adds a derived `channels[]`;
   the frontend types follow the backend names (`c_global`, `phi`, variability keys). Each science
   tab renders inside an error boundary.

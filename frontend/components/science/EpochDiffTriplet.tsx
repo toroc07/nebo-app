@@ -48,6 +48,7 @@ export default function EpochDiffTriplet({
     if (epochs.length < 2) return;
     const abort = new AbortController();
     setCandError("");
+    setCandidates([]);
     fetchPatchCandidates(
       patchId,
       { detector, size, epoch_a: templateEpoch, epoch_b: compareEpoch },
@@ -107,7 +108,8 @@ export default function EpochDiffTriplet({
             checked={showCandidates}
             onChange={(e) => setShowCandidates(e.target.checked)}
           />
-          Show detected changes ({candidates.length})
+          {/* A failed request must not read as "no changes". */}
+          Show detected changes ({candError ? "unavailable" : candidates.length})
         </label>
       </div>
 
