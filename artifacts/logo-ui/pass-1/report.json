@@ -1,0 +1,535 @@
+{
+  "url": "http://127.0.0.1:3001",
+  "date": "2026-11-14T17:57:00.249Z",
+  "runs": [
+    {
+      "tag": "light-320x568",
+      "scheme": "light",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "screenshot": "light-320x568.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "tap-target<44",
+          "selector": "a.skip",
+          "detail": "24×24px"
+        },
+        {
+          "severity": "block",
+          "rule": "contraste",
+          "selector": "a.skip",
+          "detail": "2.13:1 (mínimo 4.5:1) color rgb(43, 22, 68)"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "44px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 3,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=DIY5KGSGj1fV3HRC2fdb3' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "light-375x812",
+      "scheme": "light",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screenshot": "light-375x812.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "tap-target<44",
+          "selector": "a.skip",
+          "detail": "24×24px"
+        },
+        {
+          "severity": "block",
+          "rule": "contraste",
+          "selector": "a.skip",
+          "detail": "2.13:1 (mínimo 4.5:1) color rgb(43, 22, 68)"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "45px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 3,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=AsxIIpo7lmtO_nI2zF7Xd' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "light-568x320",
+      "scheme": "light",
+      "viewport": {
+        "width": 568,
+        "height": 320
+      },
+      "screenshot": "light-568x320.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "tap-target<44",
+          "selector": "a.skip",
+          "detail": "24×24px"
+        },
+        {
+          "severity": "block",
+          "rule": "contraste",
+          "selector": "a.skip",
+          "detail": "2.13:1 (mínimo 4.5:1) color rgb(43, 22, 68)"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "60px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 3,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=OqhyCpb4zZZhe0KRUhxaT' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "light-768x1024",
+      "scheme": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screenshot": "light-768x1024.png",
+      "findings": [
+        {
+          "severity": "block",
+          "rule": "contraste",
+          "selector": "a.skip",
+          "detail": "2.13:1 (mínimo 4.5:1) color rgb(43, 22, 68)"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 50,
+          "40px": 6,
+          "13px": 8,
+          "52px": 1,
+          "12px": 4,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 68,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 3,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=9HqmbfJ7g50p8s-qNwKOm' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "light-1280x800",
+      "scheme": "light",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "light-1280x800.png",
+      "findings": [
+        {
+          "severity": "block",
+          "rule": "contraste",
+          "selector": "a.skip",
+          "detail": "2.13:1 (mínimo 4.5:1) color rgb(43, 22, 68)"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 5,
+          "13px": 10,
+          "12px": 11,
+          "65.28px": 1,
+          "44.8px": 1,
+          "130px": 5,
+          "33.28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 3,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=yZyuYET_EzHIYNnW3B_f5' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "light-1920x1080",
+      "scheme": "light",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot": "light-1920x1080.png",
+      "findings": [
+        {
+          "severity": "block",
+          "rule": "contraste",
+          "selector": "a.skip",
+          "detail": "2.13:1 (mínimo 4.5:1) color rgb(43, 22, 68)"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 6,
+          "13px": 10,
+          "12px": 11,
+          "84px": 1,
+          "57.6px": 1,
+          "130px": 5,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 3,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=0ckxhE-DtJCD_mE2nAq2i' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "dark-320x568",
+      "scheme": "dark",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "screenshot": "dark-320x568.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "tap-target<44",
+          "selector": "a.skip",
+          "detail": "24×24px"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "44px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=NzZUBixlP-qTSOJjcgOk-' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "dark-375x812",
+      "scheme": "dark",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screenshot": "dark-375x812.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "tap-target<44",
+          "selector": "a.skip",
+          "detail": "24×24px"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "45px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=KylmIHWchPR8_SfzDoAbv' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "dark-568x320",
+      "scheme": "dark",
+      "viewport": {
+        "width": 568,
+        "height": 320
+      },
+      "screenshot": "dark-568x320.png",
+      "findings": [
+        {
+          "severity": "minor",
+          "rule": "tap-target<44",
+          "selector": "a.skip",
+          "detail": "24×24px"
+        }
+      ],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "60px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-768x1024",
+      "scheme": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screenshot": "dark-768x1024.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 50,
+          "40px": 6,
+          "13px": 8,
+          "52px": 1,
+          "12px": 4,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 68,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": [
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=lQqrojUEdCSzP1-SiEGXK' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js",
+        "network: WebSocket connection to 'ws://127.0.0.1:3001/_next/hmr?id=XEcb_Zc9jLrFcQzlfKkxO' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE http://127.0.0.1:3001/_next/static/chunks/node_modules_next_dist_client_1165-soo5tfpf._.js"
+      ]
+    },
+    {
+      "tag": "dark-1280x800",
+      "scheme": "dark",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "dark-1280x800.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 5,
+          "13px": 10,
+          "12px": 11,
+          "65.28px": 1,
+          "44.8px": 1,
+          "130px": 5,
+          "33.28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-1920x1080",
+      "scheme": "dark",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot": "dark-1920x1080.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 6,
+          "13px": 10,
+          "12px": 11,
+          "84px": 1,
+          "57.6px": 1,
+          "130px": 5,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    }
+  ],
+  "runtimeIssues": []
+}

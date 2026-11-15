@@ -1,0 +1,105 @@
+{
+  "tasks": [
+    {
+      "label": "Comenzar exploración",
+      "tabs": 8,
+      "activation": "Enter",
+      "result": "¿Cómo quieres mirar el cielo?"
+    },
+    {
+      "label": "Objetos destacados",
+      "tabs": 5,
+      "activation": "Enter",
+      "result": "Historias del cielo."
+    },
+    {
+      "label": "Aprende a observar",
+      "tabs": 10,
+      "activation": "Enter",
+      "result": "Tu primera observación."
+    }
+  ],
+  "stress": [
+    {
+      "width": 320,
+      "fontSize": "140%",
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "fontSize": "200%",
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "fontSize": "400%",
+      "overflow": false
+    },
+    {
+      "width": 375,
+      "fontSize": "140%",
+      "overflow": false
+    },
+    {
+      "width": 375,
+      "fontSize": "200%",
+      "overflow": false
+    },
+    {
+      "width": 375,
+      "fontSize": "400%",
+      "overflow": false
+    },
+    {
+      "width": 568,
+      "fontSize": "140%",
+      "overflow": false
+    },
+    {
+      "width": 568,
+      "fontSize": "200%",
+      "overflow": false
+    },
+    {
+      "width": 568,
+      "fontSize": "400%",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "fontSize": "140%",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "fontSize": "200%",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "fontSize": "400%",
+      "overflow": false
+    },
+    {
+      "width": 1280,
+      "fontSize": "140%",
+      "overflow": false
+    },
+    {
+      "width": 1280,
+      "fontSize": "200%",
+      "overflow": false
+    },
+    {
+      "width": 1280,
+      "fontSize": "400%",
+      "overflow": false
+    }
+  ],
+  "rtl": true,
+  "axe": {
+    "dark": [],
+    "light": []
+  },
+  "errors": []
+}

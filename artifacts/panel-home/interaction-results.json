@@ -1,0 +1,81 @@
+{
+  "tasks": [
+    {
+      "label": "Start exploring",
+      "tabs": 3,
+      "enter": true,
+      "return": true
+    },
+    {
+      "label": "Featured objects",
+      "tabs": 4,
+      "enter": true,
+      "return": true
+    },
+    {
+      "label": "Tutorial",
+      "tabs": 5,
+      "enter": true,
+      "return": true
+    }
+  ],
+  "stress": [
+    {
+      "width": 320,
+      "size": "140%"
+    },
+    {
+      "width": 320,
+      "size": "200%"
+    },
+    {
+      "width": 320,
+      "size": "400%"
+    },
+    {
+      "width": 375,
+      "size": "140%"
+    },
+    {
+      "width": 375,
+      "size": "200%"
+    },
+    {
+      "width": 375,
+      "size": "400%"
+    },
+    {
+      "width": 568,
+      "size": "140%"
+    },
+    {
+      "width": 568,
+      "size": "200%"
+    },
+    {
+      "width": 568,
+      "size": "400%"
+    },
+    {
+      "width": 1280,
+      "size": "140%"
+    },
+    {
+      "width": 1280,
+      "size": "200%"
+    },
+    {
+      "width": 1280,
+      "size": "400%"
+    }
+  ],
+  "hover": true,
+  "proximity": true,
+  "touch": true,
+  "reducedMotion": true,
+  "axe": {
+    "light": [],
+    "dark": []
+  },
+  "errors": []
+}

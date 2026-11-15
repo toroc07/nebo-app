@@ -1,0 +1,29 @@
+{
+  "exit": [
+    {
+      "selected": true,
+      "opacity": 0.7155,
+      "scale": 1.0128
+    },
+    {
+      "selected": false,
+      "opacity": 0.1178,
+      "scale": 0.9471
+    },
+    {
+      "selected": false,
+      "opacity": 0.3456,
+      "scale": 0.9607
+    },
+    {
+      "selected": false,
+      "opacity": 0.5304,
+      "scale": 0.9718
+    }
+  ],
+  "sequentialExit": true,
+  "busyDuringExit": true,
+  "reducedMotionDuringExit": true,
+  "repeatedActivation": true,
+  "errors": []
+}

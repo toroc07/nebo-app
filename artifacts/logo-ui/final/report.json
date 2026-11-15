@@ -1,0 +1,435 @@
+{
+  "url": "http://127.0.0.1:3002",
+  "date": "2026-11-14T17:58:39.369Z",
+  "runs": [
+    {
+      "tag": "light-320x568",
+      "scheme": "light",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "screenshot": "light-320x568.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "44px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "light-375x812",
+      "scheme": "light",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screenshot": "light-375x812.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "45px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "light-568x320",
+      "scheme": "light",
+      "viewport": {
+        "width": 568,
+        "height": 320
+      },
+      "screenshot": "light-568x320.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "60px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "light-768x1024",
+      "scheme": "light",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screenshot": "light-768x1024.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 50,
+          "40px": 6,
+          "13px": 8,
+          "52px": 1,
+          "12px": 4,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 68,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "light-1280x800",
+      "scheme": "light",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "light-1280x800.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 5,
+          "13px": 10,
+          "12px": 11,
+          "65.28px": 1,
+          "44.8px": 1,
+          "130px": 5,
+          "33.28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "light-1920x1080",
+      "scheme": "light",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot": "light-1920x1080.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 6,
+          "13px": 10,
+          "12px": 11,
+          "84px": 1,
+          "57.6px": 1,
+          "130px": 5,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-320x568",
+      "scheme": "dark",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "screenshot": "dark-320x568.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "44px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-375x812",
+      "scheme": "dark",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screenshot": "dark-375x812.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "45px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-568x320",
+      "scheme": "dark",
+      "viewport": {
+        "width": 568,
+        "height": 320
+      },
+      "screenshot": "dark-568x320.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 41,
+          "32px": 5,
+          "13px": 12,
+          "12px": 5,
+          "60px": 1,
+          "40px": 1,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 64,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-768x1024",
+      "scheme": "dark",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screenshot": "dark-768x1024.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 50,
+          "40px": 6,
+          "13px": 8,
+          "52px": 1,
+          "12px": 4,
+          "130px": 5,
+          "28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 68,
+          "Barlow": 4,
+          "PlexMono": 4
+        },
+        "radii": {
+          "12px": 5,
+          "24px": 3,
+          "50%": 4
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-1280x800",
+      "scheme": "dark",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "dark-1280x800.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 5,
+          "13px": 10,
+          "12px": 11,
+          "65.28px": 1,
+          "44.8px": 1,
+          "130px": 5,
+          "33.28px": 1,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    },
+    {
+      "tag": "dark-1920x1080",
+      "scheme": "dark",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screenshot": "dark-1920x1080.png",
+      "findings": [],
+      "census": {
+        "sizes": {
+          "16px": 52,
+          "40px": 6,
+          "13px": 10,
+          "12px": 11,
+          "84px": 1,
+          "57.6px": 1,
+          "130px": 5,
+          "20px": 1
+        },
+        "families": {
+          "Plex": 72,
+          "PlexMono": 11,
+          "Barlow": 4
+        },
+        "radii": {
+          "50%": 5,
+          "12px": 5,
+          "24px": 3
+        },
+        "colors": 4,
+        "shadows": 0
+      },
+      "runtimeIssues": []
+    }
+  ],
+  "runtimeIssues": []
+}
