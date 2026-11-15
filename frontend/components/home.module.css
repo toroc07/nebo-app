@@ -227,13 +227,12 @@
 .crew {
   display: flex;
   flex-direction: column;
-  gap: calc(12 * var(--S));
+  gap: calc(8 * var(--S));
 }
 .crewHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-right: max(60px, calc(120 * var(--S))); /* keeps clear of the logo */
 }
 .crewHead h2 {
   margin: 0;
@@ -267,6 +266,11 @@
   outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
+.crewNote {
+  margin: 0;
+  font: max(10px, calc(12 * var(--S))) / 1.25 PlexMono, monospace;
+  color: #8fe0f5;
+}
 .crewList {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -287,7 +291,7 @@
   border-radius: calc(5 * var(--S));
 }
 .member img {
-  width: calc(78 * var(--S));
+  width: calc(64 * var(--S));
   min-width: 52px;
   aspect-ratio: 1;
   object-fit: cover;

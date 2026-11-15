@@ -80,7 +80,7 @@ const CREW = [
   },
   {
     name: "Shalom Jhoanna Arrieta Marrugo",
-    role: "Backend Developer",
+    role: "Backend Developer & Data",
     photo: "/crew/shalom.webp",
   },
   {
@@ -152,15 +152,17 @@ export default function HomeScene({
         ))}
       </div>
       <div className={s.screen} data-off={off || undefined}>
-        <img
-          className={s.logo}
-          src="/brand/nebo-logo-ui.png"
-          alt=""
-          aria-hidden="true"
-          width={504}
-          height={393}
-          draggable={false}
-        />
+        {showCrew ? null : (
+          <img
+            className={s.logo}
+            src="/brand/nebo-logo-ui.png"
+            alt=""
+            aria-hidden="true"
+            width={504}
+            height={393}
+            draggable={false}
+          />
+        )}
         {showCrew ? (
           <section className={s.crew} aria-labelledby="crew-title">
             <header className={s.crewHead}>
@@ -169,6 +171,7 @@ export default function HomeScene({
                 <ArrowLeft aria-hidden="true" /> Back
               </button>
             </header>
+            <p className={s.crewNote}>Data Science students · Universidad Tecnológica de Bolívar</p>
             <ul className={s.crewList}>
               {CREW.map((m) => (
                 <li key={m.name} className={s.member}>
