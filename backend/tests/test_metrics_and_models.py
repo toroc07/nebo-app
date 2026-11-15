@@ -422,3 +422,27 @@ def test_vote_listing_never_exposes_voter_tokens():
         assert len(votes) == 1 and "voter_token" not in votes[0]
     finally:
         main.app.dependency_overrides.clear()
+
+
+def test_measured_spectrum_uses_real_exposures_and_leaves_out_saturated_ones():
+    exposures = [
+        {"aperture_flux_ujy": 100.0, "aperture_sigma_reported_ujy": 5.0, "wavelength_um": 1.2,
+         "channel_id": 10, "detector": 2, "epoch_index": 0, "mid_mjd": 61000.0},
+        {"aperture_flux_ujy": 110.0, "aperture_sigma_reported_ujy": 5.0, "wavelength_um": 1.21,
+         "channel_id": 10, "detector": 2, "epoch_index": 1, "mid_mjd": 61200.0},
+        {"aperture_flux_ujy": 300.0, "wavelength_um": 4.5, "channel_id": 95, "detector": 6,
+         "epoch_index": 0, "mid_mjd": 61000.0, "aperture_sigma_stat_ujy": 9.0},
+        # Saturated near the object: only a lower limit, so it is not a point of the spectrum.
+        {"aperture_flux_ujy": 50.0, "wavelength_um": 2.0, "channel_id": 40,
+         "saturated_near_target": True},
+        # No measurement (aperture had flagged pixels).
+        {"aperture_flux_ujy": None, "wavelength_um": 3.0, "channel_id": 70},
+    ]
+    spec = main.measured_spectrum(exposures)
+    assert spec["measured"] is True
+    assert [p["wavelength_um"] for p in spec["points"]] == [1.2, 1.21, 4.5]
+    assert spec["excluded_saturated"] == 1 and spec["excluded_missing"] == 1
+    ch10 = next(c for c in spec["channels"] if c["channel_id"] == 10)
+    assert ch10["n"] == 2 and ch10["flux_ujy"] == 105.0
+    ch95 = next(c for c in spec["channels"] if c["channel_id"] == 95)
+    assert ch95["n"] == 1 and ch95["sigma_ujy"] == 9.0

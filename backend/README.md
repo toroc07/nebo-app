@@ -333,6 +333,15 @@ shape. Messages are deleted after 24 hours and nothing about the sender is store
   numbers), `too_long`, `empty` or `nickname`. `429` + `Retry-After` for more than one message
   every 3 s from the same address (kept in memory only). `404` for an unknown room.
 
+### `GET /patches/{id}/spectrum/measured`
+
+The spectrum measured from the patch's stored exposures, all detectors and epochs: `points`
+(one per exposure: `wavelength_um`, `flux_ujy`, `sigma_ujy`, `detector`, `channel_id`,
+`epoch_index`, `mjd`) and `channels` (median flux per SPHEREx channel, robust error, `n`).
+Exposures saturated near the object are left out (`excluded_saturated`). A 3×3-pixel aperture at
+the object's position on each date, no aperture correction and no local background subtraction:
+valid for bright sources; faint ones are dominated by sky background.
+
 ## Notes for the frontend
 
 - Show the epochs in order as a blink animation. All epochs and all sizes share the

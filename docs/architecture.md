@@ -563,6 +563,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — P1-1: `GET /patches/{id}/spectrum/measured` returns the spectrum measured from
+  the stored exposures (one point per unsaturated exposure: λ at the object, 3×3 aperture flux in
+  µJy, σ; plus the median per channel). The Spectrum tab shows it first, labelled Measured, above
+  the illustrative model. No local background subtraction yet: valid for bright sources only.
 - **2026-11-15** — Honest spectrum and epochs (P1-1, P1-4): while the spectrum is a model
   (`simulated`), the Spectrum tab is called "Spectrum (model)", reads "Illustrative model · not
   SPHEREx data" and hides Model 2's χ²red. Each `/timeline` epoch adds `coverage` (`span_days`

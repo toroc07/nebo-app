@@ -1171,6 +1171,81 @@ def spectrum_channels(spec: dict) -> list[dict]:
     return out
 
 
+MEASURED_SPECTRUM_NOTE = (
+    "Measured: one point per SPHEREx exposure, a 3x3-pixel aperture at the object's position on "
+    "that date (proper motion applied), without aperture correction or local background "
+    "subtraction. Reliable for bright sources; for faint ones (e.g. WISE 0855 below ~3 µm) the "
+    "sky background dominates and the curve is mostly background. Exposures with saturated "
+    "pixels near the object are left out (their flux is only a lower limit). Points come from "
+    "all epochs, so a variable object scatters."
+)
+
+
+def measured_spectrum(exposures: list[dict]) -> dict:
+    """The spectrum measured from the stored exposures (P1-1): every usable exposure as a point
+    (wavelength, flux, sigma) and, per SPHEREx channel, the median flux with a robust error."""
+    points, saturated, missing = [], 0, 0
+    for e in exposures:
+        flux, lam = e.get("aperture_flux_ujy"), e.get("wavelength_um")
+        if e.get("saturated_near_target"):
+            saturated += 1
+            continue
+        if flux is None or lam is None or not (math.isfinite(flux) and math.isfinite(lam)):
+            missing += 1
+            continue
+        sigma = e.get("aperture_sigma_reported_ujy") or e.get("aperture_sigma_stat_ujy")
+        points.append({
+            "wavelength_um": round(float(lam), 5),
+            "flux_ujy": float(flux),
+            "sigma_ujy": float(sigma) if sigma is not None and math.isfinite(sigma) else None,
+            "detector": e.get("detector"),
+            "channel_id": e.get("channel_id"),
+            "epoch_index": e.get("epoch_index"),
+            "mjd": e.get("mid_mjd"),
+        })
+    points.sort(key=lambda p: p["wavelength_um"])
+    by_channel: dict[int, list[dict]] = {}
+    for p in points:
+        if p["channel_id"] is not None:
+            by_channel.setdefault(int(p["channel_id"]), []).append(p)
+    channels = []
+    for channel_id, group in sorted(by_channel.items()):
+        fluxes = np.array([p["flux_ujy"] for p in group])
+        median = float(np.median(fluxes))
+        # Robust error of the median: 1.4826·MAD/√n; a single point keeps its own sigma.
+        if len(group) > 1:
+            sigma = float(1.4826 * np.median(np.abs(fluxes - median)) / math.sqrt(len(group)))
+        else:
+            sigma = group[0]["sigma_ujy"]
+        channels.append({
+            "channel_id": channel_id,
+            "wavelength_um": round(float(np.median([p["wavelength_um"] for p in group])), 5),
+            "flux_ujy": median,
+            "sigma_ujy": sigma,
+            "n": len(group),
+        })
+    return {
+        "measured": True,
+        "source": DATA_SOURCE,
+        "unit": "uJy",
+        "note": MEASURED_SPECTRUM_NOTE,
+        "points": points,
+        "channels": channels,
+        "excluded_saturated": saturated,
+        "excluded_missing": missing,
+    }
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/spectrum/measured")
+def get_measured_spectrum(
+    patch_id: int = Path(..., ge=1),
+    store: Store = Depends(get_store),
+) -> dict:
+    """Spectrum measured from this patch's SPHEREx exposures (all detectors, all epochs)."""
+    _patch_or_404(store, patch_id)
+    return {"patch_id": patch_id, **measured_spectrum(store.list_nasa_sector_exposures(patch_id))}
+
+
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/spectrum")
 def get_patch_spectrum(
     patch_id: int = Path(..., ge=1),

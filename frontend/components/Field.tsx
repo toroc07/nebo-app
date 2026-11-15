@@ -63,6 +63,7 @@ import EpochDiffTriplet from "./science/EpochDiffTriplet";
 import ModelsAndMetricsPanel from "./science/ModelsAndMetricsPanel";
 import RgbCompositeView from "./science/RgbCompositeView";
 import SpectrumChart from "./science/SpectrumChart";
+import MeasuredSpectrum from "./science/MeasuredSpectrum";
 import sci from "./science/science.module.css";
 import s from "./field.module.css";
 
@@ -1090,7 +1091,13 @@ export default function Field({
                     onBuildDetector={(d) => setDetector(d)}
                   />
                 )}
-                {scienceTab === "spectrum" && <SpectrumChart patchId={data.patch.id} />}
+                {scienceTab === "spectrum" && (
+                  <>
+                    {/* Measured first (P1-1); the model below stays labelled as illustrative. */}
+                    <MeasuredSpectrum patchId={data.patch.id} />
+                    <SpectrumChart patchId={data.patch.id} />
+                  </>
+                )}
                 {scienceTab === "models" && (
                   <ModelsAndMetricsPanel
                     patchId={data.patch.id}
