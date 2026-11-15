@@ -178,6 +178,10 @@ def test_models_1_2_3_and_artifact_veto_handshake():
     he_airglow_fv.update({"is_he_1083_channel": 1.0, "bg_gradient_ratio": 4.2, "q_fit_epsf": 2.5})
     m1_air = models.run_model1_event_classifier(he_airglow_fv)
     assert m1_air["predicted_class"] == "AIRGLOW_OR_ZODI_STRIPE"
+    # P0-3: hand-set weights are not calibrated, so no class may read 0% or 100%.
+    for m1 in (m1_wise, m1_rw, m1_art, m1_air):
+        assert all(0.02 <= v <= 0.92 for v in m1["probabilities"].values()), m1["probabilities"]
+        assert m1["citizen_level1"]["confidence_score_pct"] < 100
 
     # Model 2: All 5 catalogue targets + comet classified correctly using <= 100 valid channels
     expected_m2 = {
@@ -194,6 +198,7 @@ def test_models_1_2_3_and_artifact_veto_handshake():
         assert m2["valid_channels_used"] == 100
         assert m2["predicted_class"] == expected_cls
         assert math.isclose(sum(m2["bayesian_posteriors"].values()), 1.0, abs_tol=1e-4)
+        assert all(0.01 <= v <= 0.92 for v in m2["bayesian_posteriors"].values())
 
     # Model 3: RW Aurigae triggers alert; artifact_injection is VETOED by Model 1
     rw_cfg = models.DEMO_PROFILE_SPECS["rw-aurigae"]

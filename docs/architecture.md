@@ -547,6 +547,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Models 1–2: probabilities shrunk toward uniform (no 0%/100%; weights are
+  uncalibrated). The science panel labels each model "Model estimate, not a detection", shows Model
+  1 as a high/medium/low level and hides Model 3's alert status while it runs on a simulated profile.
 - **2026-11-15** — Saturation: `nasa_sector_exposures.saturated_near_target` (OVERFLOW/SUR_ERROR
   in the 5×5 photometry box at the object's propagated position). `/metrics` `image_photometry`
   adds tri-state `saturated` plus `saturated_frames`, `checked_frames`, `total_frames`,
