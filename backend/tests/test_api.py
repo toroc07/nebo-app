@@ -254,3 +254,26 @@ def test_startup_without_database_does_not_crash(monkeypatch):
     monkeypatch.setattr(cfg, "DATABASE_URL", "")
     with TestClient(app):  # runs the lifespan warm-up
         pass
+
+
+def test_timeline_rgb_reports_missing_detectors_and_renders_when_ready(client):
+    http, service = client
+    records = make_records([60914.0])
+    service._query_frames = lambda *args: records
+    service._fetch_cutout = lambda uri, ra, dec, size: make_cutout_bytes(ra, dec, shape=(211, 211))
+
+    # Build only detector 3 first; R=6, G=3, B=1 should report missing [1, 6].
+    assert http.get("/api/v1/timeline", params={"target": "barnards-star", "detector": 3}).status_code == 202
+    wait_until_settled(service, service.resolve_patch(target_slug="barnards-star"))
+    missing = http.get("/api/v1/timeline/rgb", params={"target": "barnards-star", "r": 6, "g": 3, "b": 1})
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["missing_detectors"] == [1, 6]
+
+    # Build detectors 1 and 6 as well; RGB composite should now return an RGBA PNG.
+    for det in (1, 6):
+        http.get("/api/v1/timeline", params={"target": "barnards-star", "detector": det})
+        wait_until_settled(service, service.resolve_patch(target_slug="barnards-star"), detector=det)
+    rgb = http.get("/api/v1/timeline/rgb", params={"target": "barnards-star", "r": 6, "g": 3, "b": 1, "size": "small"})
+    assert rgb.status_code == 200
+    assert rgb.headers["content-type"] == "image/png"
+    assert rgb.content[:8] == b"\x89PNG\r\n\x1a\n"

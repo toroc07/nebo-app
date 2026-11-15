@@ -170,7 +170,7 @@ flowchart TB
 | Group | Endpoints |
 | --- | --- |
 | Health and catalogue | `GET /health`, `GET /targets`, `GET /patches`, `GET /catalogs/channels`, `GET /catalogs/spectral-indices` |
-| Images and timelines | `GET /timeline`, `GET /timeline/diff`, `GET /images/{id}.png`, `GET /images/{id}.npz`, `GET /patches/{id}/sectors` |
+| Images and timelines | `GET /timeline`, `GET /timeline/diff`, `GET /timeline/rgb`, `GET /images/{id}.png`, `GET /images/{id}.npz`, `GET /patches/{id}/sectors` |
 | Gaia | `GET /patches/{id}/gaia` |
 | Science (simulated) | `GET /patches/{id}/spectrum`, `GET /patches/{id}/metrics`, `POST /patches/{id}/analyze` |
 | Models (simulated) | `POST /models/classify-event`, `POST /models/classify-spectrum`, `POST /models/forecast-temporal`, `GET /patches/{id}/models/{event,spectrum,forecast}` |
@@ -538,6 +538,11 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 ## Architecture changelog
 
 Newest first. One line per change that affects this document.
+
+- **2026-11-15** — Scientific analysis filters & RGB composite: added `GET /api/v1/timeline/rgb`
+  (`imaging.to_rgb_png` combining three float32 detectors), typed scientific API helpers in
+  `frontend/lib/api.ts`, and modular `frontend/components/science/` filter panels (`EpochDiffTriplet`,
+  `RgbCompositeView`, `SpectrumChart`, `ModelsAndMetricsPanel`) integrated into `Field.tsx`.
 
 - **2026-11-15** — START sequence: pan → `NeboBoot` power-on → cockpit power-up → approach
   tunnel; every control is locked (`inert` on the app shell) until the tunnel finishes

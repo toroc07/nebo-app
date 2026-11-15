@@ -7,6 +7,8 @@ import {
   releaseLabel,
   timeline,
   ApiError,
+  diffImageUrl,
+  rgbImageUrl,
 } from "../lib/api";
 test("epoch dates show the whole span of the epoch, in UTC", () => {
   assert.equal(
@@ -89,6 +91,25 @@ test("timeline follows 202 progress and returns ready data", async () => {
     global.fetch = previous;
   }
 });
+test("diffImageUrl and rgbImageUrl support both target and ra/dec queries", () => {
+  const diffUrl = new URL(
+    diffImageUrl({ target: "barnards-star" }, { a: 0, b: 1, detector: 3, size: "medium" }),
+  );
+  assert.equal(diffUrl.pathname, "/api/v1/timeline/diff");
+  assert.equal(diffUrl.searchParams.get("target"), "barnards-star");
+  assert.equal(diffUrl.searchParams.get("a"), "0");
+  assert.equal(diffUrl.searchParams.get("b"), "1");
+
+  const rgbUrl = new URL(
+    rgbImageUrl({ ra: 10.5, dec: -20.25 }, { r: 6, g: 3, b: 1, epoch: 0, size: "large" }),
+  );
+  assert.equal(rgbUrl.pathname, "/api/v1/timeline/rgb");
+  assert.equal(rgbUrl.searchParams.get("ra"), "10.5");
+  assert.equal(rgbUrl.searchParams.get("dec"), "-20.25");
+  assert.equal(rgbUrl.searchParams.get("r"), "6");
+  assert.equal(rgbUrl.searchParams.get("g"), "3");
+  assert.equal(rgbUrl.searchParams.get("b"), "1");
+});
 test("cancelling a build stops polling", async () => {
   const previous = global.fetch;
   let calls = 0;
@@ -115,6 +136,25 @@ test("cancelling a build stops polling", async () => {
     global.fetch = previous;
   }
 });
+test("diffImageUrl and rgbImageUrl support both target and ra/dec queries", () => {
+  const diffUrl = new URL(
+    diffImageUrl({ target: "barnards-star" }, { a: 0, b: 1, detector: 3, size: "medium" }),
+  );
+  assert.equal(diffUrl.pathname, "/api/v1/timeline/diff");
+  assert.equal(diffUrl.searchParams.get("target"), "barnards-star");
+  assert.equal(diffUrl.searchParams.get("a"), "0");
+  assert.equal(diffUrl.searchParams.get("b"), "1");
+
+  const rgbUrl = new URL(
+    rgbImageUrl({ ra: 10.5, dec: -20.25 }, { r: 6, g: 3, b: 1, epoch: 0, size: "large" }),
+  );
+  assert.equal(rgbUrl.pathname, "/api/v1/timeline/rgb");
+  assert.equal(rgbUrl.searchParams.get("ra"), "10.5");
+  assert.equal(rgbUrl.searchParams.get("dec"), "-20.25");
+  assert.equal(rgbUrl.searchParams.get("r"), "6");
+  assert.equal(rgbUrl.searchParams.get("g"), "3");
+  assert.equal(rgbUrl.searchParams.get("b"), "1");
+});
 test("503 database error is actionable", async () => {
   const previous = global.fetch;
   global.fetch = async () =>
@@ -135,4 +175,23 @@ test("503 database error is actionable", async () => {
   } finally {
     global.fetch = previous;
   }
+});
+test("diffImageUrl and rgbImageUrl support both target and ra/dec queries", () => {
+  const diffUrl = new URL(
+    diffImageUrl({ target: "barnards-star" }, { a: 0, b: 1, detector: 3, size: "medium" }),
+  );
+  assert.equal(diffUrl.pathname, "/api/v1/timeline/diff");
+  assert.equal(diffUrl.searchParams.get("target"), "barnards-star");
+  assert.equal(diffUrl.searchParams.get("a"), "0");
+  assert.equal(diffUrl.searchParams.get("b"), "1");
+
+  const rgbUrl = new URL(
+    rgbImageUrl({ ra: 10.5, dec: -20.25 }, { r: 6, g: 3, b: 1, epoch: 0, size: "large" }),
+  );
+  assert.equal(rgbUrl.pathname, "/api/v1/timeline/rgb");
+  assert.equal(rgbUrl.searchParams.get("ra"), "10.5");
+  assert.equal(rgbUrl.searchParams.get("dec"), "-20.25");
+  assert.equal(rgbUrl.searchParams.get("r"), "6");
+  assert.equal(rgbUrl.searchParams.get("g"), "3");
+  assert.equal(rgbUrl.searchParams.get("b"), "1");
 });

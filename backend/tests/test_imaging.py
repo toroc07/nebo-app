@@ -160,3 +160,18 @@ def test_reproject_many_matches_single_with_shared_world():
     ]
     for got, want in zip(many, single, strict=True):
         np.testing.assert_array_equal(got, want)
+
+
+def test_to_rgb_png_combines_three_channels_and_masks_nans():
+    red = np.array([[10.0, 1.0], [np.nan, 1.0]], dtype=np.float32)
+    green = np.array([[1.0, 10.0], [1.0, 1.0]], dtype=np.float32)
+    blue = np.array([[1.0, 1.0], [1.0, 10.0]], dtype=np.float32)
+    png = imaging.to_rgb_png(red, green, blue)
+    rgba = np.asarray(Image.open(io.BytesIO(png)))
+    assert rgba.shape == (2, 2, 4)
+    # Row 1 in FITS (top) flips to row 0 in PNG; (1,0) in FITS has NaN in red -> transparent.
+    assert rgba[0, 0, 3] == 0
+    # (0,0) in FITS -> (1,0) in PNG: red is bright, green/blue are low, alpha is 255.
+    assert rgba[1, 0, 0] > 200 and rgba[1, 0, 1] < 50 and rgba[1, 0, 3] == 255
+    # (0,1) in FITS -> (1,1) in PNG: green is bright.
+    assert rgba[1, 1, 1] > 200 and rgba[1, 1, 0] < 50 and rgba[1, 1, 3] == 255

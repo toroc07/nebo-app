@@ -327,6 +327,11 @@ PNG of epoch `b` minus epoch `a`. Red = brighter in `b`, blue = fainter, black =
 transparent = no data. Header `X-Diff-Limit` is the brightness (MJy/sr) at full colour. The
 timeline must be ready (otherwise `404`); it never starts a build. Uses the float32 arrays.
 
+`GET /timeline/rgb?r=6&g=3&b=1&epoch=0` (same `ra`/`dec`/`target`, `size` as `/timeline`):
+False-color RGBA PNG combining three SPHEREx detectors (`r`=long, `g`=medium, `b`=short
+wavelength) using `asinh`-stretched float32 arrays. Returns `404` with `missing_detectors`
+when any of the three detector timelines is not ready; never starts a build.
+
 Static export for a demo without internet: `python -m app.export --out <folder>` writes
 `targets.json`, `timeline/<slug>_d<detector>_<size>.json` (same body as the API, with
 `image_url` relative to the folder) and `images/<id>.png`. Only ready timelines are exported;

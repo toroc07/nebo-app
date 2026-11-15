@@ -348,6 +348,37 @@ def to_diff_png(first: np.ndarray, second: np.ndarray, softening: float = 10.0) 
     return buffer.getvalue(), limit
 
 
+def _stretch_channel(channel: np.ndarray, softening: float = 10.0) -> np.ndarray:
+    """Asinh stretch of a single float32 band to [0, 255] uint8."""
+    finite = np.isfinite(channel)
+    if not finite.any():
+        return np.zeros(channel.shape, dtype=np.uint8)
+    lo, hi = np.percentile(channel[finite], [1.0, 99.5])
+    span = max(float(hi - lo), 1e-6)
+    norm = np.clip((channel - lo) / span, 0.0, 1.0)
+    scaled = np.arcsinh(norm * softening) / np.arcsinh(softening)
+    return np.where(finite, np.rint(scaled * 255), 0).astype(np.uint8)
+
+
+def to_rgb_png(
+    red: np.ndarray, green: np.ndarray, blue: np.ndarray, softening: float = 10.0
+) -> bytes:
+    """RGBA false-color PNG combining three SPHEREx detector bands (north up, east left).
+
+    Each channel is stretched independently with ``asinh`` between its 1st and 99.5th
+    percentiles. Pixels missing data in any of the three bands are transparent.
+    """
+    finite = np.isfinite(red) & np.isfinite(green) & np.isfinite(blue)
+    r_u8 = _stretch_channel(red, softening)
+    g_u8 = _stretch_channel(green, softening)
+    b_u8 = _stretch_channel(blue, softening)
+    alpha = np.where(finite, 255, 0).astype(np.uint8)
+    pixels = np.flipud(np.dstack([r_u8, g_u8, b_u8, alpha]))
+    buffer = io.BytesIO()
+    Image.fromarray(pixels).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def to_npz(image: np.ndarray, variance: np.ndarray) -> bytes:
     """Float32 data for analysis (epoch subtraction, photometry); no stretch, no hole filling."""
     buffer = io.BytesIO()
