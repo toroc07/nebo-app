@@ -8,6 +8,7 @@ import {
   type CandidateDetection,
   type Epoch,
   type Query,
+  ApiError,
 } from "@/lib/api";
 import s from "./science.module.css";
 
@@ -62,7 +63,12 @@ export default function EpochDiffTriplet({
         setGaiaComplete(res.gaia_complete_to_g);
       })
       .catch((e) => {
-        if (!abort.signal.aborted) setCandError(e.message || "Could not load candidates.");
+        if (!abort.signal.aborted) setCandError(
+            // The generic 404 text ("could not find this object") is wrong here: the field exists.
+            e instanceof ApiError && e.status === 404
+              ? "Change candidates are unavailable for this field."
+              : e.message || "Could not load candidates.",
+          );
       });
     return () => abort.abort();
   }, [patchId, detector, size, templateEpoch, compareEpoch, epochs.length]);
