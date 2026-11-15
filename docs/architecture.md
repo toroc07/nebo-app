@@ -543,14 +543,16 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 - Queue mode has no backpressure, and a worker killed mid-build leaves the timeline in a
   non-`queued` stage that the worker does not pick up again (only a new request after 15 min
   re-claims it).
-- Partial saves change image ids (delete + insert).
-- `metrics.py` comments disagree with the code (annulus r = 6 vs 6.5 px, variance floor 0.02 vs
-  0.015 px²); `frontend/lib/overlays.ts` hard-codes 6.15″; `SpectrumChart.tsx` band edges differ
-  slightly from `irsa.py`. See [science-and-techniques §10](science-and-techniques.md#10-known-inconsistencies).
 
 ## Architecture changelog
 
 Newest first. One line per change that affects this document.
+
+- **2026-11-15** — Consistency fixes: `store._replace_timeline_images_conn` now upserts by
+  `(timeline_id, epoch_index, size)` instead of `DELETE + INSERT` (preserving image IDs across
+  partial saves), `alignmentFor` uses `data.size.pixel_scale_arcsec`, `SpectrumChart` band edges
+  match `irsa.DETECTOR_WAVELENGTH_RANGE_UM`, and `metrics.py` comments match the `6.5` px /
+  `0.015` px² constants.
 
 - **2026-11-15** — Real data for the science layer: new `app/real_science.py`. `/spectrum`,
   `/metrics`, `/models/{event,spectrum,forecast}` and the patch forms of the POST model endpoints

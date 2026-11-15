@@ -443,7 +443,9 @@ export default function Field({
   useEffect(() => setSelected(null), [catalogKey, fieldKey]);
   // The simulated offset moves the last epoch only, so blinking shows the jump against the others.
   const simulated = layers.alignment && simulateOffset && count > 1 && epoch === count - 1;
-  const alignmentRow = layers.alignment ? alignmentFor(alignmentLayer?.value ?? null, epoch, simulated) : null;
+  const alignmentRow = layers.alignment
+    ? alignmentFor(alignmentLayer?.value ?? null, epoch, simulated, data?.size.pixel_scale_arcsec)
+    : null;
   const shifted =
     simulated && pixels
       ? {

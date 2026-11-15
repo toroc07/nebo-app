@@ -9,12 +9,12 @@ import {
 import s from "./science.module.css";
 
 const BANDS = [
-  { band: 1, min: 0.74, max: 1.11, fill: "rgba(63, 210, 255, 0.06)" },
-  { band: 2, min: 1.11, max: 1.64, fill: "rgba(99, 102, 241, 0.06)" },
-  { band: 3, min: 1.64, max: 2.41, fill: "rgba(168, 85, 247, 0.06)" },
-  { band: 4, min: 2.41, max: 3.80, fill: "rgba(56, 189, 248, 0.08)" },
-  { band: 5, min: 3.80, max: 4.42, fill: "rgba(251, 146, 60, 0.08)" },
-  { band: 6, min: 4.42, max: 5.01, fill: "rgba(74, 222, 128, 0.08)" },
+  { band: 1, min: 0.75, max: 1.09, fill: "rgba(63, 210, 255, 0.06)" },
+  { band: 2, min: 1.10, max: 1.62, fill: "rgba(99, 102, 241, 0.06)" },
+  { band: 3, min: 1.63, max: 2.41, fill: "rgba(168, 85, 247, 0.06)" },
+  { band: 4, min: 2.42, max: 3.82, fill: "rgba(56, 189, 248, 0.08)" },
+  { band: 5, min: 3.83, max: 4.41, fill: "rgba(251, 146, 60, 0.08)" },
+  { band: 6, min: 4.42, max: 5.00, fill: "rgba(74, 222, 128, 0.08)" },
 ];
 
 const MOLECULAR_LINES = [
