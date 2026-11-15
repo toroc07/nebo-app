@@ -295,6 +295,7 @@ erDiagram
   targets ||--o{ patches : "target_slug"
   patches ||--o{ timelines : "patch_id"
   timelines ||--o{ timeline_images : "timeline_id"
+  timelines ||--o{ timeline_build_attempts : "timeline_id"
   patches ||--o{ sector_coordinates : "patch_id"
   patches ||--o{ nasa_sector_exposures : "patch_id"
   timelines ||--o{ nasa_sector_exposures : "timeline_id"
@@ -335,6 +336,13 @@ erDiagram
     text stage
     int progress_done
     int progress_total
+  }
+  timeline_build_attempts {
+    int id PK
+    int timeline_id FK
+    int attempt
+    text stage
+    text cause
   }
   timeline_images {
     int id PK
@@ -549,6 +557,11 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Slow IRSA (P0-7): the Field gives up after 3 min without images (automatic
+  retries included) and offers Retry / Choose another object; a field being built says it is not
+  preloaded and points to the 5 catalogued targets. `NEBO_ARCHIVE_WAIT_S` default 300 → 150 s.
+  New table `timeline_build_attempts` logs every failed IRSA query and failed build with its cause.
+  Stop stays client-side (the server build continues and is cached).
 - **2026-11-15** — Coordinate requests within 30″ of a catalogue object's 1990–2027 track resolve to
   that object's patch. Typed catalogue coordinates of fast movers (WISE 0855 is 128″ from its
   2026.2 position) used to start a new download instead of opening the preloaded field.

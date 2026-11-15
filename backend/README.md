@@ -202,7 +202,10 @@ Give either `target` or both `ra` and `dec`.
 instead of a fixed interval.
 When IRSA itself is down, the build goes `querying` → `waiting_for_archive` (`progress.done` =
 attempt) → `querying` and retries with a 15 → 30 → 60 s backoff for up to `NEBO_ARCHIVE_WAIT_S`
-(default 300 s). Only then does it fail with `502` `code: "archive_unavailable"`.
+(default 150 s, below the viewer's 3-minute wait limit). Only then does it fail with `502`
+`code: "archive_unavailable"`. Every failed IRSA query (`stage = 'querying'`, `attempt` = n) and every
+failed build (`stage = 'failed'`, `attempt` = 0) is logged in `timeline_build_attempts` with its cause
+(`<ExceptionType>: <message>`).
 
 **Early preview (`wait_for`)**: `GET /timeline?...&wait_for=first_light` (or `preview`) does not
 wait; it answers `200` with `"is_partial": true, "refining": true` as soon as a preview image
