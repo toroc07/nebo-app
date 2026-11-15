@@ -65,28 +65,33 @@ const MOTES: [number, number, number, number][] = [
 const CREW = [
   {
     name: "Jasen Mihovil Yukopila Escobar",
-    role: "Software Developer & Data Scientist",
+    role: "Frontend Developer",
     photo: "/crew/jasen.webp",
   },
   {
     name: "Alejandro Patron Montero",
-    role: "Full-Stack Developer",
+    role: "Fullstack Developer & Data",
     photo: "/crew/alejandro.webp",
   },
   {
-    name: "Carlos Toro Torres",
-    role: "Backend Developer & Data Analyst",
+    name: "Carlos Miguel Toro Torres",
+    role: "Fullstack Developer & Data",
     photo: "/crew/carlos.webp",
   },
   {
-    name: "Shalom Jhoanna",
-    role: "Frontend Developer",
+    name: "Shalom Jhoanna Arrieta Marrugo",
+    role: "Backend Developer",
     photo: "/crew/shalom.webp",
   },
   {
     name: "Daryem Antonio Garcia Cardona",
-    role: "Backend Developer & Data Engineer",
+    role: "Data Engineer & Scientist",
     photo: "/crew/daryem.webp",
+  },
+  {
+    name: "Katlyn Gutierrez Cardona",
+    role: "Storyteller & Communications",
+    photo: "/crew/katlyn.webp",
   },
 ];
 

@@ -122,7 +122,7 @@ assert.deepEqual(axe.map((v) => v.id), [], "no axe violations on the start scree
 // --- crew: the team panel replaces the menu, and Back returns to it ----------------------------
 await menu.getByRole("button", { name: /Crew/ }).click();
 await page.getByRole("heading", { level: 2, name: "Crew", exact: true }).waitFor();
-assert.equal(await page.locator("section[aria-labelledby='crew-title'] li").count(), 5, "five crew members");
+assert.equal(await page.locator("section[aria-labelledby='crew-title'] li").count(), 6, "six crew members");
 await page.getByRole("button", { name: "Back", exact: true }).click();
 await menu.getByRole("button", { name: /Tutorial/ }).waitFor();
 
