@@ -3,6 +3,7 @@
 // before the approach tunnel: a screen line opens, the logo lights up, the system checks scroll
 // and a progress bar fills. Pure CSS animation; `onDone` fires when it has played out.
 import { useEffect, useRef } from "react";
+import { sfx } from "@/lib/audio";
 import s from "./neboBoot.module.css";
 
 /** Total length of the power-on, in ms (keep in sync with the CSS timings). */
@@ -21,7 +22,14 @@ export default function NeboBoot({ onDone }: { onDone: () => void }) {
   done.current = onDone;
   useEffect(() => {
     const id = window.setTimeout(() => done.current(), NEBO_BOOT_MS);
-    return () => window.clearTimeout(id);
+    // Sounds follow the CSS timings (checks appear at 1150 ms + 260 ms each).
+    sfx.powerOn();
+    const cues = CHECKS.map((_, i) => window.setTimeout(sfx.tick, 1150 + i * 260));
+    cues.push(window.setTimeout(sfx.chime, 1150 + CHECKS.length * 260 + 100));
+    return () => {
+      window.clearTimeout(id);
+      cues.forEach(window.clearTimeout);
+    };
   }, []);
   return (
     <div className={s.boot} data-nebo-boot="" role="status" aria-live="polite">

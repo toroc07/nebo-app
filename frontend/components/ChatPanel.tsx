@@ -2,6 +2,7 @@
 // Public chat, opened from a button in the top-left corner. The room follows the selected
 // catalogue object; with nothing selected it is the general room. Messages are polled while the
 // panel is open and the tab is visible; the server filters them and deletes them after 24 h.
+import { sfx } from "@/lib/audio";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { MessageCircle, SendHorizontal, X } from "lucide-react";
 import {
@@ -43,6 +44,9 @@ export default function ChatPanel({
   const input = useRef<HTMLTextAreaElement>(null);
   const list = useRef<HTMLOListElement>(null);
   const lastId = useRef(0);
+  // Read inside the polling loop, which must not restart when the nickname changes.
+  const nickRef = useRef("");
+  nickRef.current = nickname;
 
   // Read from storage after mount, so the server render and the first client render match.
   useEffect(() => setNickname(storedNickname()), []);
@@ -66,6 +70,8 @@ export default function ChatPanel({
         try {
           const page = await fetchMessages(room, lastId.current, abort.signal);
           if (abort.signal.aborted) return;
+          // Poll results that are not our own sends: one cue per batch, not per message.
+          if (lastId.current && page.messages.some((m) => m.nickname !== nickRef.current)) sfx.receive();
           setMessages((current) => {
             const merged = mergeMessages(current, page.messages);
             lastId.current = merged.at(-1)?.id ?? lastId.current;
@@ -112,8 +118,10 @@ export default function ChatPanel({
     try {
       const sent = await sendMessage(room, nickname, body);
       setDraft("");
+      sfx.send();
       setMessages((current) => mergeMessages(current, [sent]));
     } catch (err) {
+      sfx.error();
       setError(
         err instanceof ChatRefused
           ? err.message

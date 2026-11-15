@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ArrowLeft } from "lucide-react";
+import { sfx } from "@/lib/audio";
 import { read, type Target, type Query } from "@/lib/api";
 import { parseFieldLink, type FieldLink } from "@/lib/fieldLink";
 import { angularDistance, centreRadiusDeg } from "@/lib/coordinates";
@@ -65,6 +66,16 @@ export default function Nebo() {
   useEffect(() => {
     if (loaded && view === "Home") setSkyMounted(true);
   }, [loaded, view]);
+  // Cue for the analysis screen switching on and off; skipped on mount, when nothing changed.
+  const screenWasOn = useRef(screenPowered);
+  useEffect(() => {
+    if (screenWasOn.current !== screenPowered) (screenPowered ? sfx.powerOn : sfx.powerOff)();
+    screenWasOn.current = screenPowered;
+  }, [screenPowered]);
+  // The camera turn (start → cockpit, cockpit ⇄ analysis screen) gets a swoosh.
+  useEffect(() => {
+    if (turn) sfx.swoosh();
+  }, [turn]);
   const turnRef = useRef(turn);
   turnRef.current = turn;
   useEffect(() => {

@@ -1,0 +1,25 @@
+/* Sits above the warp overlay so the visitor can silence the tunnel while it plays. */
+.toggle {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--ink);
+  background: rgba(16, 28, 41, 0.82);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color var(--micro), color var(--micro);
+}
+.toggle:hover,
+.toggle:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.toggle[aria-pressed="true"] {
+  color: var(--accent);
+}

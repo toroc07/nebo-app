@@ -4,6 +4,7 @@
 // The timing is in lib/warp.ts and the star field in lib/warp-render.ts; this file only draws.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { sfx, startWhoosh } from "@/lib/audio";
 import {
   MOTION,
   REDUCED,
@@ -70,6 +71,11 @@ function Scene() {
     // Keyboard focus moves here so Enter or Space cannot press the menu button again.
     el.focus({ preventScroll: true });
 
+    // The tunnel sound follows the same speed the stars use, and ends with the animation.
+    const whoosh = startWhoosh();
+    sfx.charge();
+    let arrived = false;
+    let nextChirp = 0;
     const rng = mulberry32(20261114);
     const streaks = createStreaks(STREAK_COUNT, rng);
     let w = 0;
@@ -158,6 +164,16 @@ function Scene() {
           ?.focus({ preventScroll: true });
         return;
       }
+      whoosh.setSpeed(frame.speed);
+      // Loading chirps while the destination is not ready; one impact when the tunnel drops out.
+      if (!warp.isReady() && frame.phase === "cruise" && now >= nextChirp) {
+        nextChirp = now + 0.35 + Math.random() * 0.4;
+        sfx.data();
+      }
+      if (frame.phase === "arrive" && !arrived) {
+        arrived = true;
+        sfx.impact();
+      }
       el.style.opacity = String(frame.opacity);
       cv.style.transform = `scale(${frame.zoom})`;
       label.style.opacity = String(frame.labelOpacity);
@@ -167,6 +183,7 @@ function Scene() {
     raf = requestAnimationFrame(tick);
 
     return () => {
+      whoosh.stop();
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };

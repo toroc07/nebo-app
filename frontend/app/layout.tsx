@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AudioControl from "@/components/AudioControl";
 import WarpOverlay from "@/components/WarpOverlay";
 export const metadata: Metadata = {
   title: "Nebo — The sky has more to tell",
@@ -12,6 +13,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {children}
         {/* Persistent across navigation: the loading tunnel of "Begin exploring". */}
         <WarpOverlay />
+        <AudioControl />
       </body>
     </html>
   );
