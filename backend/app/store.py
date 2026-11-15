@@ -216,6 +216,28 @@ class Store(Protocol):
     ) -> list[dict[str, Any]]: ...
     def purge_chat_messages(self, max_age_s: float) -> int: ...
 
+    def save_patch_crossmatch(
+        self,
+        patch_id: int,
+        gaia_json: dict[str, Any] | None,
+        wise_json: dict[str, Any] | None,
+    ) -> None: ...
+    def update_target_catalog_data(
+        self,
+        slug: str,
+        *,
+        ra: float | None = None,
+        dec: float | None = None,
+        pm_ra_mas_yr: float | None = None,
+        pm_dec_mas_yr: float | None = None,
+        gaia_source_id: str | None = None,
+        gaia_dist_arcsec: float | None = None,
+        gaia_g_mag: float | None = None,
+        wise_w1_mag: float | None = None,
+        wise_w2_mag: float | None = None,
+        wise_w1_w2_color: float | None = None,
+    ) -> None: ...
+
 
 def angular_separation_deg(ra1, dec1, ra2, dec2):
     """Great-circle distance in degrees (haversine; inputs in degrees, numpy-friendly)."""
@@ -1413,3 +1435,55 @@ class PostgresStore:
                 (max_age_s,),
             )
             return cur.rowcount
+
+    def save_patch_crossmatch(
+        self,
+        patch_id: int,
+        gaia_json: dict[str, Any] | None,
+        wise_json: dict[str, Any] | None,
+    ) -> None:
+        with self.pool.connection() as conn:
+            conn.execute(
+                "UPDATE patches SET gaia_crossmatch_json = %s, wise_crossmatch_json = %s "
+                "WHERE id = %s",
+                (
+                    Jsonb(gaia_json) if gaia_json is not None else None,
+                    Jsonb(wise_json) if wise_json is not None else None,
+                    patch_id,
+                ),
+            )
+
+    def update_target_catalog_data(
+        self,
+        slug: str,
+        *,
+        ra: float | None = None,
+        dec: float | None = None,
+        pm_ra_mas_yr: float | None = None,
+        pm_dec_mas_yr: float | None = None,
+        gaia_source_id: str | None = None,
+        gaia_dist_arcsec: float | None = None,
+        gaia_g_mag: float | None = None,
+        wise_w1_mag: float | None = None,
+        wise_w2_mag: float | None = None,
+        wise_w1_w2_color: float | None = None,
+    ) -> None:
+        updates: dict[str, Any] = {
+            "ra": ra,
+            "dec": dec,
+            "pm_ra_mas_yr": pm_ra_mas_yr,
+            "pm_dec_mas_yr": pm_dec_mas_yr,
+            "gaia_source_id": gaia_source_id,
+            "gaia_dist_arcsec": gaia_dist_arcsec,
+            "gaia_g_mag": gaia_g_mag,
+            "wise_w1_mag": wise_w1_mag,
+            "wise_w2_mag": wise_w2_mag,
+            "wise_w1_w2_color": wise_w1_w2_color,
+        }
+        fields = [(col, val) for col, val in updates.items() if val is not None]
+        if not fields:
+            return
+        set_clause = ", ".join(f"{col} = %s" for col, _ in fields)
+        values = [val for _, val in fields] + [slug]
+        with self.pool.connection() as conn:
+            conn.execute(f"UPDATE targets SET {set_clause} WHERE slug = %s", values)

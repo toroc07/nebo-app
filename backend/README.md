@@ -247,6 +247,40 @@ that star). Cold brown dwarfs such as WISE 0855 and Eps Indi B are not in Gaia: 
 source with no Gaia star on it is expected for them. `502` with `code: "gaia_unavailable"` when
 the ESA archive does not answer (retry after `Retry-After`); `404` for an unknown patch.
 
+### `GET /patches/{id}/wise?size=medium&mjd=<mid_mjd>...`
+
+Catalogued **CatWISE2020** infrared sources (3.4 um W1, 4.6 um W2) on the patch image, propagated
+from epoch 2015.4 to each requested `mjd` and cross-matched against Gaia DR3 (`crossmatch_gaia=true`).
+Sources with no Gaia match within `gaia_match_radius_arcsec` (default `3.0"`) and
+`W1 - W2 >= cold_w1_w2_min` (default `1.0`) are flagged `cold_candidate: true`. `catalog.gaia_complete_to_g`
+reports the Gaia completeness limit used for the cross-match. Returns `502` (`code: "wise_unavailable"`)
+when IRSA CatWISE2020 does not answer.
+
+### `GET /patches/{id}/candidates?detector=3&size=medium&epoch_a=0&epoch_b=<last>&snr_threshold=4.0`
+
+Detects significant point-like changes in `epoch_b - epoch_a` using the float32 `.npz` arrays,
+cross-matches each peak against Gaia DR3 (at both epochs) and CatWISE2020, and labels each as
+`"catalogued_object"` or `"candidate_signal"` (along with `gaia_complete_to_g`). Returns `404` if
+the timeline or `.npz` arrays are not ready.
+
+### `GET /patches/{id}/alignment?detector=3&size=medium`
+
+Checks astrometric alignment per epoch against slow Gaia DR3 reference stars (`pm_total <= 20 mas/yr`),
+returning `stars_used`, `median_dx_px`, `median_dy_px`, `rms_arcsec`, and `status`
+(`"ok"`, `"offset_warning"`, or `"insufficient_stars"`).
+
+### `GET /explore/suggested?ra=<deg>&dec=<deg>&radius_deg=30&limit=12`
+
+Returns nearby (`parallax > 50 mas`) or fast-moving (`pm > 500 mas/yr`) Gaia DR3 stars propagated
+to epoch 2026.2 for the sky explorer, cached in `api_query_cache` with a curated fallback if ESA
+Gaia TAP is unavailable.
+
+### Database catalog hydration (`python -m app.db sync-catalogs`)
+
+Hydrates `targets.gaia_*` and `targets.wise_*` columns (and updates proper-motion-propagated
+coordinates for optical targets while keeping SIMBAD/CatWISE fallback for cold brown dwarfs). Can
+also be run via `python -m app.db init --sync-catalogs`.
+
 ### Public chat: `GET` / `POST /chat/{room}/messages`
 
 One room per catalogue object (`room` = its slug) plus `general`. Anonymous: the browser

@@ -46,6 +46,7 @@ class MemoryStore:
         self.model3_forecasts: dict[tuple[int, str], dict[str, Any]] = {}
         self.citizen_votes: list[dict[str, Any]] = []
         self.chat_messages: list[dict[str, Any]] = []
+        self.patch_crossmatches: dict[int, dict[str, Any]] = {}
         self._ids = {
             "patch": 0,
             "timeline": 0,
@@ -624,3 +625,49 @@ class MemoryStore:
             before = len(self.chat_messages)
             self.chat_messages = [m for m in self.chat_messages if m["created_at"] >= cutoff]
             return before - len(self.chat_messages)
+
+    def save_patch_crossmatch(
+        self,
+        patch_id: int,
+        gaia_json: dict[str, Any] | None,
+        wise_json: dict[str, Any] | None,
+    ) -> None:
+        with self._lock:
+            self.patch_crossmatches[patch_id] = {
+                "gaia_crossmatch_json": gaia_json,
+                "wise_crossmatch_json": wise_json,
+            }
+
+    def update_target_catalog_data(
+        self,
+        slug: str,
+        *,
+        ra: float | None = None,
+        dec: float | None = None,
+        pm_ra_mas_yr: float | None = None,
+        pm_dec_mas_yr: float | None = None,
+        gaia_source_id: str | None = None,
+        gaia_dist_arcsec: float | None = None,
+        gaia_g_mag: float | None = None,
+        wise_w1_mag: float | None = None,
+        wise_w2_mag: float | None = None,
+        wise_w1_w2_color: float | None = None,
+    ) -> None:
+        updates = {
+            "ra": ra,
+            "dec": dec,
+            "pm_ra_mas_yr": pm_ra_mas_yr,
+            "pm_dec_mas_yr": pm_dec_mas_yr,
+            "gaia_source_id": gaia_source_id,
+            "gaia_dist_arcsec": gaia_dist_arcsec,
+            "gaia_g_mag": gaia_g_mag,
+            "wise_w1_mag": wise_w1_mag,
+            "wise_w2_mag": wise_w2_mag,
+            "wise_w1_w2_color": wise_w1_w2_color,
+        }
+        with self._lock:
+            target = self.targets.get(slug)
+            if target is not None:
+                for k, v in updates.items():
+                    if v is not None:
+                        target[k] = v

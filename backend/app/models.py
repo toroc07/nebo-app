@@ -954,12 +954,31 @@ SIMULATED_NOTE = (
 )
 
 
+def enrich_features_from_catalogs(
+    fv: dict[str, float],
+    gaia_info: dict[str, Any] | None,
+    wise_info: dict[str, Any] | None,
+) -> dict[str, float]:
+    """Override synthetic Model 1 Gaia/WISE features with real cross-match values when available."""
+    out = dict(fv)
+    if gaia_info is not None:
+        if gaia_info.get("dist_arcsec") is not None:
+            out["gaia_match_dist_arcsec"] = float(gaia_info["dist_arcsec"])
+        if gaia_info.get("pm_total_mas_yr") is not None:
+            out["gaia_pm_total_mas_yr"] = float(gaia_info["pm_total_mas_yr"])
+    if wise_info is not None and wise_info.get("w1_w2_color") is not None:
+        out["wise_w1_w2_color"] = float(wise_info["w1_w2_color"])
+    return out
+
+
 def analyze_patch_science(
     store: Store,
     patch: Patch,
     *,
     scenario: str | None = None,
     force_recompute: bool = True,
+    gaia_info: dict[str, Any] | None = None,
+    wise_info: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute/seed spectrum, 17 indices, metrics, and Models 1-3 for a patch and persist all."""
     profile_key = scenario or patch.target_slug or "barnards-star"
@@ -983,7 +1002,13 @@ def analyze_patch_science(
     sigmas_mjy = [science_catalogs.compute_reported_sigma(f, 0.015 * abs(f)) for f in fluxes_mjy]
     variability = metrics.compute_variability_metrics(times_mjd, fluxes_mjy, sigmas_mjy)
 
-    fv = dict(spec_cfg["features"])
+    fv = enrich_features_from_catalogs(
+        dict(spec_cfg["features"]),
+        None if scenario else gaia_info,
+        None if scenario else wise_info,
+    )
+    if scenario is None and (gaia_info is not None or wise_info is not None):
+        store.save_patch_crossmatch(patch.id, gaia_info, wise_info)
     active_flags = ["SNOWBALL"] if fv["f_artifact_flags"] > 0.3 else []
     conf = metrics.compute_global_confidence_score(
         snr=max(fv["z_mono"], fv["z_dipole"]),

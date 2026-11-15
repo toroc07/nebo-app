@@ -8,6 +8,7 @@ import io
 import math
 from contextlib import asynccontextmanager
 import logging
+import os
 import time
 from typing import Any, Literal
 
@@ -18,7 +19,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from . import chat, config, db, ephemeris, gaia, imaging, irsa, metrics, models, science_catalogs
+from . import (
+    chat,
+    config,
+    crossmatch,
+    db,
+    ephemeris,
+    gaia,
+    imaging,
+    irsa,
+    metrics,
+    models,
+    science_catalogs,
+    wise,
+)
 from .service import (
     ServiceBusy,
     TargetNotFound,
@@ -584,6 +598,379 @@ def get_patch_gaia(
     }
 
 
+# ----- CatWISE2020 infrared overlay, cold candidates, alignment & suggested targets ------
+
+
+def _patch_wise_sources(store: Store, patch: Patch, w2_max: float) -> list[wise.WiseSource]:
+    """CatWISE2020 sources around a patch, cached in api_query_cache."""
+    key = hashlib.sha256(
+        f"catwise2020_cone:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{w2_max:.2f}"
+        f":{wise.MAX_ROWS}".encode()
+    ).hexdigest()
+    cached = store.get_cached_api(key)
+    if cached and isinstance(cached.get("response_json"), list):
+        return [wise.WiseSource(**row) for row in cached["response_json"]]
+    sources = wise.query_cone(patch.ra, patch.dec, GAIA_RADIUS_DEG, w2_max=w2_max)
+    store.set_cached_api(
+        key,
+        wise.PROVIDER,
+        [asdict(s) for s in sources],
+        query_text=wise.build_cone_query(patch.ra, patch.dec, GAIA_RADIUS_DEG, w2_max),
+        request_params={
+            "patch_id": patch.id,
+            "ra": patch.ra,
+            "dec": patch.dec,
+            "radius_deg": GAIA_RADIUS_DEG,
+            "w2_max": w2_max,
+        },
+        row_count=len(sources),
+    )
+    return sources
+
+
+def _gaia_completeness(sources: list[gaia.GaiaSource], g_max: float = gaia.DEFAULT_G_MAX) -> tuple[float, bool]:
+    truncated = len(sources) >= gaia.MAX_ROWS
+    if not truncated:
+        return g_max, False
+    mags = [s.g_mag for s in sources if s.g_mag is not None]
+    return (round(max(mags), 3) if mags else g_max), True
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/wise")
+def get_patch_wise(
+    patch_id: int = Path(..., ge=1),
+    size: SizeName = Query(config.DEFAULT_SIZE),
+    mjd: list[float] = Query(
+        ...,
+        min_length=1,
+        max_length=MAX_GAIA_EPOCHS,
+        description="Dates (MJD) to place the sources at; pass each epoch's mid_mjd.",
+    ),
+    w2_max: float = Query(wise.DEFAULT_W2_MAX, ge=6.0, le=20.0, description="Faintest WISE W2 magnitude."),
+    crossmatch_gaia: bool = Query(True, description="Cross-match against Gaia DR3 to flag cold candidates."),
+    cold_w1_w2_min: float = Query(1.0, ge=0.0, le=6.0, description="Minimum W1-W2 colour for cold candidates."),
+    gaia_match_radius_arcsec: float = Query(3.0, gt=0.1, le=30.0),
+    store: Store = Depends(get_store),
+):
+    """Catalogued CatWISE2020 infrared sources on a patch, with optional Gaia DR3 cross-match."""
+    patch = _patch_or_404(store, patch_id)
+    try:
+        wise_sources = _patch_wise_sources(store, patch, w2_max)
+    except wise.WiseQueryError as error:
+        logging.getLogger(__name__).warning("CatWISE2020 query failed for patch %s: %s", patch_id, error)
+        return JSONResponse(
+            status_code=502,
+            content={"code": "wise_unavailable", "detail": "The IRSA CatWISE2020 service did not answer. Retry later."},
+            headers={"Retry-After": str(BUSY_RETRY_AFTER_S)},
+        )
+
+    gaia_sources: list[gaia.GaiaSource] = []
+    gaia_available = False
+    g_complete: float | None = None
+    if crossmatch_gaia:
+        try:
+            gaia_sources = _patch_gaia_sources(store, patch, gaia.DEFAULT_G_MAX)
+            gaia_available = True
+            g_complete, _ = _gaia_completeness(gaia_sources, gaia.DEFAULT_G_MAX)
+        except gaia.GaiaQueryError:
+            gaia_available = False
+
+    wcs, (side, _) = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
+    ref_mjd = mjd[-1]
+    sources_out = []
+    for source in wise_sources:
+        positions = []
+        for date in mjd:
+            ra, dec = source.position_at(date)
+            x, y = (float(v) for v in wcs.world_to_pixel_values(ra, dec))
+            y = side - 1 - y
+            positions.append(
+                {
+                    "mjd": date,
+                    "ra": round(ra, 7),
+                    "dec": round(dec, 7),
+                    "x": round(x, 2),
+                    "y": round(y, 2),
+                    "in_image": bool(-0.5 <= x <= side - 0.5 and -0.5 <= y <= side - 0.5),
+                }
+            )
+        if not any(p["in_image"] for p in positions):
+            continue
+
+        gaia_match = None
+        if gaia_available and gaia_sources:
+            sra, sdec = source.position_at(ref_mjd)
+            best_g = gaia.nearest(gaia_sources, sra, sdec, ref_mjd)
+            if best_g is not None and best_g[1] <= gaia_match_radius_arcsec:
+                gsrc, gdist = best_g
+                gaia_match = {
+                    "source_id": gsrc.source_id,
+                    "dist_arcsec": round(gdist, 3),
+                    "g_mag": _round_or_none(gsrc.g_mag, 3),
+                }
+
+        w1_w2 = source.w1_w2_color
+        cold_candidate = bool(
+            gaia_available
+            and gaia_match is None
+            and w1_w2 is not None
+            and w1_w2 >= cold_w1_w2_min
+        )
+        sources_out.append(
+            {
+                "source_id": source.source_id,
+                "w1_mag": _round_or_none(source.w1_mag, 3),
+                "w2_mag": _round_or_none(source.w2_mag, 3),
+                "w1_w2_color": _round_or_none(w1_w2, 3),
+                "pm_ra_mas_yr": _round_or_none(source.pm_ra_mas_yr, 3),
+                "pm_dec_mas_yr": _round_or_none(source.pm_dec_mas_yr, 3),
+                "pm_total_mas_yr": _round_or_none(source.pm_total_mas_yr, 3),
+                "gaia_match": gaia_match,
+                "cold_candidate": cold_candidate,
+                "positions": positions,
+            }
+        )
+
+    truncated = len(wise_sources) >= wise.MAX_ROWS
+    w2_complete = w2_max
+    if truncated:
+        mags = [s.w2_mag for s in wise_sources if s.w2_mag is not None]
+        w2_complete = round(max(mags), 3) if mags else w2_max
+
+    return {
+        "patch_id": patch.id,
+        "size": {"name": size, "width_px": side, "height_px": side},
+        "catalog": {
+            "name": wise.CATALOG_NAME,
+            "ref_epoch": wise.REF_EPOCH_YEAR,
+            "w2_max": w2_max,
+            "w2_complete": w2_complete,
+            "radius_deg": round(GAIA_RADIUS_DEG, 5),
+            "truncated": truncated,
+            "gaia_crossmatched": gaia_available,
+            "gaia_complete_to_g": g_complete,
+        },
+        "mjd": mjd,
+        "sources": sources_out,
+    }
+
+
+def _load_epoch_arrays(
+    store: Store, patch_id: int, detector: int, size: SizeName
+) -> tuple[list[Any], dict[int, np.ndarray]]:
+    tl = store.get_timeline(patch_id, detector)
+    if tl is None or tl.status != "ready":
+        raise HTTPException(status_code=404, detail="Timeline not ready for this patch and detector.")
+    images = store.list_images(tl.id, size)
+    if not images:
+        raise HTTPException(status_code=404, detail="No images found for this size.")
+    arrays: dict[int, np.ndarray] = {}
+    for img in images:
+        npz = store.get_npz(img.id)
+        if npz is not None:
+            arrays[img.epoch_index] = np.load(io.BytesIO(npz))["image"]
+    return images, arrays
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/candidates")
+def get_patch_candidates(
+    patch_id: int = Path(..., ge=1),
+    detector: int = Query(3, ge=1, le=6),
+    size: SizeName = Query(config.DEFAULT_SIZE),
+    epoch_a: int = Query(0, ge=0),
+    epoch_b: int | None = Query(None, ge=0),
+    snr_threshold: float = Query(4.0, ge=2.0, le=20.0),
+    store: Store = Depends(get_store),
+):
+    """Detect epoch-to-epoch changes and label each as catalogued_object or candidate_signal."""
+    patch = _patch_or_404(store, patch_id)
+    images, arrays = _load_epoch_arrays(store, patch_id, detector, size)
+    by_epoch = {img.epoch_index: img for img in images}
+    if epoch_b is None:
+        epoch_b = max(by_epoch.keys())
+    if epoch_a not in arrays or epoch_b not in arrays:
+        raise HTTPException(status_code=404, detail="Float32 arrays (.npz) missing for requested epochs.")
+
+    wcs, _ = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
+    detections = crossmatch.detect_epoch_changes(
+        arrays[epoch_a], arrays[epoch_b], wcs, snr_threshold=snr_threshold
+    )
+
+    gaia_sources: list[gaia.GaiaSource] = []
+    gaia_available = False
+    g_complete: float | None = None
+    try:
+        gaia_sources = _patch_gaia_sources(store, patch, gaia.DEFAULT_G_MAX)
+        gaia_available = True
+        g_complete, _ = _gaia_completeness(gaia_sources, gaia.DEFAULT_G_MAX)
+    except gaia.GaiaQueryError:
+        gaia_available = False
+
+    wise_sources: list[wise.WiseSource] = []
+    wise_available = False
+    try:
+        wise_sources = _patch_wise_sources(store, patch, wise.DEFAULT_W2_MAX)
+        wise_available = True
+    except wise.WiseQueryError:
+        wise_available = False
+
+    candidates = crossmatch.classify_changes(
+        detections,
+        gaia_sources,
+        wise_sources,
+        mjd_a=by_epoch[epoch_a].mid_mjd,
+        mjd_b=by_epoch[epoch_b].mid_mjd,
+        g_complete=g_complete,
+    )
+    return {
+        "patch_id": patch.id,
+        "detector": detector,
+        "size": size,
+        "epoch_a": epoch_a,
+        "epoch_b": epoch_b,
+        "gaia_available": gaia_available,
+        "wise_available": wise_available,
+        "gaia_complete_to_g": g_complete,
+        "candidates": candidates,
+    }
+
+
+@app.get(f"{API_PREFIX}/patches/{{patch_id}}/alignment")
+def get_patch_alignment(
+    patch_id: int = Path(..., ge=1),
+    detector: int = Query(3, ge=1, le=6),
+    size: SizeName = Query(config.DEFAULT_SIZE),
+    store: Store = Depends(get_store),
+):
+    """Check astrometric alignment per epoch against slow Gaia DR3 reference stars."""
+    patch = _patch_or_404(store, patch_id)
+    images, arrays = _load_epoch_arrays(store, patch_id, detector, size)
+    try:
+        gaia_sources = _patch_gaia_sources(store, patch, gaia.DEFAULT_G_MAX)
+    except gaia.GaiaQueryError:
+        return JSONResponse(
+            status_code=502,
+            content={"code": "gaia_unavailable", "detail": "The Gaia archive did not answer. Retry later."},
+            headers={"Retry-After": str(BUSY_RETRY_AFTER_S)},
+        )
+
+    wcs, _ = imaging.make_target_grid(patch.ra, patch.dec, config.SIZES_DEG[size])
+    epochs_out = []
+    for img in images:
+        arr = arrays.get(img.epoch_index)
+        if arr is None:
+            continue
+        metrics_row = crossmatch.check_epoch_alignment(arr, wcs, gaia_sources, img.mid_mjd)
+        epochs_out.append({"epoch_index": img.epoch_index, "mid_mjd": img.mid_mjd} | metrics_row)
+    return {
+        "patch_id": patch.id,
+        "detector": detector,
+        "size": size,
+        "epochs": epochs_out,
+    }
+
+
+_CURATED_SUGGESTED_DESTINATIONS: tuple[dict[str, Any], ...] = (
+    {
+        "source_id": "4472832130114786688",
+        "name": "Barnard's Star",
+        "ra": 269.446223,
+        "dec": 4.768780,
+        "pm_total_mas_yr": 10393.4,
+        "distance_pc": 1.83,
+        "g_mag": 8.19,
+        "bp_rp": 2.83,
+    },
+    {
+        "source_id": "5853498713190525696",
+        "name": "Proxima Centauri",
+        "ra": 217.392321,
+        "dec": -62.676075,
+        "pm_total_mas_yr": 3853.0,
+        "distance_pc": 1.30,
+        "g_mag": 8.98,
+        "bp_rp": 3.80,
+    },
+    {
+        "source_id": "4810594479418041856",
+        "name": "Kapteyn's Star",
+        "ra": 77.934792,
+        "dec": -45.026583,
+        "pm_total_mas_yr": 8670.5,
+        "distance_pc": 3.93,
+        "g_mag": 8.05,
+        "bp_rp": 2.13,
+    },
+    {
+        "source_id": "4075141768785646848",
+        "name": "Ross 154",
+        "ra": 282.456750,
+        "dec": -23.836222,
+        "pm_total_mas_yr": 665.2,
+        "distance_pc": 2.98,
+        "g_mag": 9.13,
+        "bp_rp": 2.94,
+    },
+)
+
+
+@app.get(f"{API_PREFIX}/explore/suggested")
+def get_suggested_destinations(
+    ra: float | None = Query(None, ge=0.0, lt=360.0),
+    dec: float | None = Query(None, ge=-90.0, le=90.0),
+    radius_deg: float = Query(30.0, gt=0.1, le=90.0),
+    limit: int = Query(12, ge=1, le=50),
+    store: Store = Depends(get_store),
+):
+    """Nearby or high-proper-motion Gaia DR3 stars to suggest in the sky explorer."""
+    ref_mjd = ephemeris.REFERENCE_MJD
+    cache_key = hashlib.sha256(
+        f"gaia_suggested:{ra}:{dec}:{radius_deg:.2f}:{limit}".encode()
+    ).hexdigest()
+    cached = store.get_cached_api(cache_key)
+    if cached and isinstance(cached.get("response_json"), list):
+        sources = [gaia.GaiaSource(**row) for row in cached["response_json"]]
+        source_kind = gaia.PROVIDER
+    else:
+        try:
+            sources = gaia.query_suggested_destinations(
+                ra=ra, dec=dec, radius_deg=radius_deg, limit=limit
+            )
+            store.set_cached_api(
+                cache_key,
+                "gaia_suggested_tap",
+                [asdict(s) for s in sources],
+                query_text=gaia.build_suggested_query(
+                    ra=ra, dec=dec, radius_deg=radius_deg, limit=limit
+                ),
+                request_params={"ra": ra, "dec": dec, "radius_deg": radius_deg, "limit": limit},
+                row_count=len(sources),
+            )
+            source_kind = gaia.PROVIDER
+        except gaia.GaiaQueryError:
+            return {
+                "source": "curated_fallback",
+                "destinations": list(_CURATED_SUGGESTED_DESTINATIONS[:limit]),
+            }
+
+    destinations = []
+    for s in sources:
+        prop_ra, prop_dec = s.position_at(ref_mjd)
+        destinations.append(
+            {
+                "source_id": s.source_id,
+                "name": f"Gaia DR3 {s.source_id}",
+                "ra": round(prop_ra, 6),
+                "dec": round(prop_dec, 6),
+                "pm_total_mas_yr": _round_or_none(s.pm_total_mas_yr, 2),
+                "distance_pc": _round_or_none(s.distance_pc, 2),
+                "g_mag": _round_or_none(s.g_mag, 3),
+                "bp_rp": _round_or_none(s.bp_rp, 3),
+            }
+        )
+    return {"source": source_kind, "destinations": destinations}
+
+
 # ----- science metrics, 17 spectral indices & ML Models 1, 2, 3 -------------------------
 
 
@@ -719,6 +1106,41 @@ def get_patch_metrics(
     }
 
 
+def _resolve_patch_crossmatch(
+    store: Store, patch: Patch
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Best-effort Gaia DR3 and CatWISE2020 cross-match for Model 1 enrichment."""
+    in_pytest = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+    g_sources: list[gaia.GaiaSource] = []
+    w_sources: list[wise.WiseSource] = []
+
+    g_key = hashlib.sha256(
+        f"gaia_dr3_cone:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{gaia.DEFAULT_G_MAX:.2f}"
+        f":{gaia.MAX_ROWS}".encode()
+    ).hexdigest()
+    if store.get_cached_api(g_key) or not in_pytest or gaia.query_cone.__module__ != "app.gaia":
+        try:
+            g_sources = _patch_gaia_sources(store, patch, gaia.DEFAULT_G_MAX)
+        except gaia.GaiaQueryError:
+            g_sources = []
+
+    w_key = hashlib.sha256(
+        f"catwise2020_cone:{patch.ra:.6f}:{patch.dec:.6f}:{GAIA_RADIUS_DEG:.5f}:{wise.DEFAULT_W2_MAX:.2f}"
+        f":{wise.MAX_ROWS}".encode()
+    ).hexdigest()
+    if store.get_cached_api(w_key) or not in_pytest or wise.query_cone.__module__ != "app.wise":
+        try:
+            w_sources = _patch_wise_sources(store, patch, wise.DEFAULT_W2_MAX)
+        except wise.WiseQueryError:
+            w_sources = []
+
+    if not g_sources and not w_sources:
+        return None, None
+    return crossmatch.patch_crossmatch_summary(
+        patch.ra, patch.dec, ephemeris.REFERENCE_MJD, g_sources, w_sources
+    )
+
+
 @app.post(f"{API_PREFIX}/patches/{{patch_id}}/analyze")
 def analyze_patch(
     patch_id: int = Path(..., ge=1),
@@ -739,11 +1161,14 @@ def analyze_patch(
                 headers={"Retry-After": str(wait)},
             )
         _last_forced_analysis[patch_id] = now
+    gaia_info, wise_info = (None, None) if req.scenario else _resolve_patch_crossmatch(store, patch)
     return models.analyze_patch_science(
         store,
         patch,
         scenario=req.scenario,
         force_recompute=req.force_recompute,
+        gaia_info=gaia_info,
+        wise_info=wise_info,
     )
 
 
@@ -761,7 +1186,12 @@ def classify_event(
         profile_key = patch.target_slug or "barnards-star"
         if profile_key not in models.DEMO_PROFILE_SPECS:
             profile_key = "barnards-star"
-        fv = models.DEMO_PROFILE_SPECS[profile_key]["features"]
+        gaia_info, wise_info = _resolve_patch_crossmatch(store, patch)
+        fv = models.enrich_features_from_catalogs(
+            models.DEMO_PROFILE_SPECS[profile_key]["features"], gaia_info, wise_info
+        )
+        if gaia_info is not None or wise_info is not None:
+            store.save_patch_crossmatch(patch.id, gaia_info, wise_info)
     else:
         raise HTTPException(status_code=422, detail="Provide feature_vector, patch_id, or target.")
 

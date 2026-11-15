@@ -525,8 +525,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
   source; today the lab is URL-only and defaults to the API.
 - `frontend/tests/browser.mjs` no longer covers the field console or the lab: they were reached
   through the removed coordinate form; a new path through the cockpit is needed.
-- `gcs_media_assets` and several columns (`targets.gaia_*`, `targets.wise_*`,
-  `patches.gaia_crossmatch_json`, `timeline_images.gcs_uri`) are never written.
+- `gcs_media_assets` and `timeline_images.gcs_uri` are never written (`targets.gaia_*`,
+  `targets.wise_*`, `patches.gaia_crossmatch_json`, and `patches.wise_crossmatch_json` are now
+  populated by `app.db sync-catalogs` and `analyze_patch_science` / `classify_event`).
 - Queue mode has no backpressure, and a worker killed mid-build leaves the timeline in a
   non-`queued` stage that the worker does not pick up again (only a new request after 15 min
   re-claims it).
@@ -536,6 +537,13 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Backend Gaia DR3 + CatWISE2020 integration: added `app/wise.py` (IRSA
+  CatWISE2020 TAP client + `GET /patches/{id}/wise` with cold-candidate flagging),
+  `app/crossmatch.py` (`GET /patches/{id}/candidates` for catalogued vs candidate changes,
+  `GET /patches/{id}/alignment` for per-epoch Gaia astrometric drift checks),
+  `GET /explore/suggested` for nearby/fast Gaia destinations, `app.db sync-catalogs` target
+  hydration, and real Gaia/WISE feature injection into Model 1 persisted in
+  `patches.gaia_crossmatch_json` / `patches.wise_crossmatch_json`.
 - **2026-11-15** — Field room: the tablet's painted globe is covered by `StarHologram`, a
   spinning 3D illustration of the observed object (red dwarf, T-dwarf pair, Y dwarf, young star
   with disk, Mira giant; wireframe for custom fields). Cockpit art: the SKY MAP key repainted
