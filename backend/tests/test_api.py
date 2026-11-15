@@ -277,3 +277,21 @@ def test_timeline_rgb_reports_missing_detectors_and_renders_when_ready(client):
     assert rgb.status_code == 200
     assert rgb.headers["content-type"] == "image/png"
     assert rgb.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_spectrum_channels_follow_the_catalog_and_keep_blankch_null():
+    from app.main import spectrum_channels
+
+    flux = [float(i) for i in range(102)]
+    channels = spectrum_channels(
+        {"flux_mjy": flux, "sigma_reported_mjy": [0.1] * 102, "valid_mask": [True] * 101 + [False]}
+    )
+    assert len(channels) == 102
+    assert channels[0] == {
+        "channel_id": 1, "band": 1, "lambda_c_um": channels[0]["lambda_c_um"],
+        "flux_mjy": 0.0, "sigma_mjy": 0.1, "is_blankch": False,
+    }
+    blank = [c for c in channels if c["is_blankch"]]
+    assert [c["channel_id"] for c in blank] == [51, 52]
+    assert all(c["flux_mjy"] is None for c in blank)
+    assert channels[-1]["flux_mjy"] is None  # Invalid channel: null, never 0.

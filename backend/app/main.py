@@ -1107,6 +1107,29 @@ def _resolve_optional_patch(
     return None
 
 
+def spectrum_channels(spec: dict) -> list[dict]:
+    """One entry per SPHEREx channel, as the web client draws them.
+
+    The stored spectrum is columnar (index i = channel i + 1); the catalog adds channel id,
+    band and central wavelength. BLANKCH and invalid channels get a null flux, never 0.
+    """
+    flux = spec.get("flux_mjy") or []
+    sigma = spec.get("sigma_reported_mjy") or []
+    valid = spec.get("valid_mask") or []
+    out = []
+    for i, ch in enumerate(science_catalogs.SPHEREX_102_CHANNELS):
+        ok = i < len(flux) and flux[i] is not None and (valid[i] if i < len(valid) else True)
+        out.append({
+            "channel_id": ch.channel_id,
+            "band": ch.band,
+            "lambda_c_um": ch.lambda_c_um,
+            "flux_mjy": flux[i] if ok and not ch.is_blankch else None,
+            "sigma_mjy": sigma[i] if ok and not ch.is_blankch and i < len(sigma) else None,
+            "is_blankch": ch.is_blankch,
+        })
+    return out
+
+
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/spectrum")
 def get_patch_spectrum(
     patch_id: int = Path(..., ge=1),
@@ -1122,7 +1145,7 @@ def get_patch_spectrum(
         spec = bundle["spectrum"]
     if spec is None:
         raise HTTPException(status_code=404, detail="Patch spectrum not found.")
-    return _simulated(spec)
+    return _simulated(spec | {"channels": spectrum_channels(spec)})
 
 
 @app.get(f"{API_PREFIX}/patches/{{patch_id}}/metrics")
