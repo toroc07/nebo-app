@@ -461,7 +461,9 @@ stateDiagram-v2
   }
   Home --> Explore: START or Launch (warp to the cockpit)
   Explore --> Field: View images (object, RA and Dec, or map centre)
+  [*] --> Field: shared link (?ra&dec or ?target)
   Field --> Explore: Back
+  Field --> Home: Back (opened from a link)
   Explore --> Home: Back
   note right of Explore
     /lab/observation is a separate route,
@@ -546,6 +548,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Journey: a shared link `/?ra=&dec=` or `/?target=` (with optional `fov` 3/6/15,
+  `det` 1–6, `epoch` 1-based) opens the field viewer directly; invalid links start at Home. The
+  viewer's "Copy link" button writes that link. Parsing in `frontend/lib/fieldLink.ts`.
 - **2026-11-15** — `/candidates` and `/alignment` crop the largest size's float32 arrays to the
   requested size (only `large` stores `.npz`); before, any other size always answered 404 and the
   UI showed it as "0 detected changes". The UI now says "unavailable" on a failed request.
