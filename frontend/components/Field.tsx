@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type PointerEvent, type Ref } from "react";
+import { Component, useEffect, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -727,6 +727,8 @@ export default function Field({
                   ))}
                 </div>
 
+                {/* Keyed by tab: a crash in one analysis resets when another tab is chosen. */}
+                <AnalysisBoundary key={scienceTab}>
                 {scienceTab === "diff" && (
                   <EpochDiffTriplet
                     patchId={data.patch.id}
@@ -756,6 +758,7 @@ export default function Field({
                     epochIndex={epoch}
                   />
                 )}
+                </AnalysisBoundary>
                 </div>
               </aside>
             )}
@@ -763,6 +766,26 @@ export default function Field({
       </div>
     </section>
   );
+}
+
+/** One analysis that fails to render shows a note instead of taking the whole page down. */
+class AnalysisBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error("Scientific analysis failed to render", error);
+  }
+  render() {
+    return this.state.failed ? (
+      <p className={s.message} role="alert">
+        This analysis could not be shown for this field. The other tabs still work.
+      </p>
+    ) : (
+      this.props.children
+    );
+  }
 }
 
 // The backend build stages, grouped into the steps a visitor can follow.

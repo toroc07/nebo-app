@@ -422,6 +422,8 @@
   height: 16px;
 }
 .drawerBody {
+  /* The panels inside lay out by the drawer's width, not the window's. */
+  container-type: inline-size;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -442,4 +444,15 @@
     width: auto;
     font-size: max(12px, calc(15 * var(--s)));
   }
+}
+
+@container (max-width: 640px) {
+  .gridTwo {
+    grid-template-columns: 1fr;
+  }
+}
+/* Long feature/class names wrap instead of running into the bar. */
+.barRow > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
