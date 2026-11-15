@@ -91,14 +91,18 @@ the demo profiles (`models.SIMULATED_NOTE`) only answer an explicit `scenario` r
 | Palettes | amber; inferno | `imaging.py` | Colour only; never changes the data |
 | Difference image | `B − A`, symmetric limit = p99.7 of `|diff|`, asinh softening 10; red brighter, blue fainter (`X-Diff-Limit` header) | `imaging.py`, `main.py` | Show what changed between two epochs |
 | RGB composite | Each band asinh between its own p1 and p99.5; transparent where any band is NaN | `imaging.py` (`/timeline/rgb`) | Colour hints at temperature (cold objects are red) |
-| Pixelated upscale | `image-rendering: pixelated` | `lab.module.css`, `science.module.css`, `field.module.css` | A 31 px image enlarged must show its real pixels, not a blur |
+| Pixelated upscale | `image-rendering: pixelated` | `science.module.css`, `field.module.css` | A 31 px image enlarged must show its real pixels, not a blur |
 
 ## 5. Photometry
 
 | Concept | Value / formula | Where | Why |
 | --- | --- | --- | --- |
 | Units | MJy/sr → µJy: `× rad(6.15/3600)² × 1e12` | `service.py` | Fluxes users can compare with catalogues |
-| Quick-look aperture | 3×3 sum around the target, 3% floor | `service.py` | Per-exposure photometry while building |
+| Quick-look aperture | 3×3 sum around the target (proper motion applied), 3% floor; stored raw (no aperture correction, so ~70–90 % of the total) | `service._build_exposure_row` | Per-exposure photometry while building |
+| Local sky | Clipped median (iterative 3σ, MAD) of the valid pixels in an annulus 4–9 px around the object, ≥ 40 pixels; error `1.2533·σ/√n`; the measured spectrum subtracts 9× it from the 3×3 flux and adds its error in quadrature | `imaging.local_background`, `config.LOCAL_BACKGROUND_*` | `IMAGE − ZODI` leaves a residual sky (~150–300 µJy in the aperture on WISE 0855; ~1.2 mJy at 0.76 µm on ε Indi B); radii 3–7, 4–9 and 5–12 px agree within the errors |
+| Blend flag | Brightest pixel of the 5×5 box ≥ 5σ above the sky and ≥ 1.2 px from the object → `blended` (a source on the object peaks within ~0.7 px) | `imaging.peak_offset`, `real_science.BLENDED_PEAK_OFFSET_PX` | At 6.15″/px a neighbour can dominate the aperture (WISE 0855 below ~4 µm); blended points are drawn grey and left out of the channel medians. A neighbour closer than 1.2 px cannot be told apart |
+| Measured spectrum | One point per unsaturated exposure (sky-subtracted once the patch has local-sky values, never mixing raw and subtracted); channel = median, error `1.4826·MAD/√n` | `real_science.measured_spectrum` (`/spectrum/measured`) | The object's real SPHEREx spectrum; saturated stars give lower limits only, so they get no spectrum |
+| Local-sky backfill | Re-reads each stored exposure's cutout, batches of 48, 6 parallel downloads (`--workers`); cutouts IRSA refuses (503 to bursts) are retried one at a time with 2 s pauses at the end | `app.backfill_background` | Fill rows built before the columns existed, without rebuilding timelines |
 | ePSF kernel | 5×5 Gaussian, FWHM 1.22 px, `σ = max(0.35, FWHM/2.35482)` ≈ 0.52 px, sub-pixel offset, sum 1 | `metrics.gaussian_epsf_kernel` | SPHEREx PSF is about one pixel wide |
 | Optimal (PSF-weighted) flux | `F = Σ(P·N/V) / Σ(P²/V)`, `σ = √(1/Σ(P²/V))`, `SNR = F/σ`; aperture r = 2 px; background = median of annulus 3–6.5 px | `metrics.py` | Best SNR for a point source; this is the measured `image_photometry` |
 | Systematic floor | `σ_rep = hypot(σ_stat, 0.03·|F|)` | `science_catalogs.py` | Calibration is not better than ~3% |
@@ -168,7 +172,9 @@ estimate, not a detection", never as a discovery.
 | IRSA outage | waits 15 / 30 / 60 s up to 150 s (`NEBO_ARCHIVE_WAIT_S`) | `service.py`, `config.py` | |
 | Stale / failed builds | re-claimed after 900 s; failed retried after 60 s | `config.py` | |
 | Progressive waves | `first_light` (1 frame) → `preview_ready` (1 per epoch) → `refining` (up to 16) | `service.py` | Something to look at within seconds for new coordinates |
-| HTTP caching | PNG/NPZ `max-age=31536000, immutable`; `api_query_cache` never expires | `main.py` | Image ids change when content changes, so caching forever is safe |
+| HTTP caching | PNG/NPZ/mask `max-age=31536000, immutable`; the URLs in `/timeline` carry `?v=` = the row's `timeline_images.updated_at`; `api_query_cache` never expires | `main._image_version`, `store.py` | Image rows are upserted by (timeline, epoch, size) and keep their id when a preview is refined, so the version, not the id, makes each content a new URL |
+| Measured science storage | Model rows stored as `model_version = "v2-measured"` and reused; old simulated rows (`v1`) ignored; spectrum and light curve recomputed from the exposures on each request | `real_science.MEASURED_VERSION` | No schema change; fast reads once a patch has been analysed |
+| Catalogue cross-match for Model 1 | Gaia DR3 / CatWISE queried only when Model 1 has an event to classify | `main._patch_science`, `real_science.analyze` | Those services time out often; a field without an event used to wait ~32 s per request for them |
 | Chat | 280 chars, 24 h retention, 3 s per message | `chat.py` | |
 
 ## 9. Frontend techniques
