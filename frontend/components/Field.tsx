@@ -1,5 +1,6 @@
 "use client";
 import { Component, useEffect, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
+import { sfx } from "@/lib/audio";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -228,6 +229,7 @@ export default function Field({
       .then((d) => {
         if (!abort.signal.aborted) {
           setData(d);
+          sfx.chime();
           setProgress(null);
           // Applied on the finished timeline: partial epochs while building would clamp it.
           if (firstEpoch.current) setEpoch(Math.min(firstEpoch.current, d.epochs.length - 1));
@@ -283,6 +285,13 @@ export default function Field({
     );
     return () => clearInterval(id);
   }, [playing, data, interval]);
+  // One tick per blink step, pitched by epoch. Tied to the epoch change (not to the interval) so
+  // it stays in sync with the image, and kept out of the state updater, which StrictMode runs twice.
+  const blinkEpoch = useRef(epoch);
+  useEffect(() => {
+    if (playing && data && epoch !== blinkEpoch.current) sfx.blink(epoch, data.epochs.length);
+    blinkEpoch.current = epoch;
+  }, [epoch, playing, data]);
   // Preload every epoch before blinking: swapping `src` to an image that is still downloading
   // shows half-loaded frames and makes the loading notice flicker on every step.
   const [loaded, setLoaded] = useState<Set<string>>(new Set());
