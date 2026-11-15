@@ -7,6 +7,14 @@ import {
   partsToDec,
   stepRa,
   stepDec,
+  gmstDeg,
+  subPoint,
+  angularDistance,
+  hammer,
+  hammerInverse,
+  fovToFraction,
+  fractionToFov,
+  wrap180,
 } from "../lib/coordinates";
 
 const near = (a: number | null, b: number, tol = 1e-6) =>
@@ -54,4 +62,46 @@ test("stepping carries and wraps RA, and clamps Dec at the poles", () => {
   near(stepRa(0, "m", -1), 360 - 0.25);
   assert.equal(stepDec(89.5, "d", 1), 90);
   assert.equal(stepDec(-89.5, "d", -1), -90);
+});
+
+test("GMST matches Meeus example 12.a (1987-04-10 0h UT = 13h10m46.3668s)", () => {
+  const expected = (13 + 10 / 60 + 46.3668 / 3600) * 15;
+  near(gmstDeg(new Date(Date.UTC(1987, 3, 10, 0, 0, 0))), expected, 1e-4);
+});
+
+test("the zenith point has latitude = Dec and drifts west 15° per sidereal hour", () => {
+  const t0 = new Date(Date.UTC(2026, 10, 14, 0, 0, 0));
+  const a = subPoint(269.446, 4.769, t0);
+  assert.equal(a.lat, 4.769);
+  // One sidereal hour later the same star is overhead 15° further west.
+  const b = subPoint(269.446, 4.769, new Date(t0.getTime() + 3590170));
+  near(wrap180(a.lon - b.lon), 15, 1e-3);
+});
+
+test("a star is overhead at Greenwich when its RA equals GMST", () => {
+  const t = new Date(Date.UTC(2026, 0, 1, 6, 0, 0));
+  near(subPoint(gmstDeg(t), 51.48, t).lon, 0, 1e-9);
+});
+
+test("angular distance: poles, equator and tiny separations", () => {
+  near(angularDistance(0, 90, 123, -90), 180, 1e-9);
+  near(angularDistance(10, 0, 20, 0), 10, 1e-9);
+  near(angularDistance(100, 30, 100, 30 + 1 / 3600), 1 / 3600, 1e-9);
+});
+
+test("Hammer projection round-trips and keeps east on the left", () => {
+  for (const [ra, dec] of [[0.1, 0], [90, 45], [180, 0], [269.446, 4.769], [330, -56.8], [10, -89]]) {
+    const p = hammer(ra, dec);
+    const back = hammerInverse(p.x, p.y)!;
+    near(angularDistance(ra, dec, back.ra, back.dec), 0, 1e-6);
+  }
+  assert.ok(hammer(190, 0).x < hammer(170, 0).x, "larger RA is further left");
+  assert.equal(hammerInverse(0.9, 0.9), null);
+});
+
+test("FOV gauge scale is logarithmic and invertible", () => {
+  assert.equal(fovToFraction(0.1), 0);
+  assert.equal(fovToFraction(180), 1);
+  near(fractionToFov(fovToFraction(8)), 8, 1e-9);
+  near(fovToFraction(Math.sqrt(0.1 * 180)), 0.5, 1e-9);
 });

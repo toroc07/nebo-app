@@ -26,7 +26,7 @@ import {
 } from "@/lib/api";
 import Field from "./Field";
 import Cockpit from "./Cockpit";
-import type { SkyCommand } from "./Sky";
+import type { SkyCommand, SkyLayers, SkyView } from "./Sky";
 import { launchWarp } from "@/lib/warp";
 const Sky = dynamic(() => import("./Sky"), {
   ssr: false,
@@ -86,6 +86,8 @@ export default function Nebo() {
   const [selected, setSelected] = useState<Target | null>(null),
     [skyCoordinates, setSkyCoordinates] = useState<{ ra: number; dec: number } | null>(null),
     [skyCommand, setSkyCommand] = useState<SkyCommand | null>(null),
+    [skyView, setSkyView] = useState<SkyView | null>(null),
+    [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, grid: false }),
     [query, setQuery] = useState<Query | null>(null),
     [ra, setRa] = useState(""),
     [dec, setDec] = useState(""),
@@ -542,33 +544,34 @@ export default function Nebo() {
           </>
         ) : (
           <>
-            <div
-              className={`page-heading${view === "Observe" ? " observe-heading" : ""}`}
-            >
-              <button className="back" onClick={back}>
-                <ArrowLeft size={18} />
-                Back
-              </button>
-              <h1
-                className={["Observe", "Explore"].includes(view) ? "sr-only" : undefined}
-                tabIndex={-1}
-                ref={heading}
+            {/* The field console draws its own Back button and title inside the ship screen. */}
+            {view !== "Field" && (
+              <div
+                className={`page-heading${view === "Observe" ? " observe-heading" : ""}`}
               >
-                {view === "Observe"
-                  ? "Observe"
-                  : view === "Coordinates"
-                    ? "Find your field."
-                    : view === "Explore"
-                      ? "Choose your next destination."
-                      : view === "Field"
-                        ? selected?.name || "Your observation field"
+                <button className="back" onClick={back}>
+                  <ArrowLeft size={18} />
+                  Back
+                </button>
+                <h1
+                  className={["Observe", "Explore"].includes(view) ? "sr-only" : undefined}
+                  tabIndex={-1}
+                  ref={heading}
+                >
+                  {view === "Observe"
+                    ? "Observe"
+                    : view === "Coordinates"
+                      ? "Find your field."
+                      : view === "Explore"
+                        ? "Choose your next destination."
                         : view === "Featured objects"
                           ? "Featured objects"
                           : view === "Tutorial"
                             ? "Tutorial"
                             : "Settings"}
-              </h1>
-            </div>
+                </h1>
+              </div>
+            )}
             {view === "Observe" && (
               <nav
                 className="observe-grid panel-menu"
@@ -689,6 +692,10 @@ export default function Nebo() {
             {view === "Field" && query && (
               <Field
                 query={query}
+                target={selected}
+                title={selected?.name || "Your observation field"}
+                headingRef={heading}
+                onBack={back}
                 recommended={selected?.recommended_detector || 3}
                 speed={prefs.speed}
                 reduced={reduced}
@@ -803,6 +810,8 @@ export default function Nebo() {
                 selected={selected}
                 coordinates={skyCoordinates}
                 command={skyCommand}
+                layers={skyLayers}
+                onView={setSkyView}
                 onSelect={(target) => { setSkyCoordinates(null); setSelected(target); }}
               />
               <span className="map-credit">
@@ -824,7 +833,6 @@ export default function Nebo() {
                 setSkyCoordinates(p);
               }}
               onZoom={(action) => setSkyCommand({ id: Date.now(), action })}
-              onCenter={(p) => setSkyCommand({ id: Date.now(), action: "center", ...p })}
               onView={() => {
                 if (selected) open(selected);
                 else if (skyCoordinates) {
@@ -833,6 +841,10 @@ export default function Nebo() {
                 }
               }}
               onRetry={() => setReload((x) => x + 1)}
+              skyView={skyView}
+              layers={skyLayers}
+              onLayers={setSkyLayers}
+              onCommand={(c) => setSkyCommand({ id: Date.now(), ...c })}
             />
           </div>
         )}

@@ -30,10 +30,13 @@ export default function CoordinatePanel({
   initial,
   onApply,
   onClose,
+  closing = false,
 }: {
   initial: Position | null;
   onApply: (p: Position) => void;
   onClose: () => void;
+  /** True while the panel plays its dematerialise animation before unmounting. */
+  closing?: boolean;
 }) {
   const id = useId();
   const [format, setFormat] = useState<Format>("sexagesimal");
@@ -110,6 +113,7 @@ export default function CoordinatePanel({
   return (
     <div
       className={s.holo}
+      data-state={closing ? "closing" : "open"}
       role="dialog"
       aria-modal="false"
       aria-labelledby={`${id}-title`}

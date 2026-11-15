@@ -525,6 +525,9 @@ footer .mono {
 .target-number {
   color: var(--muted);
 }
+/* The field console is a full-screen ship scene: the page chrome steps aside. */
+.app-shell:has([data-console="field"]) > header,
+.app-shell:has([data-console="field"]) > footer { display: none; }
 /* In Explore the sky is the canvas; the flight deck is its only reserved band. */
 .app-shell:has(.explorer-grid:not([hidden])) { padding: 0; height: 100dvh; overflow: hidden; }
 .app-shell:has(.explorer-grid:not([hidden])) .header { display: none; }

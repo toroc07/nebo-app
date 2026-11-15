@@ -27,7 +27,8 @@
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     "id id"
-    "dest locate"
+    "screens screens"
+    "dest dest"
     "pos switch"
     "zoom view"
     "status status";
@@ -147,9 +148,6 @@
   border-color: var(--cyan);
   box-shadow: 0 0 14px rgb(63 210 255 / 0.4), inset 0 0 12px rgb(63 210 255 / 0.2);
 }
-.locate {
-  grid-area: locate;
-}
 .switch {
   grid-area: switch;
 }
@@ -219,19 +217,9 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
+  /* On wide screens the OBJECTS tab picks the destination. */
   .destination {
-    display: block;
-  }
-  .destination select {
-    height: 100%;
-    min-height: 0;
-    padding: 0 calc(42 * var(--u)) 0 calc(13 * var(--u));
-    font-size: max(10px, calc(13.5 * var(--u)));
-    letter-spacing: 0.02em;
-    border: 0;
-    border-radius: 0;
-    background-size: calc(15 * var(--u));
-    background-position: right calc(10 * var(--u)) center;
+    display: none;
   }
   /* Painted buttons: the art is the button; the live layer adds feedback only. */
   .control {
@@ -307,28 +295,42 @@
     border: 1px solid var(--cyan-soft);
     pointer-events: auto;
   }
-  .control:focus-visible,
-  .destination select:focus-visible {
+  .control:focus-visible {
     outline-offset: 1px;
   }
 
-  /* Projection cone from the radar dish to the bottom edge of the panel. */
+  /*
+   * Projection cone from the radar dish to the bottom edge of the panel. The light is a
+   * generated volumetric texture (hologram-beam.webp, alpha = brightness) so the rays,
+   * scanlines and dust look like light rather than a flat gradient. It is drawn above the
+   * console (z 3): projected light passes over the hull and the screens it crosses.
+   */
   .beam {
     display: block;
     position: absolute;
     left: 50%;
-    bottom: calc(60 * var(--u));
-    width: calc(760 * var(--u));
-    height: calc(230 * var(--u));
+    bottom: calc(62 * var(--u));
+    width: calc(880 * var(--u));
+    height: calc(218 * var(--u));
     translate: -50% 0;
-    z-index: 1;
-    clip-path: polygon(0 0, 100% 0, 54.5% 100%, 45.5% 100%);
-    background:
-      linear-gradient(90deg, transparent 46%, rgb(190 245 255 / 0.5) 50%, transparent 54%),
-      linear-gradient(to top, rgb(80 220 255 / 0.85), rgb(50 185 255 / 0.38) 50%, rgb(50 180 255 / 0.12));
+    z-index: 3;
+    background: url("/panels/hologram-beam.webp") center / 100% 100% no-repeat;
     mix-blend-mode: screen;
-    animation: beam-in 320ms ease-out both, beam-flicker 3.2s ease-in-out 320ms infinite;
+    transform-origin: 50% 100%;
+    animation: beam-rise 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+      beam-breathe 3.6s ease-in-out 300ms infinite;
     pointer-events: none;
+  }
+  /* Dust drifting up the beam, masked to the cone by the same texture. */
+  .beamDust {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle, rgb(210 250 255 / 0.9) 0 1px, transparent 1.6px) 0 0 / calc(37 * var(--u)) calc(29 * var(--u)),
+      radial-gradient(circle, rgb(150 235 255 / 0.7) 0 0.8px, transparent 1.4px) calc(13 * var(--u)) calc(7 * var(--u)) / calc(23 * var(--u)) calc(41 * var(--u));
+    mask: url("/panels/hologram-beam.webp") center / 100% 100% no-repeat;
+    opacity: 0.7;
+    animation: dust-rise 5s linear infinite;
   }
   .beam::after {
     /* Hot spot where the cone leaves the radar dish. */
@@ -336,11 +338,484 @@
     position: absolute;
     left: 50%;
     bottom: 0;
-    width: calc(120 * var(--u));
-    height: calc(40 * var(--u));
-    translate: -50% 40%;
-    background: radial-gradient(closest-side, rgb(200 248 255 / 0.95), rgb(63 210 255 / 0.4) 50%, transparent);
+    width: calc(150 * var(--u));
+    height: calc(46 * var(--u));
+    translate: -50% 45%;
+    background: radial-gradient(closest-side, rgb(220 252 255 / 0.95), rgb(63 210 255 / 0.45) 45%, transparent);
+    animation: hotspot 1.8s ease-in-out infinite alternate;
   }
+  .beam[data-state="closing"] {
+    animation: beam-sink 240ms ease-in 60ms both;
+  }
+}
+
+/* ---------- Live cockpit screens (replace the painted decoration) ---------- */
+.screens {
+  grid-area: screens;
+}
+.menu {
+  display: none;
+}
+.zenithLine {
+  margin: 0;
+  font: 0.72rem PlexMono, monospace;
+  color: #8fdcf0;
+}
+.screens > :not(.zenithLine) {
+  display: none;
+}
+@media (min-width: 1180px) {
+  .screens,
+  .menu {
+    display: contents;
+  }
+  .zenithLine {
+    display: none;
+  }
+  .screens > :not(.zenithLine) {
+    display: flex;
+  }
+  .screens {
+    --mono: PlexMono, monospace;
+    --tiny: max(7px, calc(8 * var(--u)));
+    --small: max(8px, calc(10 * var(--u)));
+  }
+
+  /* Menu keys: the painted key is the button; the live layer marks the selected one. */
+  .menuKey[aria-selected="false"] {
+    background: rgb(4 10 16 / 0.42);
+  }
+  .menuKey[aria-selected="true"] {
+    background: rgb(63 210 255 / 0.1);
+    box-shadow: 0 0 calc(12 * var(--u)) rgb(63 210 255 / 0.7), inset 0 0 0 1px rgb(120 225 255 / 0.8);
+  }
+
+  /* Earth globe: the place where this sky is straight overhead. */
+  .earth {
+    margin: 0;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(4 * var(--u));
+    /* The screen's left edge is slanted: keep the caption clear of the cut. */
+    padding: 0 calc(10 * var(--u)) 0 calc(24 * var(--u));
+    clip-path: polygon(19.2% 4%, 99.4% 0, 93.8% 98%, 0.6% 98%);
+  }
+  .earth svg {
+    height: 90%;
+    flex: none;
+    aspect-ratio: 1;
+    cursor: grab;
+    touch-action: none;
+    overflow: visible;
+  }
+  .earth svg:active {
+    cursor: grabbing;
+  }
+  .earth svg:focus-visible {
+    outline: 1px solid var(--cyan);
+    outline-offset: 2px;
+  }
+  .earthSphere {
+    fill: #041828;
+    stroke: rgb(63 210 255 / 0.7);
+    stroke-width: 0.8;
+    filter: drop-shadow(0 0 3px rgb(63 210 255 / 0.6));
+  }
+  .earthGrid {
+    fill: none;
+    stroke: rgb(63 210 255 / 0.16);
+    stroke-width: 0.35;
+  }
+  .earthLand {
+    fill: rgb(63 210 255 / 0.2);
+    stroke: rgb(140 230 255 / 0.75);
+    stroke-width: 0.3;
+  }
+  .earthDot {
+    fill: #fff;
+    filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 4px var(--cyan));
+  }
+  .earthPulse {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 0.6;
+    opacity: 0.8;
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: pulse 2.4s ease-out infinite;
+  }
+  .earth figcaption {
+    display: flex;
+    flex-direction: column;
+    gap: calc(3 * var(--u));
+    align-self: flex-end;
+    margin-bottom: calc(10 * var(--u));
+    pointer-events: none;
+    font: var(--tiny) / 1 var(--mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7fcfe6;
+  }
+  .earth figcaption strong {
+    font-size: var(--small);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: #fff;
+    text-transform: none;
+  }
+  .earth figcaption button {
+    pointer-events: auto;
+    padding: 1px 4px;
+    font: inherit;
+    color: var(--ink);
+    background: rgb(63 210 255 / 0.15);
+    border: 1px solid var(--cyan-soft);
+    border-radius: 2px;
+  }
+
+  /* Destination title (where NAVIGATION was painted). */
+  .titleScreen {
+    flex-direction: column;
+    justify-content: center;
+    gap: calc(2 * var(--u));
+    min-width: 0;
+    pointer-events: none;
+  }
+  .titleScreen strong {
+    font: italic 700 max(11px, calc(16 * var(--u))) / 1.05 Barlow, sans-serif;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .titleScreen span {
+    font: italic 600 max(7px, calc(9.5 * var(--u))) / 1.1 Barlow, sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Multi-function screen driven by the menu keys. */
+  .mfd {
+    flex-direction: column;
+    padding: calc(4 * var(--u)) calc(6 * var(--u));
+    overflow: hidden;
+    font: var(--small) / 1.3 var(--mono);
+    color: var(--ink);
+  }
+  .mfdList {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    height: 100%;
+  }
+  .mfdList > div {
+    display: flex;
+    flex-direction: column;
+  }
+  .mfdList dt {
+    font-size: var(--tiny);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7fa9bb;
+  }
+  .mfdList dd {
+    margin: 0;
+    color: #6fe3ff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mfdObjects {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    /* Five rows must fit the 73 px screen, so the list rows are tighter than the toggles. */
+    font-size: max(7.5px, calc(9.5 * var(--u)));
+    line-height: 1.15;
+  }
+  .mfdObjects button {
+    /* Fixed row height: five rows × 12.5 px fit the screen whatever the inherited line-heights. */
+    height: calc(12.5 * var(--u));
+    align-items: center;
+    padding-block: 0;
+  }
+  .mfdObjects button,
+  .toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px;
+    width: 100%;
+    padding: calc(1.5 * var(--u)) calc(4 * var(--u));
+    font: inherit;
+    text-align: left;
+    color: var(--ink);
+    background: transparent;
+    border-radius: 2px;
+  }
+  .mfdObjects span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mfdObjects small {
+    color: #7fa9bb;
+    font-size: var(--tiny);
+  }
+  .mfdObjects button:hover,
+  .toggle:hover,
+  .mfdTools button:hover:not(:disabled) {
+    background: rgb(63 210 255 / 0.14);
+  }
+  .mfdObjects button[aria-current="true"] {
+    color: #6fe3ff;
+    box-shadow: inset 2px 0 var(--cyan);
+  }
+  .mfdEmpty {
+    color: #7fa9bb;
+  }
+  .mfdToggles {
+    display: flex;
+    flex-direction: column;
+    gap: calc(3 * var(--u));
+  }
+  .toggle i {
+    font-style: normal;
+    font-size: var(--tiny);
+    padding: 0 calc(4 * var(--u));
+    border-radius: 999px;
+    color: #9ab0bb;
+    border: 1px solid rgb(150 180 195 / 0.4);
+  }
+  .toggle[aria-checked="true"] i {
+    color: #02121c;
+    background: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan);
+  }
+  .mfdToggles p,
+  .mfdTools p {
+    margin: 0;
+    font-size: var(--tiny);
+    color: #7fa9bb;
+    overflow-wrap: anywhere;
+  }
+  .mfdTools {
+    display: flex;
+    flex-direction: column;
+    gap: calc(3 * var(--u));
+  }
+  .mfdTools button {
+    padding: calc(2 * var(--u)) calc(5 * var(--u));
+    font: inherit;
+    font-size: var(--tiny);
+    text-align: left;
+    color: var(--ink);
+    background: rgb(63 210 255 / 0.06);
+    border: 1px solid var(--cyan-soft);
+    border-radius: 2px;
+  }
+  .mfdTools button:disabled {
+    opacity: 0.5;
+  }
+  .mfd button:focus-visible,
+  .nearest:focus-visible,
+  .fovTrackArea:focus-visible,
+  .locator:focus-visible {
+    outline: 1px solid var(--cyan);
+    outline-offset: 1px;
+  }
+
+  /* UTC clock (the zenith point depends on it). */
+  .clock {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(1 * var(--u));
+    font-family: var(--mono);
+    pointer-events: none;
+  }
+  .clock span {
+    font-size: var(--tiny);
+    letter-spacing: 0.14em;
+    color: var(--cyan);
+  }
+  .clock strong {
+    font-size: max(9px, calc(13.5 * var(--u)));
+    font-weight: 500;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 6px rgb(63 210 255 / 0.6);
+  }
+  .clock small {
+    font-size: var(--tiny);
+    color: #7fa9bb;
+  }
+
+  /* All-sky locator. */
+  .locator {
+    display: block;
+    cursor: crosshair;
+    overflow: visible;
+  }
+  .locatorSky {
+    fill: rgb(63 210 255 / 0.07);
+    stroke: rgb(63 210 255 / 0.75);
+    stroke-width: 0.8;
+    vector-effect: non-scaling-stroke;
+  }
+  .locatorGrid {
+    fill: none;
+    stroke: rgb(63 210 255 / 0.2);
+    stroke-width: 0.5;
+    vector-effect: non-scaling-stroke;
+  }
+  .locatorTarget {
+    fill: #edc181;
+  }
+  .locatorHere {
+    fill: none;
+    stroke: #ff5ce1;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 2px #ff5ce1);
+  }
+  .centerReadout span,
+  .centerReadout small,
+  .fovHead span,
+  .nearest span {
+    font: var(--tiny) / 1.1 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7fa9bb;
+  }
+  .centerReadout {
+    flex-direction: column;
+    justify-content: center;
+    gap: calc(2 * var(--u));
+    pointer-events: none;
+  }
+  .centerReadout strong {
+    font: 500 max(8px, calc(11 * var(--u))) var(--mono);
+    color: #6fe3ff;
+    white-space: nowrap;
+  }
+
+  /* Field-of-view gauge (where the spectrum art was). */
+  .fovGauge {
+    flex-direction: column;
+    padding: calc(4 * var(--u)) calc(8 * var(--u)) calc(2 * var(--u));
+  }
+  .fovHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .fovHead strong {
+    font: 500 max(9px, calc(12 * var(--u))) var(--mono);
+    color: #6fe3ff;
+  }
+  .fovTrackArea {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+  .fovTrack {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: calc(22 * var(--u));
+  }
+  .fovTrack i {
+    flex: 1;
+    background: rgb(63 210 255 / 0.16);
+  }
+  .fovTrack i[data-on="true"] {
+    background: linear-gradient(#9cecff, var(--cyan));
+    box-shadow: 0 0 3px rgb(63 210 255 / 0.7);
+  }
+  .fovTrack b {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    translate: -50% 0;
+    background: #fff;
+    box-shadow: 0 0 6px #fff, 0 0 10px var(--cyan);
+  }
+  .fovTicks {
+    position: relative;
+    height: calc(10 * var(--u));
+  }
+  .fovTicks span {
+    position: absolute;
+    top: 1px;
+    translate: -50% 0;
+    font: max(6px, calc(7.5 * var(--u))) var(--mono);
+    color: #7fa9bb;
+  }
+  .fovTicks span:first-child {
+    translate: 0 0;
+  }
+  .fovTicks span:last-child {
+    translate: -100% 0;
+  }
+
+  /* Nearest catalogued object to the map centre (where the spiral art was). */
+  .nearest {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: calc(1 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    text-align: left;
+    color: var(--ink);
+    background: transparent;
+    border-radius: calc(3 * var(--u));
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+  }
+  .nearest strong {
+    font: 600 max(9px, calc(13 * var(--u))) Plex, sans-serif;
+    color: #fff;
+  }
+  .nearest small {
+    font: max(7px, calc(8.5 * var(--u))) var(--mono);
+    color: #6fe3ff;
+  }
+  .nearest:hover:not(:disabled) {
+    background: rgb(63 210 255 / 0.1);
+    box-shadow: inset 0 0 0 1px rgb(120 225 255 / 0.6);
+  }
+}
+@keyframes pulse {
+  from {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .earthPulse {
+    animation: none;
+  }
+}
+:global(html[data-reduced="true"]) .earthPulse {
+  animation: none;
 }
 
 /* ---------- Holographic coordinate panel ---------- */
@@ -349,12 +824,42 @@
   left: 12px;
   right: 12px;
   bottom: calc(100% + 12px);
-  z-index: 3;
+  z-index: 4;
   padding: 18px 20px 20px;
   color: var(--ink);
   pointer-events: auto;
-  animation: holo-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: holo-materialize 560ms cubic-bezier(0.25, 0.7, 0.2, 1) 120ms both;
   transform-origin: 50% 100%;
+}
+.holo[data-state="closing"] {
+  animation: holo-dematerialize 220ms ease-in both;
+  pointer-events: none;
+}
+/* Fine scanlines drifting through the glass: the panel reads as projected light. */
+.holo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: repeating-linear-gradient(to bottom, rgb(120 220 255 / 0.045) 0 1px, transparent 1px 3px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: scan-drift 6s linear infinite;
+}
+/* The bright line that "prints" the panel from the beam upwards. */
+.holo::after {
+  content: "";
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  top: 100%;
+  height: 3px;
+  z-index: 2;
+  background: linear-gradient(90deg, transparent, #d8fbff 15%, #ffffff 50%, #d8fbff 85%, transparent);
+  box-shadow: 0 0 12px #8ff0ff, 0 0 30px var(--cyan);
+  opacity: 0;
+  pointer-events: none;
+  animation: scan-print 560ms cubic-bezier(0.25, 0.7, 0.2, 1) 120ms both;
 }
 @media (min-width: 1180px) {
   .holo {
@@ -780,32 +1285,121 @@
   }
 }
 
-@keyframes holo-in {
+@keyframes beam-rise {
   from {
     opacity: 0;
-    transform: scale(0.94, 0.6);
-    filter: brightness(2);
+    transform: scaleY(0.05);
+  }
+  60% {
+    opacity: 1;
   }
 }
-@keyframes beam-in {
-  from {
-    opacity: 0;
-    transform: scaleY(0.2);
-    transform-origin: 50% 100%;
+@keyframes beam-breathe {
+  0%,
+  100% {
+    opacity: 1;
   }
-}
-@keyframes beam-flicker {
+  47% {
+    opacity: 0.86;
+  }
   50% {
-    opacity: 0.82;
+    opacity: 0.94;
+  }
+  53% {
+    opacity: 0.84;
+  }
+}
+@keyframes beam-sink {
+  to {
+    opacity: 0;
+    transform: scaleY(0.05);
+  }
+}
+@keyframes dust-rise {
+  to {
+    background-position:
+      0 calc(-290 * var(--u)),
+      calc(13 * var(--u)) calc(-403 * var(--u));
+  }
+}
+@keyframes hotspot {
+  to {
+    opacity: 0.75;
+    scale: 1.12 0.9;
+  }
+}
+@keyframes holo-materialize {
+  0% {
+    opacity: 0.6;
+    clip-path: inset(100% -40px -40px -40px);
+    filter: brightness(2.4) saturate(1.5);
+  }
+  62% {
+    clip-path: inset(0 -40px -40px -40px);
+    filter: brightness(1.5) saturate(1.2);
+  }
+  /* A short flicker as the projection stabilises. */
+  70% {
+    opacity: 0.7;
+  }
+  76% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(-40px);
+    filter: none;
+  }
+}
+@keyframes holo-dematerialize {
+  0% {
+    opacity: 1;
+    clip-path: inset(-40px);
+    filter: brightness(1.6);
+  }
+  100% {
+    opacity: 0;
+    clip-path: inset(100% -40px -40px -40px);
+    filter: brightness(2.4);
+  }
+}
+@keyframes scan-print {
+  0% {
+    top: 100%;
+    opacity: 1;
+  }
+  62% {
+    top: 0;
+    opacity: 1;
+  }
+  100% {
+    top: 0;
+    opacity: 0;
+  }
+}
+@keyframes scan-drift {
+  to {
+    background-position: 0 30px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .holo,
-  .beam {
+  .holo::before,
+  .holo::after,
+  .beam,
+  .beam::after,
+  .beamDust {
     animation: none;
   }
 }
 :global(html[data-reduced="true"]) .holo,
-:global(html[data-reduced="true"]) .beam {
+:global(html[data-reduced="true"]) .holo::before,
+:global(html[data-reduced="true"]) .holo::after,
+:global(html[data-reduced="true"]) .beam,
+:global(html[data-reduced="true"]) .beam::after,
+:global(html[data-reduced="true"]) .beamDust {
   animation: none;
 }

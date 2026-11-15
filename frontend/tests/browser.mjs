@@ -134,11 +134,14 @@ await page.getByLabel("Declination").fill("4.768");
 mode = "building";
 await page.getByRole("button", { name: "View images", exact: true }).click();
 await page.getByText("Searching for observations", { exact: true }).waitFor();
-await page.getByLabel(/^Observed ·/).waitFor();
+await page.getByText(/^Observed: .+ UTC/).waitFor();
 await page.getByRole("button", { name: "Compare epochs", exact: true }).click();
 await page.waitForTimeout(900);
 await page.getByRole("button", { name: "Pause", exact: true }).click();
-assert.notEqual(await page.locator("#epoch").inputValue(), "0");
+assert.doesNotMatch(
+  await page.getByText(/^Epoch \d+ of \d+$/).textContent(),
+  /^Epoch 1 of/,
+);
 await page.screenshot({ path: out + "field-mobile.png", fullPage: true });
 mode = "single";
 await page.getByLabel("Field size").selectOption("small");
@@ -158,7 +161,11 @@ await page
 mode = "error";
 await page.getByLabel("Field size").selectOption("medium");
 await page.getByText(/The database is not configured yet/).waitFor();
-await page.getByRole("link", { name: "Nebo, home" }).click();
+// The field console replaces the site header (as in the design), so leave it with Back:
+// field → coordinates form → Observe → Home.
+for (let i = 0; i < 3; i++)
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+await page.getByRole("navigation", { name: "Home panel" }).waitFor();
 await page.getByRole("button", { name: /Settings/ }).click();
 await page.getByLabel("Appearance").selectOption("light");
 await page.getByLabel("Reduce motion", { exact: true }).check();
@@ -318,7 +325,7 @@ const heading = (name) =>
   page.getByRole("heading", { level: 1, name, exact: true });
 await page.getByRole("button", { name: /Featured objects/ }).click();
 await page.getByRole("button", { name: /Barnard/ }).click();
-await page.getByLabel(/^Observed ·/).waitFor();
+await page.getByText(/^Observed: .+ UTC/).waitFor();
 await backButton.click();
 await heading("Featured objects").waitFor();
 await backButton.click();
@@ -328,7 +335,7 @@ await page.getByRole("button", { name: /Search by coordinates/ }).click();
 await page.getByLabel("Right ascension").fill("269.446");
 await page.getByLabel("Declination").fill("4.768");
 await page.getByRole("button", { name: "View images", exact: true }).click();
-await page.getByLabel(/^Observed ·/).waitFor();
+await page.getByText(/^Observed: .+ UTC/).waitFor();
 await backButton.click();
 await heading("Find your field.").waitFor();
 await page.getByRole("link", { name: "Nebo, home" }).click();
