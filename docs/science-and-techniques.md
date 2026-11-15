@@ -194,10 +194,5 @@ estimate, not a detection", never as a discovery.
 
 ## 10. Known inconsistencies
 
-Found while writing this document (2026-11-15). Also listed in
-[architecture §10](architecture.md#10-known-gaps-and-doc-drift).
-
-- `metrics.py`: a comment says the background annulus ends at r = 6 px; the code uses 6.5. Another
-  says the position-variance floor is 0.02 px²; the code uses 0.015.
-- `frontend/lib/overlays.ts` hard-codes 6.15″ instead of reading the pixel scale from the API.
-- `SpectrumChart.tsx` band shading edges differ slightly from the detector ranges in `irsa.py`.
+None currently open (the `metrics.py` comments, `overlays.ts` pixel scale, and `SpectrumChart.tsx`
+band edges listed here on 2026-11-15 have been aligned with the code).

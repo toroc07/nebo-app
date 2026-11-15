@@ -142,10 +142,12 @@ test("alignmentFor returns the real row, or a labelled simulated offset", () => 
   };
   assert.equal(alignmentFor(alignment, 1, false)?.status, "ok");
   assert.equal(alignmentFor(alignment, 2, false), null);
-  const sim = alignmentFor(alignment, 1, true)!;
+  const sim = alignmentFor(alignment, 1, true, 6.2)!;
   assert.equal(sim.status, "offset_warning");
   assert.equal(sim.simulated, true);
   assert.equal(sim.stars_used, 12);
+  assert.ok(sim.rms_arcsec !== null);
+  assert.ok(Math.abs(sim.rms_arcsec - Math.hypot(sim.median_dx_px ?? 0, sim.median_dy_px ?? 0) * 6.2) < 1e-9);
 });
 
 test("layerLine explains an empty or failed layer", () => {

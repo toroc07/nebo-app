@@ -67,7 +67,7 @@ def extract_optimal_psf_photometry(
     sub_img = img[y0:y1, x0:x1]
     sub_var = var[y0:y1, x0:x1]
 
-    # Local annulus background (between r=3 and r=6 pixels)
+    # Local annulus background (between r=3 and r=6.5 pixels)
     yy_full, xx_full = np.mgrid[0:h, 0:w]
     dist_full = np.hypot(xx_full - cx, yy_full - cy)
     annulus_mask = (dist_full >= 3.0) & (dist_full <= 6.5) & np.isfinite(img)
@@ -297,7 +297,7 @@ def _weighted_centroid(
 
     cx = float(np.sum(xx * weights) / w_sum)
     cy = float(np.sum(yy * weights) / w_sum)
-    # Positional variance scaled by inverse SNR^2 (floor 0.02 px^2)
+    # Positional variance scaled by inverse SNR^2 (floor 0.015 px^2)
     snr_tot = float(np.sum(img[valid]) / math.sqrt(max(1e-12, float(np.sum(var[valid])))))
     pos_var = max(0.015, 1.0 / max(1.0, snr_tot ** 2))
     cov = np.array([[pos_var, 0.0], [0.0, pos_var]], dtype=np.float64)

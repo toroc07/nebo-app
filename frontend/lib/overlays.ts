@@ -238,6 +238,7 @@ export function alignmentFor(
   alignment: Alignment | null,
   epoch: number,
   simulate: boolean,
+  pixelScaleArcsec = 6.15,
 ): AlignmentEpoch | null {
   const real = alignment?.epochs.find((e) => e.epoch_index === epoch) ?? null;
   if (!simulate) return real;
@@ -248,7 +249,7 @@ export function alignmentFor(
     stars_used: real?.stars_used ?? 0,
     median_dx_px: dx,
     median_dy_px: dy,
-    rms_arcsec: Math.hypot(dx, dy) * 6.15,
+    rms_arcsec: Math.hypot(dx, dy) * pixelScaleArcsec,
     status: "offset_warning",
     simulated: true,
   };

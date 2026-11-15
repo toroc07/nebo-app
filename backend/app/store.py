@@ -556,9 +556,25 @@ class PostgresStore:
 
     @staticmethod
     def _replace_timeline_images_conn(conn: Any, timeline_id: int, images: list[EpochImage]) -> None:
-        conn.execute("DELETE FROM timeline_images WHERE timeline_id = %s", (timeline_id,))
         if not images:
+            conn.execute("DELETE FROM timeline_images WHERE timeline_id = %s", (timeline_id,))
             return
+        # Upsert by (timeline_id, epoch_index, size) and drop only stale keys so partial saves
+        # keep existing image IDs stable.
+        keep_keys = [(i.epoch_index, i.size) for i in images]
+        placeholders = ", ".join(["(%s, %s)"] * len(keep_keys))
+        flat_keys = [v for pair in keep_keys for v in pair]
+        conn.execute(
+            f"""
+            DELETE FROM timeline_images t
+            WHERE t.timeline_id = %s
+              AND NOT EXISTS (
+                  SELECT 1 FROM (VALUES {placeholders}) AS keep(epoch_index, size)
+                  WHERE keep.epoch_index = t.epoch_index AND keep.size = t.size
+              )
+            """,
+            (timeline_id, *flat_keys),
+        )
         with conn.cursor() as cur:
             cur.executemany(
                 """
@@ -567,6 +583,18 @@ class PostgresStore:
                     frames_available, frames_used, width_px, height_px,
                     display_min, display_max, png, npz)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (timeline_id, epoch_index, size) DO UPDATE SET
+                    start_utc = EXCLUDED.start_utc,
+                    end_utc = EXCLUDED.end_utc,
+                    mid_mjd = EXCLUDED.mid_mjd,
+                    frames_available = EXCLUDED.frames_available,
+                    frames_used = EXCLUDED.frames_used,
+                    width_px = EXCLUDED.width_px,
+                    height_px = EXCLUDED.height_px,
+                    display_min = EXCLUDED.display_min,
+                    display_max = EXCLUDED.display_max,
+                    png = EXCLUDED.png,
+                    npz = EXCLUDED.npz
                 """,
                 [
                     (
