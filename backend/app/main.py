@@ -1166,12 +1166,21 @@ def get_patch_metrics(
     if detector is not None:
         tl = store.get_timeline(patch_id, detector)
         if tl is not None and tl.status == "ready":
+            target = store.get_target(patch.target_slug) if patch.target_slug else None
             for img_info in store.list_images(tl.id, "large"):
                 npz = store.get_npz(img_info.id)
                 if npz is None:
                     continue
                 data = np.load(io.BytesIO(npz))
-                phot = metrics.extract_optimal_psf_photometry(data["image"], data["variance"])
+                # Moving targets (Barnard: ~1.7 px/yr) are measured where they are at this epoch.
+                center = None
+                expected = _expected_position(patch, target, img_info.mid_mjd, "large")
+                if expected is not None and expected["in_image"]:
+                    side = data["image"].shape[0]
+                    center = (expected["x"], side - 1 - expected["y"])  # npz rows are unflipped FITS
+                phot = metrics.extract_optimal_psf_photometry(
+                    data["image"], data["variance"], center_xy=center
+                )
                 image_photometry.append({"epoch_index": img_info.epoch_index, "mid_mjd": img_info.mid_mjd, **phot})
     return {
         "patch": bundle["patch"],
