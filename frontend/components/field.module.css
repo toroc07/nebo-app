@@ -176,37 +176,100 @@
   min-width: 0;
 }
 .control > span:first-child {
+  font-size: max(14px, calc(18 * var(--s)));
+  font-weight: 500;
   color: var(--ink);
 }
 .select {
   position: relative;
   display: flex;
 }
-.select select {
-  appearance: none;
+.selectButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
-  min-height: max(40px, calc(44 * var(--s)));
-  padding: 0 calc(1em + 26px) 0 max(10px, calc(14 * var(--s)));
-  color-scheme: dark;
-  font: inherit;
+  min-height: max(42px, calc(46 * var(--s)));
+  padding: 0 max(10px, calc(14 * var(--s))) 0 max(12px, calc(16 * var(--s)));
+  font: 400 max(14px, calc(17 * var(--s))) Plex, sans-serif;
+  text-align: left;
   color: var(--ink);
   background: rgb(6 20 31 / 0.85);
   border: 1px solid rgb(120 190 220 / 0.32);
   border-radius: max(4px, calc(6 * var(--s)));
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.selectButton > span {
+  overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
-.select svg {
-  position: absolute;
-  right: max(10px, calc(14 * var(--s)));
-  top: 50%;
+.selectButton svg {
+  flex: none;
   width: 1.3em;
   height: 1.3em;
-  translate: 0 -50%;
-  color: var(--ink);
-  pointer-events: none;
+  transition: rotate 160ms ease;
 }
-.select select:hover {
-  border-color: var(--cyan-soft);
+.selectButton svg[data-open="true"] {
+  rotate: 180deg;
+}
+.selectButton:hover,
+.selectButton[aria-expanded="true"] {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgb(63 210 255 / 0.35);
+}
+/* The open list is a panel of the same console, not the operating system's grey menu. */
+.listbox {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 280px;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  list-style: none;
+  font: 400 max(14px, calc(16.5 * var(--s))) Plex, sans-serif;
+  background: rgb(5 18 29 / 0.97);
+  border: 1px solid var(--cyan);
+  border-radius: max(5px, calc(7 * var(--s)));
+  box-shadow: 0 0 18px rgb(63 210 255 / 0.35), 0 18px 40px rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(6px);
+  animation: list-open 140ms ease-out both;
+}
+.listbox:focus {
+  outline: none;
+}
+.listbox li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: max(8px, calc(9 * var(--s))) max(10px, calc(12 * var(--s)));
+  border-radius: 4px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.listbox li[data-active="true"] {
+  background: rgb(63 210 255 / 0.16);
+  box-shadow: inset 2px 0 var(--cyan);
+}
+.listbox li[aria-selected="true"] {
+  color: #8fe9ff;
+}
+.listbox li svg {
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  color: var(--cyan);
+}
+@keyframes list-open {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
 }
 
 /* Field image with compass labels and corner brackets. */
@@ -248,6 +311,7 @@
 .image > img {
   width: 100%;
   height: 100%;
+  cursor: crosshair;
   object-fit: contain;
   /* SPHEREx patches are 31–147 px: keep each pixel sharp when enlarged. */
   image-rendering: pixelated;
@@ -274,6 +338,64 @@
     linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 3px var(--b);
   background-repeat: no-repeat;
   filter: drop-shadow(0 0 4px var(--cyan));
+}
+/* Difference view: the reference epoch underneath, the current one blended over it. */
+.image > .reference {
+  position: absolute;
+  inset: 0;
+}
+.image > .differenceLayer {
+  position: relative;
+  mix-blend-mode: difference;
+}
+.image {
+  isolation: isolate;
+}
+.diffToggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  font: 500 max(12px, calc(13 * var(--s))) Plex, sans-serif;
+  color: var(--ink);
+  background: rgb(4 14 22 / 0.78);
+  border: 1px solid rgb(63 210 255 / 0.4);
+  border-radius: 999px;
+}
+.diffToggle svg {
+  width: 1.05em;
+  height: 1.05em;
+}
+.diffToggle[aria-pressed="true"] {
+  color: #02121c;
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+}
+.diffToggle:disabled {
+  opacity: 0.45;
+}
+.readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  max-width: none;
+  margin: 0;
+  padding: 14px 8px 5px;
+  font: max(11px, calc(12 * var(--s))) PlexMono, monospace;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #bfeeff;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.8));
+  pointer-events: none;
 }
 .reticle {
   position: absolute;
@@ -465,9 +587,53 @@
 .counter {
   grid-area: counter;
   align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
   white-space: nowrap;
   font-size: 1.05em;
   font-variant-numeric: tabular-nums;
+}
+.strip {
+  position: relative;
+  height: 18px;
+  margin: 0 8px;
+}
+.stripLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  translate: 0 -50%;
+  background: linear-gradient(90deg, rgb(63 210 255 / 0.15), rgb(63 210 255 / 0.5), rgb(63 210 255 / 0.15));
+}
+.strip button {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  translate: -50% -50%;
+  background: #0b2232;
+  border: 2px solid rgb(63 210 255 / 0.7);
+  border-radius: 50%;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+/* A wider invisible hit area: the dots are small, the target should not be. */
+.strip button::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.strip button:hover {
+  transform: scale(1.3);
+}
+.strip button[aria-current="true"] {
+  background: var(--cyan);
+  border-color: #e6fbff;
+  box-shadow: 0 0 10px var(--cyan);
 }
 .steps {
   grid-area: steps;
@@ -499,7 +665,10 @@
   opacity: 0.4;
 }
 .back:focus-visible,
-.select select:focus-visible,
+.selectButton:focus-visible,
+.image:focus-visible,
+.diffToggle:focus-visible,
+.strip button:focus-visible,
 .compare:focus-visible,
 .steps button:focus-visible,
 .retry:focus-visible {
@@ -507,43 +676,33 @@
   outline-offset: 2px;
 }
 
-/* ---------- Wide screens: the screen sits in the room's bay, tilted like the reference ---------- */
+/* ---------- Wide screens: a flat console fixed in the room's screen bay ---------- */
 @media (min-width: 1024px) and (min-aspect-ratio: 5/4) {
   .stage {
     /*
-     * Cover the viewport with the room, but never so large that the screen
-     * (77.8 % of the art's height, 66.6 % of its width) is cut off.
+     * --S scales the room so it always covers the viewport (no side bands). The screen
+     * uses --s, which is --S capped so the whole console fits on screen, and it is
+     * centred on the room's screen bay (art pixel 1030, 448) wherever the crop falls.
      */
-    --H: min(max(56.28vw, 100dvh), 123dvh, 82vw);
-    --W: calc(var(--H) * 1672 / 941);
-    --s: calc(var(--H) / 941);
-    position: absolute;
-    width: var(--W);
-    height: var(--H);
+    --S: max(calc(100vw / 1672), calc(100dvh / 941));
+    --s: min(var(--S), calc((100dvh - 96px) / 678), calc((100vw - 48px) / 1083));
+    position: fixed;
+    inset: 0;
     min-height: 0;
     padding: 0;
-    /* Centre the screen (not the art) when the viewport crops the room. */
-    left: clamp(100vw - var(--W), 50vw - 0.6393 * var(--W), 0px);
-    top: clamp(100dvh - var(--H), 50dvh - 0.4634 * var(--H), 0px);
   }
   .room {
-    position: absolute;
-    object-fit: fill;
+    object-fit: cover;
+    object-position: 50% 50%;
   }
   .screen {
     position: absolute;
-    left: calc(488.5 * var(--s));
-    top: calc(109 * var(--s));
     width: calc(1083 * var(--s));
     height: calc(678 * var(--s));
+    left: clamp(24px, 50vw + 194 * var(--S) - 541.5 * var(--s), 100vw - 24px - 1083 * var(--s));
+    top: clamp(28px, 50dvh - 22.5 * var(--S) - 339 * var(--s), 100dvh - 12px - 678 * var(--s));
     padding: 0;
-    font-size: max(11px, calc(17 * var(--s)));
-    /*
-     * The reference is photographed at an angle: right edge nearer than the left.
-     * These values map the flat 1083 × 678 screen onto the bay of console-bg.webp.
-     */
-    transform: perspective(calc(1400 * var(--s))) rotateZ(-1.34deg) rotateY(-11deg);
-    transform-style: flat;
+    font-size: max(13px, calc(17 * var(--s)));
   }
   .headerArt {
     top: calc(3 * var(--s));
@@ -588,36 +747,63 @@
     left: calc(64 * var(--s));
     right: calc(50 * var(--s));
     bottom: calc(26 * var(--s));
-    grid-template-columns: calc(430 * var(--s)) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    /*
+     * The image is the protagonist: it owns the whole left column, from the title rule to
+     * the epoch controls. Detector and field size sit above the cards on the right.
+     */
+    grid-template-columns: calc(500 * var(--s)) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "detector size"
+      "viewer detector"
+      "viewer size"
       "viewer cards"
       "timeline timeline";
-    column-gap: calc(46 * var(--s));
+    column-gap: calc(40 * var(--s));
     row-gap: calc(10 * var(--s));
   }
+  /* Label beside the picker: two rows instead of four, so both cards fit beneath. */
+  .detector,
+  .size {
+    flex-direction: row;
+    align-items: center;
+    gap: calc(14 * var(--s));
+  }
+  .detector > span:first-child,
+  .size > span:first-child {
+    flex: none;
+    width: calc(96 * var(--s));
+  }
+  .detector > div,
+  .size > div {
+    flex: 1;
+    min-width: 0;
+  }
+  /* Proportional on the console (mouse screens); the 42 px touch minimum is for phones. */
+  .selectButton {
+    min-height: calc(40 * var(--s));
+    font-size: max(12px, calc(16.5 * var(--s)));
+  }
   .viewer {
-    align-self: start;
-    gap: calc(6 * var(--s)) calc(12 * var(--s));
+    align-self: center;
+    gap: calc(4 * var(--s)) calc(10 * var(--s));
   }
   .image {
-    width: calc(274 * var(--s));
+    width: calc(372 * var(--s));
   }
   .cards {
     padding-top: calc(6 * var(--s));
     gap: calc(10 * var(--s));
   }
   .card h2 {
-    padding: calc(7 * var(--s)) calc(18 * var(--s));
+    padding: calc(6 * var(--s)) calc(18 * var(--s));
     font-size: calc(17 * var(--s));
   }
   .card dl {
-    padding-block: calc(2 * var(--s));
-    font-size: calc(16 * var(--s));
+    padding-block: calc(1 * var(--s));
+    font-size: calc(15.5 * var(--s));
   }
   .card dl > div {
-    padding: calc(4 * var(--s)) 0;
+    padding: calc(2.5 * var(--s)) 0;
   }
   .timeline {
     grid-template-columns: calc(255 * var(--s)) calc(195 * var(--s)) minmax(0, 1fr) auto;
@@ -628,8 +814,8 @@
     row-gap: calc(12 * var(--s));
   }
   .counter {
-    align-self: center;
-    padding-top: calc(28 * var(--s));
+    align-self: end;
+    gap: calc(8 * var(--s));
   }
   .observed {
     white-space: nowrap;
@@ -645,17 +831,141 @@
     min-height: 0;
   }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .screen {
-    animation: screen-on 420ms ease-out both;
+/* ---------- Power phases of the analysis screen ---------- */
+/* Off: the bezel glows faintly, the glass is dark and empty. */
+.screen[data-phase="off"] > :not(.frame),
+.screen[data-phase="boot"] > :not(.frame):not(.boot):not(.back) {
+  opacity: 0;
+  pointer-events: none;
+}
+.screen[data-phase="off"] .frame {
+  opacity: 0.35;
+}
+/* Boot: a CRT line opens the picture, the frame lights up, then the log prints. */
+.screen[data-phase="boot"]::after {
+  content: "";
+  position: absolute;
+  left: 2%;
+  right: 2%;
+  top: 50%;
+  height: 2px;
+  background: #e8fdff;
+  box-shadow: 0 0 14px #9ff3ff, 0 0 40px var(--cyan);
+  animation: crt-line 380ms ease-out both;
+  pointer-events: none;
+}
+.screen[data-phase="boot"] .frame {
+  animation: frame-on 600ms steps(6, end) both;
+}
+.boot {
+  position: absolute;
+  inset: 18% 14%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: max(10px, calc(16 * var(--s)));
+  font: max(12px, calc(16 * var(--s))) / 1.5 PlexMono, monospace;
+  color: #9eeaff;
+  animation: boot-in 200ms ease-out 300ms both;
+}
+.bootTitle {
+  max-width: none;
+  margin: 0;
+  font: italic 700 max(16px, calc(26 * var(--s))) Barlow, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 12px rgb(63 210 255 / 0.7);
+}
+.boot ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.boot li {
+  opacity: 0;
+  animation: boot-line 1ms linear both;
+}
+.boot li::before {
+  content: "> ";
+  color: var(--cyan);
+}
+/* Lines print one after another, like a terminal. */
+.boot li:nth-child(1) { animation-delay: 420ms; }
+.boot li:nth-child(2) { animation-delay: 620ms; }
+.boot li:nth-child(3) { animation-delay: 820ms; }
+.boot li:nth-child(4) { animation-delay: 1000ms; }
+.boot li:nth-child(5) { animation-delay: 1180ms; }
+.bootBar {
+  display: block;
+  height: 4px;
+  background: rgb(63 210 255 / 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bootBar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), #e6fbff);
+  box-shadow: 0 0 10px var(--cyan);
+  transform-origin: left;
+  animation: boot-bar 1250ms cubic-bezier(0.4, 0, 0.2, 1) 400ms both;
+}
+/* On: the content arrives with a short flicker. */
+.screen[data-phase="on"] > :not(.frame) {
+  animation: content-on 420ms ease-out both;
+}
+/* Shutdown: the picture collapses to a line and goes dark, like a CRT. */
+.screen[data-phase="shutdown"] {
+  animation: crt-off 300ms ease-in both;
+}
+@keyframes crt-line {
+  0% { transform: scaleX(0); opacity: 1; }
+  45% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(1) scaleY(260); opacity: 0; }
+}
+@keyframes frame-on {
+  from { opacity: 0.2; }
+  to { opacity: 1; }
+}
+@keyframes boot-in {
+  from { opacity: 0; }
+}
+@keyframes boot-line {
+  to { opacity: 1; }
+}
+@keyframes boot-bar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes content-on {
+  0% { opacity: 0; filter: brightness(1.8); }
+  40% { opacity: 0.8; }
+  55% { opacity: 0.45; }
+  100% { opacity: 1; filter: none; }
+}
+@keyframes crt-off {
+  0% { transform: none; filter: brightness(1); }
+  55% { transform: scaleY(0.01); filter: brightness(2.5); }
+  100% { transform: scaleX(0) scaleY(0.01); filter: brightness(3); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screen,
+  .screen > *,
+  .screen::after,
+  .boot,
+  .boot li,
+  .bootBar i,
+  .frame {
+    animation: none !important;
+  }
+  .boot li {
+    opacity: 1;
   }
 }
-:global(html[data-reduced="true"]) .screen {
-  animation: none;
-}
-@keyframes screen-on {
-  from {
-    opacity: 0;
-    filter: brightness(1.8);
-  }
+:global(html[data-reduced="true"]) .screen,
+:global(html[data-reduced="true"]) .screen > *,
+:global(html[data-reduced="true"]) .screen::after {
+  animation: none !important;
 }

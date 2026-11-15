@@ -85,10 +85,21 @@ export default function Sky({
           target: "269.446 4.769",
           fov: 180,
           projection: "AIT",
+          // The cockpit is the interface: Aladin's own widgets (frame picker, coordinate box,
+          // layers, projection, zoom, status bar) would break the scene. Every one of these is
+          // covered by a cockpit control; the coordinate grid is a toggle in CATALOGS.
           showFullscreenControl: false,
           showShareControl: false,
           showSimbadPointerControl: false,
-          showCooGridControl: true,
+          showCooGridControl: false,
+          showLayersControl: false,
+          showSettingsControl: false,
+          showProjectionControl: false,
+          showZoomControl: false,
+          showFrame: false,
+          showFov: false,
+          showCooLocation: false,
+          showStatusBar: false,
         });
         // HiPS cubes load through newImageSurvey, as in the Aladin Lite 3D examples.
         viewer.current!.setImageLayer(

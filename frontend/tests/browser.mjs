@@ -90,6 +90,11 @@ await page.route("**/api/v1/**", async (route) => {
   });
 });
 await page.goto(process.env.NEBO_TEST_URL || "http://127.0.0.1:3001");
+// The field console uses its own listbox (styled like the ship), not a native <select>.
+const pickFieldSize = async (label) => {
+  await page.getByRole("button", { name: /^Field size/ }).click();
+  await page.getByRole("option", { name: label, exact: true }).click();
+};
 await page.evaluate(() => document.fonts.ready);
 await page.waitForFunction(() => document.documentElement.dataset.theme);
 assert.equal(await page.locator(".nav").count(), 0);
@@ -144,7 +149,7 @@ assert.doesNotMatch(
 );
 await page.screenshot({ path: out + "field-mobile.png", fullPage: true });
 mode = "single";
-await page.getByLabel("Field size").selectOption("small");
+await pickFieldSize("3 arcminutes");
 await page.getByText("Only one epoch is available", { exact: false }).waitFor();
 assert.ok(
   await page
@@ -152,14 +157,14 @@ assert.ok(
     .isDisabled(),
 );
 mode = "empty";
-await page.getByLabel("Field size").selectOption("large");
+await pickFieldSize("15 arcminutes");
 await page
   .getByText("This field has no epochs available yet.", {
     exact: false,
   })
   .waitFor();
 mode = "error";
-await page.getByLabel("Field size").selectOption("medium");
+await pickFieldSize("6 arcminutes");
 await page.getByText(/The database is not configured yet/).waitFor();
 // The field console replaces the site header (as in the design), so leave it with Back:
 // field → coordinates form → Observe → Home.

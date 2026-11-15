@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useState, type PointerEvent, type Ref } from "react";
 import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowUpDown,
-  ChevronDown,
+  Contrast,
   ChevronLeft,
   ChevronRight,
   Crosshair,
@@ -26,6 +26,8 @@ import {
   type Building,
 } from "@/lib/api";
 import { decToParts, raToParts } from "@/lib/coordinates";
+import { pixelToSky } from "@/lib/lab/sky";
+import ConsoleSelect from "./ConsoleSelect";
 import s from "./field.module.css";
 
 const stages: Record<string, string> = {
@@ -62,6 +64,7 @@ export default function Field({
   recommended,
   speed,
   reduced,
+  powered = true,
 }: {
   query: Query;
   target: Target | null;
@@ -71,6 +74,11 @@ export default function Field({
   recommended: number;
   speed: number;
   reduced: boolean;
+  /**
+   * Whether the analysis screen is switched on. The page turns it off while the camera
+   * turns towards or away from it; switching it on plays the boot sequence.
+   */
+  powered?: boolean;
 }) {
   const [detector, setDetector] = useState(recommended),
     [size, setSize] = useState("medium"),
@@ -177,6 +185,24 @@ export default function Field({
     setImageError(false);
     setImageLoading(true);
   }, [current?.image_url, reload]);
+  const [cursor, setCursor] = useState<{ ra: number; dec: number; x: number; y: number } | null>(null);
+  const [difference, setDifference] = useState(false);
+  const [pixels, setPixels] = useState<{ w: number; h: number } | null>(null);
+  const [phase, setPhase] = useState<"off" | "boot" | "on" | "shutdown">(() =>
+    powered ? (reduced ? "on" : "boot") : "off",
+  );
+  useEffect(() => {
+    if (powered) {
+      if (reduced) return setPhase("on");
+      setPhase("boot");
+      // Matches the boot animation in field.module.css (CRT line + initialising log).
+      const id = setTimeout(() => setPhase("on"), 1700);
+      return () => clearTimeout(id);
+    }
+    setPhase((p) => (p === "off" ? "off" : "shutdown"));
+    const id = setTimeout(() => setPhase("off"), 320);
+    return () => clearTimeout(id);
+  }, [powered, reduced]);
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
   const count = data?.epochs.length ?? 0;
   const canCompare = count > 1 && !imageError;
@@ -185,6 +211,24 @@ export default function Field({
     setPlaying(false);
     setEpoch((e) => (e + direction + count) % count);
   }
+
+  /** Sky position under the pointer: the image is the patch, one pixel = pixel_scale_arcsec. */
+  function readCursor(e: PointerEvent<HTMLDivElement>) {
+    const img = e.currentTarget.querySelector<HTMLImageElement>("img[data-epoch]");
+    if (!data || !pixels || !img) return;
+    const r = img.getBoundingClientRect();
+    const x = Math.floor(((e.clientX - r.left) / r.width) * pixels.w);
+    const y = Math.floor(((e.clientY - r.top) / r.height) * pixels.h);
+    if (x < 0 || y < 0 || x >= pixels.w || y >= pixels.h) return setCursor(null);
+    const sky = pixelToSky(
+      { ra: data.patch.ra, dec: data.patch.dec, width: pixels.w, height: pixels.h, scaleArcsec: data.size.pixel_scale_arcsec },
+      x,
+      y,
+    );
+    setCursor({ ...sky, x, y });
+  }
+  const reference = data?.epochs[0];
+  const showDifference = difference && !!reference && epoch > 0;
 
   // The patch centre once the API answers; before that, the requested position.
   const center =
@@ -199,13 +243,22 @@ export default function Field({
     <section className={s.scene} data-console="field" aria-labelledby="field-title">
       <div className={s.stage}>
         <img className={s.room} src="/panels/console-bg.webp" alt="" aria-hidden="true" draggable={false} />
-        <div className={s.screen}>
+        <div className={s.screen} data-phase={phase}>
           <svg className={s.frame} viewBox="0 0 1083 678" preserveAspectRatio="none" aria-hidden="true">
             {/* Chamfered outline from the reference; the gap at top-left holds the Back tab. */}
             <path className={s.frameLine} d="M150 0H1030L1083 44V630L1035 678H40L0 636V44L44 0H54" />
             <path className={s.frameRule} d="M0 96H1083" />
           </svg>
           <img className={s.headerArt} src="/panels/console-header.webp" alt="" aria-hidden="true" />
+          {phase === "boot" && (
+            <BootLog
+              name={title}
+              band={`D${detector} · ${band.range} µm`}
+              status={
+                error ? "service unavailable" : data ? `${count} epoch${count === 1 ? "" : "s"} ready` : "fetching…"
+              }
+            />
+          )}
 
           <button type="button" className={s.back} onClick={onBack}>
             <ArrowLeft aria-hidden="true" /> Back
@@ -218,31 +271,44 @@ export default function Field({
           </header>
 
           <div className={s.body}>
-            <label className={`${s.control} ${s.detector}`}>
-              <span>Detector</span>
-              <Select value={detector} onChange={(v) => setDetector(Number(v))}>
-                {bands.map((b, i) => (
-                  <option value={i + 1} key={b.range}>
-                    D{i + 1} · {b.range} µm · {b.use}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className={`${s.control} ${s.size}`}>
-              <span>Field size</span>
-              <Select value={size} onChange={setSize}>
-                <option value="small">3 arcminutes</option>
-                <option value="medium">6 arcminutes</option>
-                <option value="large">15 arcminutes</option>
-              </Select>
-            </label>
+            <ConsoleSelect
+              className={s.detector}
+              label="Detector"
+              value={String(detector)}
+              onChange={(v) => setDetector(Number(v))}
+              options={bands.map((b, i) => ({ value: String(i + 1), label: `D${i + 1} · ${b.range} µm · ${b.use}` }))}
+            />
+            <ConsoleSelect
+              className={s.size}
+              label="Field size"
+              value={size}
+              onChange={setSize}
+              options={[
+                { value: "small", label: "3 arcminutes" },
+                { value: "medium", label: "6 arcminutes" },
+                { value: "large", label: "15 arcminutes" },
+              ]}
+            />
 
             <div className={s.viewer}>
               <span className={`${s.compass} ${s.north}`} aria-hidden="true">N ↑</span>
               <span className={`${s.compass} ${s.south}`} aria-hidden="true">S ↓</span>
               <span className={`${s.compass} ${s.east}`} aria-hidden="true">E ←</span>
               <span className={`${s.compass} ${s.west}`} aria-hidden="true">→ W</span>
-              <div className={s.image}>
+              <div
+                className={s.image}
+                tabIndex={current ? 0 : -1}
+                aria-label={current ? "Field image. Left and right arrows change the epoch." : undefined}
+                onPointerMove={readCursor}
+                onPointerLeave={() => setCursor(null)}
+                onKeyDown={(e) => {
+                  if (!canCompare) return;
+                  if (e.key === "ArrowRight") stepEpoch(1);
+                  else if (e.key === "ArrowLeft") stepEpoch(-1);
+                  else return;
+                  e.preventDefault();
+                }}
+              >
                 <span className={s.brackets} aria-hidden="true" />
                 {error ? (
                   <div className={s.message} role="alert">
@@ -294,12 +360,25 @@ export default function Field({
                   </div>
                 ) : (
                   <>
+                    {/*
+                      * Difference view: the current epoch is blended over the first one with
+                      * `difference`, so unchanged sky goes black and only brightness changes glow.
+                      * All epochs of a field share one display scale, so the subtraction is fair.
+                      */}
+                    {showDifference && (
+                      <img className={s.reference} src={imageUrl(reference.image_url)} alt="" aria-hidden="true" />
+                    )}
                     <img
+                      data-epoch
+                      className={showDifference ? s.differenceLayer : undefined}
                       src={currentUrl}
-                      alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}`}
+                      alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}${showDifference ? ", shown as the difference from the first epoch" : ""}`}
                       width={420}
                       height={420}
-                      onLoad={() => setImageLoading(false)}
+                      onLoad={(e) => {
+                        setImageLoading(false);
+                        setPixels({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
+                      }}
                       onError={() => {
                         setImageError(true);
                         setImageLoading(false);
@@ -313,6 +392,25 @@ export default function Field({
                     )}
                     {/* The patch centre is the central pixel, which is where the target sits. */}
                     <span className={s.reticle} aria-hidden="true" />
+                    <button
+                      type="button"
+                      className={s.diffToggle}
+                      aria-pressed={difference}
+                      disabled={count < 2}
+                      title="Show what changed since the first epoch"
+                      onClick={() => setDifference((d) => !d)}
+                    >
+                      <Contrast aria-hidden="true" /> Difference
+                    </button>
+                    <p className={s.readout} aria-live="off">
+                      {cursor
+                        ? `x ${cursor.x}, y ${cursor.y} · RA ${cursor.ra.toFixed(4)}° · Dec ${cursor.dec >= 0 ? "+" : "−"}${Math.abs(cursor.dec).toFixed(4)}°`
+                        : difference
+                          ? epoch === 0
+                            ? "Epoch 1 is the reference: step to another epoch"
+                            : "Difference from epoch 1 · bright = changed"
+                          : "Hover the image to read a position"}
+                    </p>
                   </>
                 )}
               </div>
@@ -408,17 +506,31 @@ export default function Field({
                     ? "Compare epochs"
                     : `Loading epochs ${preloaded}/${count}`}
               </button>
-              <label className={`${s.control} ${s.interval}`}>
-                <span>Interval</span>
-                <Select value={interval} onChange={(v) => setIntervalMs(Number(v))}>
-                  <option value="400">0.4 seconds</option>
-                  <option value="800">0.8 seconds</option>
-                  <option value="1500">1.5 seconds</option>
-                </Select>
-              </label>
-              <span className={s.counter} aria-live="polite">
-                {count ? `Epoch ${epoch + 1} of ${count}` : "Epoch —"}
-              </span>
+              <ConsoleSelect
+                className={s.interval}
+                label="Interval"
+                value={String(interval)}
+                onChange={(v) => setIntervalMs(Number(v))}
+                options={[
+                  { value: "400", label: "0.4 seconds" },
+                  { value: "800", label: "0.8 seconds" },
+                  { value: "1500", label: "1.5 seconds" },
+                ]}
+              />
+              <div className={s.counter}>
+                <span aria-live="polite">{count ? `Epoch ${epoch + 1} of ${count}` : "Epoch —"}</span>
+                {count > 1 && (
+                  // One mark per epoch, spaced by date, so the gaps between visits are visible.
+                  <EpochStrip
+                    epochs={data!.epochs}
+                    current={epoch}
+                    onPick={(i) => {
+                      setPlaying(false);
+                      setEpoch(i);
+                    }}
+                  />
+                )}
+              </div>
               <div className={s.steps}>
                 <button type="button" aria-label="Previous epoch" disabled={!canCompare} onClick={() => stepEpoch(-1)}>
                   <ChevronLeft aria-hidden="true" />
@@ -435,22 +547,56 @@ export default function Field({
   );
 }
 
-function Select({
-  value,
-  onChange,
-  children,
-}: {
-  value: string | number;
-  onChange: (v: string) => void;
-  children: ReactNode;
-}) {
+/**
+ * What the analysis screen prints while it powers up. Every line states something real
+ * (target, band, what the archive answered), so the wait is informative, not decoration.
+ */
+function BootLog({ name, band, status }: { name: string; band: string; status: string }) {
   return (
-    <span className={s.select}>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {children}
-      </select>
-      <ChevronDown aria-hidden="true" />
-    </span>
+    <div className={s.boot} role="status" aria-label="Initialising the analysis console">
+      <p className={s.bootTitle}>Nebo · analysis console</p>
+      <ol>
+        <li>Initialising display…</li>
+        <li>Linking SPHEREx archive…</li>
+        <li>Target: {name}</li>
+        <li>Detector {band}</li>
+        <li>Epochs: {status}</li>
+      </ol>
+      <span className={s.bootBar} aria-hidden="true">
+        <i />
+      </span>
+    </div>
+  );
+}
+
+/** Clickable timeline of the epochs, placed by observation date. */
+function EpochStrip({
+  epochs,
+  current,
+  onPick,
+}: {
+  epochs: { start_utc: string; end_utc: string }[];
+  current: number;
+  onPick: (i: number) => void;
+}) {
+  const times = epochs.map((e) => new Date(e.start_utc).getTime());
+  const first = Math.min(...times);
+  const span = Math.max(1, Math.max(...times) - first);
+  return (
+    <div className={s.strip} role="group" aria-label="Epochs by date">
+      <span className={s.stripLine} aria-hidden="true" />
+      {epochs.map((e, i) => (
+        <button
+          key={e.start_utc + i}
+          type="button"
+          style={{ left: `${((times[i] - first) / span) * 100}%` }}
+          aria-label={`Epoch ${i + 1}: ${epochDateRange(e.start_utc, e.end_utc)}`}
+          aria-current={i === current}
+          title={epochDateRange(e.start_utc, e.end_utc)}
+          onClick={() => onPick(i)}
+        />
+      ))}
+    </div>
   );
 }
 
