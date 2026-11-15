@@ -36,6 +36,7 @@ import {
   releaseLabel,
   coverageLabel,
   epochWarnings,
+  centerFlags,
   latitudeLabel,
   qualityLabel,
   warningLabel,
@@ -462,6 +463,7 @@ export default function Field({
         }
       : undefined;
   const warnings = epochWarnings(current);
+  const flags = centerFlags(current);
   const detail = selected && detailFor(selected);
   const imageSize = pixels ? { width: pixels.w, height: pixels.h } : null;
   const layerButtons = [
@@ -1029,6 +1031,24 @@ export default function Field({
                     <div className={s.wide}>
                       <dt>Images</dt>
                       <dd>{qualityLabel(current)}</dd>
+                    </div>
+                  )}
+                  {flags && (
+                    <div className={s.wide}>
+                      <dt>Flags at centre</dt>
+                      <dd>
+                        {flags.length === 0 ? (
+                          `None in ${current?.quality?.center_flags_checked_frames} images`
+                        ) : (
+                          <ul className={s.epochNotes} aria-label="Contamination flags at the centre mark">
+                            {flags.map((f) => (
+                              <li key={f.name}>
+                                <b>{f.name}</b> {f.frames}/{f.of} images · {f.text}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </dd>
                     </div>
                   )}
                   {warnings.length > 0 && (

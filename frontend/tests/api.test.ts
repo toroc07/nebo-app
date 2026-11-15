@@ -10,6 +10,7 @@ import {
   diffImageUrl,
   rgbImageUrl,
   qualityLabel,
+  centerFlags,
   epochWarnings,
   warningLabel,
   latitudeLabel,
@@ -289,4 +290,22 @@ test("stackImageUrl sends the epochs sorted and once each", () => {
   assert.equal(url.searchParams.get("epochs"), "0,2");
   assert.equal(url.searchParams.get("detector"), "3");
   assert.equal(url.searchParams.get("target"), "barnards-star");
+});
+
+test("center flags list the contamination flags seen, [] when clean, null when unknown", () => {
+  const base = { frames_used: 16, frames_available: 16, clean_fraction: 1, flagged_fraction: 0, saturated_frames: 0 };
+  assert.equal(centerFlags(epochFixture({ quality: base })), null);
+  assert.deepEqual(
+    centerFlags(epochFixture({ quality: { ...base, center_flags: {}, center_flags_checked_frames: 16 } })),
+    [],
+  );
+  const flags = centerFlags(
+    epochFixture({ quality: { ...base, center_flags: { PERSIST: 3, NEWFLAG: 1 }, center_flags_checked_frames: 16 } }),
+  );
+  assert.deepEqual(
+    flags?.map((f) => [f.name, f.frames, f.of]),
+    [["PERSIST", 3, 16], ["NEWFLAG", 1, 16]],
+  );
+  assert.match(flags![0].text, /afterglow/);
+  assert.equal(flags![1].text, "pixel flag");
 });

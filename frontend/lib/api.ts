@@ -46,6 +46,9 @@ export type EpochQuality = {
   /** Frames with OVERFLOW/SUR_ERROR at the centre mark, out of the frames checked. */
   saturated_frames: number;
   saturation_checked_frames?: number;
+  /** Frames whose centre pixel carries each SPHEREx FLAGS bit, e.g. {PERSIST: 3}; only flags seen. */
+  center_flags?: Record<string, number>;
+  center_flags_checked_frames?: number;
 };
 export type EpochWarning = {
   code: "few_frames" | "dense_field" | "saturation" | "mixed_bursts" | (string & {});
@@ -487,6 +490,36 @@ const WARNING_LABELS: Record<string, string> = {
   saturation: "Saturation",
   mixed_bursts: "Mixed bursts",
 };
+// Plain-English meaning of the SPHEREx pixel flags (Explanatory Supplement, Table 16).
+const FLAG_DESCRIPTIONS: Record<string, string> = {
+  OVERFLOW: "the detector overflowed (saturated)",
+  SUR_ERROR: "the brightness ramp could not be fit, often saturation",
+  NONFUNC: "non-functional pixel",
+  DICHROIC: "affected by the dichroic filter artifact",
+  MISSING_DATA: "no data",
+  HOT: "hot pixel",
+  COLD: "low-response pixel",
+  PHANMISS: "phantom (electronic ghost) correction missing",
+  NONLINEAR: "outside the reliable linear range",
+  PERSIST: "afterglow of a bright source from an earlier exposure",
+  BLOOM: "charge spilling over from a saturated neighbour",
+  SNOWBALL: "cosmic-ray 'snowball' hit",
+  HALO: "inside the halo of a bright star",
+};
+/**
+ * Contamination flags at the centre mark of the epoch, as {name, frames, of, text}; [] when the
+ * checked frames are clean, null when the API sent nothing to check.
+ */
+export function centerFlags(epoch?: Epoch | null) {
+  const q = epoch?.quality;
+  if (!q?.center_flags || !q.center_flags_checked_frames) return null;
+  return Object.entries(q.center_flags).map(([name, frames]) => ({
+    name,
+    frames,
+    of: q.center_flags_checked_frames as number,
+    text: FLAG_DESCRIPTIONS[name] ?? "pixel flag",
+  }));
+}
 /** Short chip label of a warning code; unknown codes from a newer API still show. */
 export function warningLabel(code: string) {
   return WARNING_LABELS[code] ?? "Note";
