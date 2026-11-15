@@ -47,12 +47,21 @@ export default function HomeScene({
     <section className={s.scene} data-scene="home" aria-labelledby="home-title" style={bayStyle}>
       <img className={s.room} src="/panels/home-bg.webp" alt="" aria-hidden="true" draggable={false} />
       <div className={s.screen} data-off={off || undefined}>
+        <img
+          className={s.logo}
+          src="/brand/nebo-logo-cyan.png"
+          alt=""
+          aria-hidden="true"
+          width={504}
+          height={393}
+          draggable={false}
+        />
         <header className={s.header}>
           <p className={s.status}>
             <span aria-hidden="true" /> Landed · Earth · systems ready
           </p>
           <h1 id="home-title" ref={headingRef} tabIndex={-1}>
-            <img className={s.logo} src="/brand/nebo-logo.png" alt="Nebo" width={827} height={524} />
+            Nebo<span>.</span>
           </h1>
           <p className={s.tagline}>The infrared sky of SPHEREx, epoch by epoch.</p>
         </header>

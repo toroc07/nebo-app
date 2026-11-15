@@ -59,13 +59,19 @@
   background: radial-gradient(90% 80% at 35% 40%, rgb(63 210 255 / 0.13), transparent 70%);
   mix-blend-mode: screen;
 }
+/* Decorative mark in the top-right corner of the screen; the h1 carries the name. */
 .logo {
-  display: block;
-  height: max(96px, calc(170 * var(--S)));
+  position: absolute;
+  top: calc(22 * var(--S));
+  right: calc(28 * var(--S));
+  height: max(44px, calc(84 * var(--S)));
   width: auto;
-  /* The PNG has wide transparent margins around the mark: pull them out of the layout. */
-  margin: calc(-20 * var(--S)) 0 calc(-30 * var(--S)) calc(-48 * var(--S));
-  filter: drop-shadow(0 0 calc(10 * var(--S)) rgb(160 120 255 / 0.45));
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 0 calc(10 * var(--S)) rgb(63 210 255 / 0.35));
+}
+.header h1 span {
+  color: var(--cyan);
 }
 /* START pressed: the picture collapses to a line and goes dark before the camera turns. */
 .screen[data-off] {
@@ -191,6 +197,11 @@
     padding: 20px;
     font-size: 14px;
     --cut: 14px;
+  }
+  .logo {
+    top: 12px;
+    right: 14px;
+    height: 36px;
   }
   /* Here the panel is not on the art's screen, so it needs its own glass to stay legible. */
   .screen::before {
