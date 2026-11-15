@@ -593,9 +593,6 @@ export default function Nebo() {
             headingRef={heading}
             onStart={startJourney}
             onTutorial={() => go("Tutorial")}
-            onFeatured={() => go("Featured objects")}
-            onCoordinates={() => go("Coordinates")}
-            onSettings={() => go("Settings")}
           />
         ) : (
           <>

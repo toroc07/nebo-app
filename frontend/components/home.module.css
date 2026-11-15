@@ -147,32 +147,8 @@
   border-color: var(--cyan);
   box-shadow: 0 0 14px rgb(63 210 255 / 0.4);
 }
-.shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(6 * var(--S)) calc(18 * var(--S));
-}
-.shortcuts button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0;
-  font-size: max(12px, calc(12.5 * var(--S)));
-  color: var(--muted);
-  background: transparent;
-}
-.shortcuts svg {
-  width: 1.1em;
-  height: 1.1em;
-  color: var(--cyan);
-}
-.shortcuts button:hover {
-  color: var(--ink);
-}
 .start:focus-visible,
-.tutorial:focus-visible,
-.shortcuts button:focus-visible {
+.tutorial:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
