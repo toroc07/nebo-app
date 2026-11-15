@@ -382,18 +382,21 @@ export default function Nebo() {
      * which clipped the walls and needed dark masks at their edges.
      */
     const vw = window.innerWidth;
-    // The corner's last 9 % fades out over the screen's left edge (and its first 9 %, offset by
-    // a negative margin, over the cockpit's right edge), so the strip advances 82 % of its width.
-    const span = corner.offsetWidth * 0.82;
+    // turn-corner.webp is 1536 × 1024: its left 600 px repeat the cockpit's right edge, its right
+    // 600 px the room's left edge (both at their on-screen scale for 16:9), and the 336 px
+    // between were painted to join them. It overlays both live views where they match.
+    const scale = corner.offsetHeight / 1024;
+    const overlap = 600 * scale;
+    const gap = 336 * scale;
     const right = turn === "right";
-    // Pan positions (px): the cockpit at 0, the corner just right of it, the screen after both.
-    const start = right ? 0 : -(vw + span);
-    const end = right ? -(vw + span) : 0;
+    // Strip offsets from the cockpit's x: corner at vw − overlap, screen at vw + gap.
+    const start = right ? 0 : -(vw + gap);
+    const end = right ? -(vw + gap) : 0;
     const timeline = gsap.timeline({ onComplete: finish, defaults: { duration: 1.25, ease: "power2.inOut" } });
     timeline
       .fromTo(explorer, { x: start }, { x: end }, 0)
-      .fromTo(corner, { x: start + vw }, { x: end + vw }, 0)
-      .fromTo(field, { x: start + vw + span }, { x: end + vw + span }, 0);
+      .fromTo(corner, { x: start + vw - overlap }, { x: end + vw - overlap }, 0)
+      .fromTo(field, { x: start + vw + gap }, { x: end + vw + gap }, 0);
     return () => {
       timeline.kill();
     };
