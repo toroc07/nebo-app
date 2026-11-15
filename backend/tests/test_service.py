@@ -402,3 +402,16 @@ def test_failed_rebuild_keeps_the_old_exposures_with_the_old_images(monkeypatch)
     with pytest.raises(RuntimeError):
         service.rebuild_now(patch, 3)
     assert store.list_nasa_sector_exposures(patch.id, detector=3) == before
+
+
+def test_partial_render_skips_npz_final_keeps_it():
+    from app.service import _Processed, render_epoch_images
+
+    records = make_records([60914.0])
+    side = imaging.grid_pixels(config.SIZES_DEG["large"])
+    frame = np.random.default_rng(0).normal(size=(side, side))
+    processed = [_Processed(epoch=0, image=frame, variance=np.ones_like(frame), exposure_row=None)]
+    partial = render_epoch_images(records, [[0]], processed, final=False)
+    final = render_epoch_images(records, [[0]], processed)
+    assert all(i.npz is None for i in partial) and len(partial) == len(final)
+    assert any(i.npz for i in final)

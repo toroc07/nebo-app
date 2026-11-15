@@ -13,6 +13,8 @@ import io
 import logging
 import random
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,6 +110,8 @@ SIA_SEARCH_RADIUS_DEG = 0.0001
 QUERY_TIMEOUT_S = (10, 60)
 TAP_ATTEMPTS = 2
 SIA_ATTEMPTS = 3
+# If TAP has not answered after this long, ask SIA in parallel and take whichever succeeds first.
+TAP_HEDGE_S = 20.0
 
 
 class IrsaQueryError(RuntimeError):
@@ -175,11 +179,31 @@ def query_frames(ra: float, dec: float, detector: int) -> list[FrameRecord]:
     goes down under load (it answered 502 for hours during the hackathon), so when it keeps
     failing the same list is requested from the SIA service, which lags about one day.
     """
+    pool = ThreadPoolExecutor(2, thread_name_prefix="irsa-q")
     try:
-        return _with_retries("TAP", TAP_ATTEMPTS, lambda: _query_frames_tap(ra, dec, detector))
-    except Exception as tap_error:
-        log.warning("IRSA TAP unavailable (%s); falling back to SIA", tap_error)
-        return _with_retries("SIA", SIA_ATTEMPTS, lambda: _query_frames_sia(ra, dec, detector))
+        tap = pool.submit(
+            _with_retries, "TAP", TAP_ATTEMPTS, lambda: _query_frames_tap(ra, dec, detector)
+        )
+        try:
+            return tap.result(timeout=TAP_HEDGE_S)
+        except FutureTimeout:
+            log.info("IRSA TAP slow (>%.0f s); also asking SIA", TAP_HEDGE_S)
+        except Exception as tap_error:
+            log.warning("IRSA TAP unavailable (%s); falling back to SIA", tap_error)
+            return _with_retries("SIA", SIA_ATTEMPTS, lambda: _query_frames_sia(ra, dec, detector))
+        sia = pool.submit(
+            _with_retries, "SIA", SIA_ATTEMPTS, lambda: _query_frames_sia(ra, dec, detector)
+        )
+        pending, error = {tap, sia}, None
+        while pending:
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for future in sorted(done, key=lambda f: f is not tap):  # TAP wins a tie: fresher
+                if future.exception() is None:
+                    return future.result()
+                error = future.exception()
+        raise error
+    finally:
+        pool.shutdown(wait=False)  # a slow loser must not hold up the answer
 
 
 def _query_frames_sia(ra: float, dec: float, detector: int) -> list[FrameRecord]:

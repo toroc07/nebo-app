@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import io
+from contextlib import asynccontextmanager
 import logging
 import time
 from typing import Any, Literal
@@ -29,11 +30,29 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 API_PREFIX = "/api/v1"
 RETRY_AFTER_S = 5
+# Early stages change quickly: poll faster so the first image shows as soon as it exists.
+FAST_RETRY_AFTER_S = 2
+FAST_STAGES = ("queued", "querying", "downloading", "first_light")
+
+
+def retry_after_for(stage: str | None) -> int:
+    return FAST_RETRY_AFTER_S if stage in FAST_STAGES else RETRY_AFTER_S
 BUSY_RETRY_AFTER_S = 30
 DEFAULT_DETECTOR = 3
 SizeName = Literal["small", "medium", "large"]
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Create the service (and open the DB pool) at startup so the first search is not slower."""
+    try:
+        get_service(get_store())
+    except Exception as error:  # No DB yet: the endpoints answer 503 on their own.
+        logging.getLogger(__name__).info("Warm-up skipped: %s", error)
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Nebo API",
     version="0.2.0",
     description=(
@@ -212,7 +231,7 @@ def timeline_payload(view: TimelineView, size: str, store: Store) -> dict:
                 "epochs_ready": len(epochs),
                 "is_partial": True,
             },
-            "retry_after_s": RETRY_AFTER_S,
+            "retry_after_s": retry_after_for(timeline.stage),
         }
 
     side_px = view.images[0].width_px if view.images else None
@@ -328,10 +347,12 @@ def get_timeline(
                     "processed_at": view.timeline.updated_at.isoformat(),
                 },
             },
-            headers={"Retry-After": str(RETRY_AFTER_S)},
+            headers={"Retry-After": str(retry_after_for(view.timeline.stage))},
         )
     return JSONResponse(
-        status_code=202, content=payload, headers={"Retry-After": str(RETRY_AFTER_S)}
+        status_code=202,
+        content=payload,
+        headers={"Retry-After": str(retry_after_for(view.timeline.stage))},
     )
 
 

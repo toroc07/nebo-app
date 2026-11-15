@@ -11,6 +11,7 @@ import hashlib
 import logging
 import math
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -278,9 +279,14 @@ def _build_exposure_row(
 
 
 def render_epoch_images(
-    records: list[irsa.FrameRecord], epochs: list[list[int]], processed: list[_Processed]
+    records: list[irsa.FrameRecord],
+    epochs: list[list[int]],
+    processed: list[_Processed],
+    final: bool = True,
 ) -> list[EpochImage]:
     """Co-add each epoch on the large grid, crop every size and render the PNGs.
+
+    ``final=False`` is for the previews saved mid-build: it skips the npz and the hole fill.
 
     Display limits are shared by all epochs and sizes, so a blink compares like with like.
     """
@@ -290,8 +296,8 @@ def render_epoch_images(
         if members:
             frames, variances = [m.image for m in members], [m.variance for m in members]
             stacked, stacked_variance = imaging.coadd(frames, variances)
-            npz = imaging.to_npz(stacked, stacked_variance)
-            coadds.append((epoch, imaging.fill_enclosed_holes(stacked), npz))
+            npz = imaging.to_npz(stacked, stacked_variance) if final else None
+            coadds.append((epoch, imaging.fill_enclosed_holes(stacked) if final else stacked, npz))
 
     # One stretch for every size (taken from the largest), so changing size keeps the contrast.
     largest = max(config.SIZES_DEG, key=config.SIZES_DEG.get)
@@ -322,6 +328,9 @@ def render_epoch_images(
                 )
             )
     return images
+
+
+PROGRESS_WRITE_MIN_S = 0.5
 
 
 class TimelineService:
@@ -448,6 +457,7 @@ class TimelineService:
 
     def _build(self, patch: Patch, timeline: Timeline, refresh_frames: bool = False) -> None:
         store, timeline_id = self.store, timeline.id
+        t0 = time.monotonic()
         store.update_progress(timeline_id, "querying", 0, 0)
         tap_cache_key = hashlib.sha256(
             f"irsa_tap:{patch.ra:.6f}:{patch.dec:.6f}:D{timeline.detector}".encode()
@@ -501,7 +511,9 @@ class TimelineService:
             patch.ra, patch.dec, config.SIZES_DEG["large"]
         )
 
+        grid_world = imaging.target_world(grid_wcs, grid_shape)
         done = 0
+        last_write = [0.0]
         current_stage = "downloading"
         progress_lock = threading.Lock()
 
@@ -519,7 +531,9 @@ class TimelineService:
             nonlocal done
             epoch, record = item
             try:
+                t_fetch = time.monotonic()
                 data = self._fetch_cutout(record.uri, patch.ra, patch.dec, config.FETCH_SIZE_DEG)
+                log.info("timeline %s: frame in %.1fs", timeline_id, time.monotonic() - t_fetch)
                 cutout = imaging.read_cutout(data, patch.ra, patch.dec)
                 source_position = (
                     ephemeris.expected_position(
@@ -528,12 +542,13 @@ class TimelineService:
                     if proper_motion
                     else None
                 )
+                image, variance = imaging.reproject_nearest_many(
+                    [cutout.image, cutout.variance], cutout.wcs, grid_wcs, grid_shape, grid_world
+                )
                 return _Processed(
                     epoch=epoch,
-                    image=imaging.reproject_nearest(cutout.image, cutout.wcs, grid_wcs, grid_shape),
-                    variance=imaging.reproject_nearest(
-                        cutout.variance, cutout.wcs, grid_wcs, grid_shape
-                    ),
+                    image=image,
+                    variance=variance,
                     exposure_row=_build_exposure_row(
                         patch, timeline, epoch, record, cutout, data, source_position
                     ),
@@ -544,33 +559,45 @@ class TimelineService:
             finally:
                 with progress_lock:
                     done += 1
-                    store.update_progress(timeline_id, current_stage, done, total_work)
+                    now = time.monotonic()
+                    # One DB write per frame is wasteful; the client polls every 2-5 s anyway.
+                    if done == total_work or now - last_write[0] >= PROGRESS_WRITE_MIN_S:
+                        last_write[0] = now
+                        store.update_progress(timeline_id, current_stage, done, total_work)
 
         if is_progressive:
             store.delete_timeline_exposures(timeline_id)
             processed: list[_Processed] = []
 
-            def download(items: list[tuple[int, int]]) -> None:
-                batch = [(epoch, records[i]) for epoch, i in items]
-                fresh = [p for p in self._downloads.map(process, batch) if p is not None]
+            def submit(items: list[tuple[int, int]]) -> list:
+                return [self._downloads.submit(process, (e, records[i])) for e, i in items]
+
+            def collect(futures: list) -> None:
+                fresh = [p for p in (f.result() for f in futures) if p is not None]
                 processed.extend(fresh)
                 rows = [p.exposure_row for p in fresh if p.exposure_row is not None]
                 if rows:
                     store.save_nasa_sector_exposures(rows)
 
-            # The previews (first light, then one frame per epoch) are saved as soon as they are
-            # downloaded, the last one included, so `preview_ready` is never skipped. The stage
-            # names what is already saved. The refining frames are fetched in one parallel batch
-            # and rendered once at the end: re-rendering and rewriting every image after each
-            # refining round multiplied the build time and the database writes.
-            for wave_stage, wave_items in waves:
+            # Every frame is queued up front (first light first, FIFO), so the pool never idles
+            # while a wave is rendered and saved: the preview frames download during first
+            # light's render. Each wave is saved as soon as its own frames are done, the last
+            # preview included, so `preview_ready` is never skipped. The refining frames are
+            # rendered once at the end: re-rendering after each round multiplied the build time.
+            queued = [(stage, submit(items)) for stage, items in waves]
+            for wave_stage, futures in queued:
+                if wave_stage == "refining" and processed:
+                    current_stage = "refining"
+                collect(futures)
                 if wave_stage == "refining":
                     continue
-                download(wave_items)
                 if processed:
+                    log.info(
+                        "timeline %s: %s at +%.1fs", timeline_id, wave_stage, time.monotonic() - t0
+                    )
                     store.save_partial_timeline(
                         timeline_id,
-                        render_epoch_images(records, epochs, processed),
+                        render_epoch_images(records, epochs, processed, final=False),
                         stage=wave_stage,
                         done=done,
                         total=total_work,
@@ -578,11 +605,6 @@ class TimelineService:
                         frames_used=len(processed),
                     )
                     current_stage = wave_stage
-            refining = [item for stage, items in waves if stage == "refining" for item in items]
-            if refining:
-                if processed:
-                    current_stage = "refining"
-                download(refining)
             if not processed:
                 raise NoDataError("SPHEREx images were found but none could be downloaded.")
         else:
@@ -590,6 +612,7 @@ class TimelineService:
             if not processed:
                 raise NoDataError("SPHEREx images were found but none could be downloaded.")
 
+        log.info("timeline %s: all frames at +%.1fs", timeline_id, time.monotonic() - t0)
         store.update_progress(timeline_id, "rendering", total_work, total_work)
         images = render_epoch_images(records, epochs, processed)
         # A rebuild can regroup the epochs, so the exposure rows are replaced in the same

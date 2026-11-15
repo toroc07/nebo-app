@@ -229,3 +229,30 @@ def test_http_error_is_raised(monkeypatch):
     _fake_request(monkeypatch, b"<html>502 Proxy Error</html>", status=502)
     with pytest.raises(requests.HTTPError):
         irsa._sia_table(269.4, 4.7)
+
+
+def test_slow_tap_is_hedged_with_sia(monkeypatch, no_sleep):
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(irsa, "TAP_HEDGE_S", 0.05)
+
+    def stuck_tap(query):
+        release.wait(5)
+        raise RuntimeError("late")
+
+    monkeypatch.setattr(irsa, "_tap_table", stuck_tap)
+    monkeypatch.setattr(irsa, "_sia_table", lambda ra, dec: _sia_table())
+    try:
+        records = irsa.query_frames(269.4, 4.7, 3)
+    finally:
+        release.set()
+    assert [r.mjd_start for r in records] == [61000.0, 61200.0]
+
+
+def test_hedge_raises_when_both_fail(monkeypatch, no_sleep):
+    monkeypatch.setattr(irsa, "TAP_HEDGE_S", 0.01)
+    monkeypatch.setattr(irsa, "_tap_table", lambda q: (_ for _ in ()).throw(RuntimeError("tap")))
+    monkeypatch.setattr(irsa, "_sia_table", lambda r, d: (_ for _ in ()).throw(RuntimeError("sia")))
+    with pytest.raises(RuntimeError):
+        irsa.query_frames(269.4, 4.7, 3)

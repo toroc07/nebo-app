@@ -181,12 +181,26 @@ Give either `target` or both `ra` and `dec`.
   "status": "building",
   "patch": { "id": 7, "ra": 10.0, "dec": 20.0, "target": null },
   "detector": { "id": 3, "bandpass": "SPHEREx-D3", "wavelength_range_um": [1.63, 2.41] },
-  "progress": { "stage": "downloading", "done": 11, "total": 24 },
-  "retry_after_s": 5
+  "is_partial": true,
+  "preview_image_url": "/api/v1/images/41.png",
+  "progress": { "stage": "downloading", "done": 11, "total": 24, "epochs_ready": 0, "is_partial": true },
+  "retry_after_s": 2
 }
 ```
 
-`stage` goes `queued` → `querying` → `downloading` → `rendering`.
+`stage` goes `queued` → `querying` → `downloading` → `first_light` → `preview_ready` →
+`refining` → `rendering`. Coordinate searches build in steps: `first_light` is one frame,
+`preview_ready` is one frame per epoch (enough to blink), `refining` adds the remaining frames.
+`epochs[]` of a `202` already lists the epochs rendered so far (it grows during the build).
+`Retry-After` is 2 s in the early stages (up to `first_light`) and 5 s afterwards; use it
+instead of a fixed interval.
+
+**Early preview (`wait_for`)**: `GET /timeline?...&wait_for=first_light` (or `preview`) does not
+wait; it answers `200` with `"is_partial": true, "refining": true` as soon as a preview image
+exists (`first_light`, or `preview_ready` for `preview`), and `202` before that. Keep polling
+after `Retry-After`: the images are replaced at each step and **their ids change**, so re-read
+`image_url` every time. The final answer is a normal `200` without `is_partial`. Coordinate
+searches only; label partial images as preliminary.
 
 **`502` — failed**: `{"status": "failed", ..., "error": "No SPHEREx images cover this position with this detector yet."}`.
 The same request is retried automatically after one minute.

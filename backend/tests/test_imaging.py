@@ -145,3 +145,18 @@ def test_inferno_palette_runs_from_near_black_to_pale_yellow():
     grey = imaging.to_png(np.array([[0.0, 2.0]]), 0.0, 2.0)
     pixels = np.asarray(Image.open(io.BytesIO(imaging.colorize_png(grey, "inferno"))))[0]
     assert tuple(pixels[0]) == (0, 0, 4, 255) and tuple(pixels[1]) == (252, 255, 164, 255)
+
+
+def test_reproject_many_matches_single_with_shared_world():
+    grid_wcs, grid_shape = imaging.make_target_grid(RA, DEC, 0.05)
+    cutout = imaging.read_cutout(make_cutout_bytes(RA, DEC, star_offset_px=(3, 5)), RA, DEC)
+    world = imaging.target_world(grid_wcs, grid_shape)
+    many = imaging.reproject_nearest_many(
+        [cutout.image, cutout.variance], cutout.wcs, grid_wcs, grid_shape, world
+    )
+    single = [
+        imaging.reproject_nearest(a, cutout.wcs, grid_wcs, grid_shape)
+        for a in (cutout.image, cutout.variance)
+    ]
+    for got, want in zip(many, single, strict=True):
+        np.testing.assert_array_equal(got, want)
