@@ -96,4 +96,13 @@ instantly" (a preloaded patch within 30″ for this detector, from `/patches`) o
 
 The URL-only `/lab/observation` viewer and its `/lab/demo` route were removed. Its Gaia, pixel↔sky
 and zoom-level helpers stay in `lib/lab/` because the field viewer uses them; its findings are in
-`docs/observation-lab.md`. `tests/browser.mjs` needs `shared/demo` next to the frontend folder.
+`docs/observation-lab.md`.
+
+## Browser test
+
+`node tests/browser.mjs` drives the real journey with the API mocked: start screen (axe),
+the 7-step tutorial, 200 % text and RTL at desktop sizes, START → cockpit, Objects → View images
+→ field (a 202 then ready) and Back. Run `npm run dev` first; it opens `http://localhost:3000`
+(`NEBO_TEST_URL` to change; use `localhost`, not `127.0.0.1`, or `next dev` blocks its scripts).
+`NEBO_CHROME` points to a Chrome/Edge binary when Playwright's own browser is not installed;
+results and screenshots go to `NEBO_ARTIFACTS` (default: the system temp folder).

@@ -536,8 +536,6 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 - `Field.tsx` maps only `queued`, `querying`, `downloading`, `rendering`; the stages
   `first_light`, `preview_ready`, `refining` fall back to a generic label, and the frontend does
   not use `wait_for` yet, so users wait for the full build before seeing an image.
-- `frontend/tests/browser.mjs` no longer covers the field console: it was reached through the
-  removed coordinate form; a new path through the cockpit is needed.
 - `gcs_media_assets` and `timeline_images.gcs_uri` are never written (`targets.gaia_*`,
   `targets.wise_*`, `patches.gaia_crossmatch_json`, and `patches.wise_crossmatch_json` are now
   populated by `app.db sync-catalogs` and `analyze_patch_science` / `classify_event`).
@@ -553,6 +551,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — `frontend/tests/browser.mjs` rewritten for the current journey (tutorial with 7
+  steps, START → cockpit, Objects → View images → field with a 202, Back); it no longer expects the
+  removed Observe menu.
 - **2026-11-15** — Removed the URL-only observation lab: routes `/lab/observation` and
   `/lab/demo/[...path]`, `ObservationLab`, `ImageViewport`, `lib/lab/contract.ts` and
   `lib/lab/levels.ts`, and the warp's `viewer` destination. The field viewer's helpers in
