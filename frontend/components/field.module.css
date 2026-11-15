@@ -1,0 +1,661 @@
+/*
+ * Observation console (the field view), after the "Epsilon Indi B" ship-console reference.
+ * The room art (console-bg.webp, 1672 × 941) has its screen bay emptied; the screen itself
+ * is live HTML. `--s` is one pixel of the reference, so every size below keeps the
+ * reference proportions at any viewport.
+ */
+.scene {
+  --cyan: #3fd2ff;
+  --cyan-soft: rgb(63 210 255 / 0.38);
+  --ink: #eef8fc;
+  --muted: #a9c3d0;
+  --violet: #b48cff;
+  --s: 1px;
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden auto;
+  color: var(--ink);
+  font-family: Plex, system-ui, sans-serif;
+  background: #020509;
+}
+.stage {
+  position: relative;
+  min-height: 100%;
+  padding: 72px 12px 24px;
+}
+.room {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 60% 50%;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ---------- Screen (shared) ---------- */
+.screen {
+  position: relative;
+  padding: 30px 18px 22px;
+  font-size: max(13px, calc(17 * var(--s)));
+}
+.screen::before {
+  /* Dark glass with the faint grid of the reference, cut to the chamfered outline. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  clip-path: polygon(4.06% 0, 95.1% 0, 100% 6.5%, 100% 92.9%, 95.6% 100%, 3.7% 100%, 0 93.8%, 0 6.5%);
+  background:
+    linear-gradient(rgb(63 210 255 / 0.035) 1px, transparent 1px) 0 0 / calc(34 * var(--s)) calc(34 * var(--s)),
+    linear-gradient(90deg, rgb(63 210 255 / 0.035) 1px, transparent 1px) 0 0 / calc(34 * var(--s)) calc(34 * var(--s)),
+    radial-gradient(120% 90% at 50% 40%, rgb(8 22 34 / 0.94), rgb(2 7 12 / 0.97));
+}
+.frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.frame path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.frameLine {
+  stroke: var(--cyan);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 3px var(--cyan)) drop-shadow(0 0 10px rgb(63 210 255 / 0.55));
+}
+.frameRule {
+  /* Only on the fixed-proportion wide screen; narrow screens use the header border. */
+  display: none;
+  stroke: rgb(63 210 255 / 0.55);
+  stroke-width: 1;
+}
+.headerArt {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  width: min(60%, calc(440 * var(--s)));
+  height: calc(92 * var(--s));
+  min-height: 56px;
+  object-fit: cover;
+  object-position: right center;
+  /* The strip fades into the glass so the title keeps a clean background. */
+  mask-image: linear-gradient(90deg, transparent, #000 38%);
+  pointer-events: none;
+}
+.back {
+  position: absolute;
+  top: -16px;
+  left: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  font: 500 max(13px, calc(16 * var(--s))) Plex, sans-serif;
+  color: var(--ink);
+  background: #071521;
+  border: 1.5px solid var(--cyan);
+  border-radius: 6px;
+  box-shadow: 0 0 10px rgb(63 210 255 / 0.45);
+}
+.back svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+.back:hover {
+  background: #0c2333;
+  box-shadow: 0 0 16px rgb(63 210 255 / 0.75);
+}
+.header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgb(63 210 255 / 0.55);
+}
+.planet {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px var(--cyan));
+}
+.header h1 {
+  margin: 0;
+  font: 600 28px / 1.1 Plex, sans-serif;
+  letter-spacing: 0.005em;
+  color: #fff;
+  text-shadow: 0 0 14px rgb(140 220 255 / 0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.header h1:focus {
+  outline: none;
+}
+
+/* ---------- Body ---------- */
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "detector" "size" "viewer" "cards" "timeline";
+  gap: 14px;
+}
+.detector {
+  grid-area: detector;
+}
+.size {
+  grid-area: size;
+}
+.viewer {
+  grid-area: viewer;
+}
+.cards {
+  grid-area: cards;
+}
+.timeline {
+  grid-area: timeline;
+}
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: max(4px, calc(6 * var(--s)));
+  min-width: 0;
+}
+.control > span:first-child {
+  color: var(--ink);
+}
+.select {
+  position: relative;
+  display: flex;
+}
+.select select {
+  appearance: none;
+  width: 100%;
+  min-height: max(40px, calc(44 * var(--s)));
+  padding: 0 calc(1em + 26px) 0 max(10px, calc(14 * var(--s)));
+  color-scheme: dark;
+  font: inherit;
+  color: var(--ink);
+  background: rgb(6 20 31 / 0.85);
+  border: 1px solid rgb(120 190 220 / 0.32);
+  border-radius: max(4px, calc(6 * var(--s)));
+  text-overflow: ellipsis;
+}
+.select svg {
+  position: absolute;
+  right: max(10px, calc(14 * var(--s)));
+  top: 50%;
+  width: 1.3em;
+  height: 1.3em;
+  translate: 0 -50%;
+  color: var(--ink);
+  pointer-events: none;
+}
+.select select:hover {
+  border-color: var(--cyan-soft);
+}
+
+/* Field image with compass labels and corner brackets. */
+.viewer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  grid-template-areas: ". n ." "e img w" ". s .";
+  align-items: center;
+  justify-items: center;
+  gap: max(4px, calc(8 * var(--s)));
+}
+.compass {
+  font: 700 max(13px, calc(18 * var(--s))) Plex, sans-serif;
+  white-space: nowrap;
+}
+.north {
+  grid-area: n;
+}
+.south {
+  grid-area: s;
+}
+.east {
+  grid-area: e;
+}
+.west {
+  grid-area: w;
+}
+.image {
+  grid-area: img;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(100%, 330px);
+  aspect-ratio: 1;
+  background: #000;
+  box-shadow: 0 0 0 1px rgb(63 210 255 / 0.18);
+}
+.image > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* SPHEREx patches are 31–147 px: keep each pixel sharp when enlarged. */
+  image-rendering: pixelated;
+}
+.brackets,
+.brackets::before,
+.brackets::after {
+  position: absolute;
+  pointer-events: none;
+}
+.brackets {
+  inset: -3px;
+  z-index: 1;
+  /* Four L-shaped corners drawn with gradients: no extra elements, crisp at any scale. */
+  --b: max(14px, calc(22 * var(--s)));
+  background:
+    linear-gradient(var(--cyan), var(--cyan)) 0 0 / var(--b) 3px,
+    linear-gradient(var(--cyan), var(--cyan)) 0 0 / 3px var(--b),
+    linear-gradient(var(--cyan), var(--cyan)) 100% 0 / var(--b) 3px,
+    linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 3px var(--b),
+    linear-gradient(var(--cyan), var(--cyan)) 0 100% / var(--b) 3px,
+    linear-gradient(var(--cyan), var(--cyan)) 0 100% / 3px var(--b),
+    linear-gradient(var(--cyan), var(--cyan)) 100% 100% / var(--b) 3px,
+    linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 3px var(--b);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 4px var(--cyan));
+}
+.reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(14px, calc(18 * var(--s)));
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border: 2px solid var(--violet);
+  box-shadow: 0 0 8px var(--violet), inset 0 0 6px rgb(180 140 255 / 0.6);
+  pointer-events: none;
+}
+.imageStatus {
+  position: absolute;
+  bottom: 8px;
+  font-size: 0.75em;
+  color: var(--muted);
+}
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  margin: 0;
+  text-align: center;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.message strong {
+  color: var(--ink);
+}
+.message p {
+  margin: 0;
+}
+.message progress {
+  width: 80%;
+  accent-color: var(--cyan);
+}
+.retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: rgb(14 90 120 / 0.5);
+  border: 1px solid var(--cyan);
+  border-radius: 6px;
+}
+.retry svg {
+  width: 1em;
+  height: 1em;
+}
+.retry:disabled {
+  opacity: 0.55;
+}
+
+/* Coordinate and object cards. */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: max(8px, calc(10 * var(--s)));
+  min-width: 0;
+}
+.card {
+  /* Cards keep their content height; the column is sized so both always fit. */
+  flex: none;
+  border: 1.5px solid var(--cyan-soft);
+  border-radius: max(8px, calc(12 * var(--s)));
+  background: rgb(8 26 40 / 0.45);
+  box-shadow: inset 0 0 18px rgb(63 210 255 / 0.06);
+  overflow: hidden;
+}
+.card h2 {
+  display: flex;
+  align-items: center;
+  gap: max(8px, calc(12 * var(--s)));
+  margin: 0;
+  padding: max(8px, calc(11 * var(--s))) max(12px, calc(18 * var(--s)));
+  font: 700 max(13px, calc(18 * var(--s))) Plex, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background: linear-gradient(90deg, rgb(63 210 255 / 0.1), rgb(63 210 255 / 0.03));
+  border-bottom: 1px solid rgb(63 210 255 / 0.15);
+}
+.card h2 svg {
+  width: 1.4em;
+  height: 1.4em;
+  filter: drop-shadow(0 0 4px var(--cyan));
+}
+.card dl {
+  margin: 0;
+  padding: max(4px, calc(6 * var(--s))) max(12px, calc(22 * var(--s)));
+}
+.card dl > div {
+  display: grid;
+  grid-template-columns: minmax(6.5em, 0.9fr) minmax(0, 2fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: max(3px, calc(6 * var(--s))) 0;
+}
+.card dl > div + div {
+  border-top: 1px solid rgb(63 210 255 / 0.07);
+}
+.card dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+.card dt svg {
+  width: 1.1em;
+  height: 1.1em;
+  color: var(--cyan);
+}
+.card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.sexagesimal {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.sexagesimal i {
+  margin: 0 0.45em 0 0.3em;
+  font-style: normal;
+  color: var(--cyan);
+}
+.honest {
+  grid-area: honest;
+  margin: 0;
+  font-size: 0.8em;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.honest strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Epoch controls. */
+.timeline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "observed observed" "honest honest" "compare compare" "interval counter" "steps steps";
+  align-items: end;
+  gap: 10px 16px;
+}
+.observed {
+  grid-area: observed;
+  margin: 0;
+  font-style: italic;
+  font-size: 0.95em;
+  color: var(--ink);
+}
+.compare {
+  grid-area: compare;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: max(10px, calc(20 * var(--s)));
+  min-height: max(44px, calc(50 * var(--s)));
+  padding: 0 max(16px, calc(26 * var(--s)));
+  font: 500 max(15px, calc(19 * var(--s))) Plex, sans-serif;
+  color: #fff;
+  background: rgb(80 50 170 / 0.32);
+  border: 2px solid var(--violet);
+  border-radius: max(5px, calc(7 * var(--s)));
+  box-shadow: 0 0 14px rgb(180 140 255 / 0.65), inset 0 0 14px rgb(180 140 255 / 0.3);
+}
+.compare svg {
+  width: 1.15em;
+  height: 1.15em;
+}
+.compare:hover:not(:disabled) {
+  background: rgb(100 66 200 / 0.45);
+  box-shadow: 0 0 20px rgb(180 140 255 / 0.85), inset 0 0 16px rgb(180 140 255 / 0.4);
+}
+.compare:disabled {
+  opacity: 0.55;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.interval {
+  grid-area: interval;
+}
+.counter {
+  grid-area: counter;
+  align-self: center;
+  white-space: nowrap;
+  font-size: 1.05em;
+  font-variant-numeric: tabular-nums;
+}
+.steps {
+  grid-area: steps;
+  display: flex;
+  gap: max(10px, calc(16 * var(--s)));
+}
+.steps button {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-width: 44px;
+  height: max(44px, calc(50 * var(--s)));
+  color: #fff;
+  background: rgb(6 24 38 / 0.7);
+  border: 1.5px solid rgb(63 210 255 / 0.6);
+  border-radius: max(5px, calc(7 * var(--s)));
+  box-shadow: inset 0 0 12px rgb(63 210 255 / 0.12);
+}
+.steps svg {
+  width: max(22px, calc(30 * var(--s)));
+  height: max(22px, calc(30 * var(--s)));
+  stroke-width: 3;
+}
+.steps button:hover:not(:disabled) {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgb(63 210 255 / 0.55), inset 0 0 12px rgb(63 210 255 / 0.2);
+}
+.steps button:disabled {
+  opacity: 0.4;
+}
+.back:focus-visible,
+.select select:focus-visible,
+.compare:focus-visible,
+.steps button:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* ---------- Wide screens: the screen sits in the room's bay, tilted like the reference ---------- */
+@media (min-width: 1024px) and (min-aspect-ratio: 5/4) {
+  .stage {
+    /*
+     * Cover the viewport with the room, but never so large that the screen
+     * (77.8 % of the art's height, 66.6 % of its width) is cut off.
+     */
+    --H: min(max(56.28vw, 100dvh), 123dvh, 82vw);
+    --W: calc(var(--H) * 1672 / 941);
+    --s: calc(var(--H) / 941);
+    position: absolute;
+    width: var(--W);
+    height: var(--H);
+    min-height: 0;
+    padding: 0;
+    /* Centre the screen (not the art) when the viewport crops the room. */
+    left: clamp(100vw - var(--W), 50vw - 0.6393 * var(--W), 0px);
+    top: clamp(100dvh - var(--H), 50dvh - 0.4634 * var(--H), 0px);
+  }
+  .room {
+    position: absolute;
+    object-fit: fill;
+  }
+  .screen {
+    position: absolute;
+    left: calc(488.5 * var(--s));
+    top: calc(109 * var(--s));
+    width: calc(1083 * var(--s));
+    height: calc(678 * var(--s));
+    padding: 0;
+    font-size: max(11px, calc(17 * var(--s)));
+    /*
+     * The reference is photographed at an angle: right edge nearer than the left.
+     * These values map the flat 1083 × 678 screen onto the bay of console-bg.webp.
+     */
+    transform: perspective(calc(1400 * var(--s))) rotateZ(-1.34deg) rotateY(-11deg);
+    transform-style: flat;
+  }
+  .headerArt {
+    top: calc(3 * var(--s));
+    right: calc(4 * var(--s));
+    width: calc(440 * var(--s));
+    min-height: 0;
+  }
+  .back {
+    top: calc(-17 * var(--s));
+    left: calc(56 * var(--s));
+    min-height: 0;
+    height: calc(32 * var(--s));
+    padding: 0 calc(12 * var(--s));
+    gap: calc(6 * var(--s));
+    border-radius: calc(6 * var(--s));
+  }
+  .frameRule {
+    display: inline;
+  }
+  .header {
+    position: absolute;
+    top: calc(22 * var(--s));
+    left: calc(62 * var(--s));
+    right: calc(460 * var(--s));
+    height: calc(64 * var(--s));
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    gap: calc(22 * var(--s));
+    border: 0;
+  }
+  .planet {
+    width: calc(58 * var(--s));
+    height: calc(58 * var(--s));
+  }
+  .header h1 {
+    font-size: calc(46 * var(--s));
+  }
+  .body {
+    position: absolute;
+    top: calc(112 * var(--s));
+    left: calc(64 * var(--s));
+    right: calc(50 * var(--s));
+    bottom: calc(26 * var(--s));
+    grid-template-columns: calc(430 * var(--s)) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "detector size"
+      "viewer cards"
+      "timeline timeline";
+    column-gap: calc(46 * var(--s));
+    row-gap: calc(10 * var(--s));
+  }
+  .viewer {
+    align-self: start;
+    gap: calc(6 * var(--s)) calc(12 * var(--s));
+  }
+  .image {
+    width: calc(274 * var(--s));
+  }
+  .cards {
+    padding-top: calc(6 * var(--s));
+    gap: calc(10 * var(--s));
+  }
+  .card h2 {
+    padding: calc(7 * var(--s)) calc(18 * var(--s));
+    font-size: calc(17 * var(--s));
+  }
+  .card dl {
+    padding-block: calc(2 * var(--s));
+    font-size: calc(16 * var(--s));
+  }
+  .card dl > div {
+    padding: calc(4 * var(--s)) 0;
+  }
+  .timeline {
+    grid-template-columns: calc(255 * var(--s)) calc(195 * var(--s)) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "observed honest honest honest"
+      "compare interval counter steps";
+    column-gap: calc(52 * var(--s));
+    row-gap: calc(12 * var(--s));
+  }
+  .counter {
+    align-self: center;
+    padding-top: calc(28 * var(--s));
+  }
+  .observed {
+    white-space: nowrap;
+  }
+  .honest {
+    align-self: end;
+    font-size: calc(13 * var(--s));
+  }
+  .steps button {
+    flex: none;
+    width: calc(62 * var(--s));
+    min-width: 0;
+    min-height: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .screen {
+    animation: screen-on 420ms ease-out both;
+  }
+}
+:global(html[data-reduced="true"]) .screen {
+  animation: none;
+}
+@keyframes screen-on {
+  from {
+    opacity: 0;
+    filter: brightness(1.8);
+  }
+}

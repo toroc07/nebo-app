@@ -12,24 +12,44 @@ type Viewer = {
     options?: { successCallback?: (survey: { setSliceNumber: (n: number) => void }) => void },
   ) => unknown;
   setImageLayer: (layer: unknown) => void;
+  // Callbacks verified in aladin.js: positionChanged gets {ra, dec, dragging}, zoomChanged the FoV.
+  on: (event: "positionChanged" | "zoomChanged", handler: (payload: never) => void) => void;
+  getRaDec: () => [number, number];
+  showCooGrid: () => void;
+  hideCooGrid: () => void;
 };
+/** What the map is showing right now: its centre and horizontal field of view, in degrees. */
+export type SkyView = { ra: number; dec: number; fov: number };
+export type SkyLayers = { markers: boolean; grid: boolean };
+/** Camera moves the cockpit screens can request (the command id is added by the page). */
+export type SkyMove =
+  | { action: "center" | "goto"; ra: number; dec: number }
+  | { action: "fov"; fov: number };
 export type SkyCommand =
   | { id: number; action: "in" | "out" | "all" }
   // Re-centres on a position the map already knows, e.g. after the user dragged away.
-  | { id: number; action: "center"; ra: number; dec: number };
+  | { id: number; action: "center"; ra: number; dec: number }
+  // Flies to a position keeping the current zoom (all-sky locator).
+  | { id: number; action: "goto"; ra: number; dec: number }
+  // Sets an exact field of view (FOV gauge).
+  | { id: number; action: "fov"; fov: number };
 const SKY_FRAME = 40; // ~1.86 µm, inside detector 3
 export default function Sky({
   targets,
   selected,
   coordinates,
   command,
+  layers,
   onSelect,
+  onView,
 }: {
   targets: Target[];
   selected: Target | null;
   coordinates: { ra: number; dec: number } | null;
   command: SkyCommand | null;
+  layers: SkyLayers;
   onSelect: (t: Target) => void;
+  onView: (view: SkyView) => void;
 }) {
   const host = useRef<HTMLDivElement>(null),
     fieldOfView = useRef(180),
@@ -37,13 +57,18 @@ export default function Sky({
     catalog = useRef<{
       removeAll: () => void;
       addSources: (s: unknown[]) => void;
+      show: () => void;
+      hide: () => void;
     } | null>(null),
     api = useRef<any>(null),
-    callback = useRef(onSelect);
+    callback = useRef(onSelect),
+    viewCallback = useRef(onView),
+    center = useRef({ ra: 269.446, dec: 4.769 });
   const [error, setError] = useState(false),
     [ready, setReady] = useState(false),
     [retry, setRetry] = useState(0);
   callback.current = onSelect;
+  viewCallback.current = onView;
   useEffect(() => {
     let cancelled = false;
     setError(false);
@@ -85,6 +110,19 @@ export default function Sky({
           },
         });
         viewer.current!.addCatalog(catalog.current);
+        // Report the live view so the cockpit screens follow drags and wheel zooms too.
+        const report = () =>
+          viewCallback.current({ ...center.current, fov: fieldOfView.current });
+        viewer.current!.on("positionChanged", (({ ra, dec }: { ra: number; dec: number }) => {
+          center.current = { ra, dec };
+          report();
+        }) as (payload: never) => void);
+        viewer.current!.on("zoomChanged", ((fov: number) => {
+          // Keeps the +/− buttons stepping from the zoom the user reached with the wheel.
+          fieldOfView.current = fov;
+          report();
+        }) as (payload: never) => void);
+        report();
         setReady(true);
       })
       .catch(() => {
@@ -109,29 +147,47 @@ export default function Sky({
     );
   }, [targets, ready]);
   useEffect(() => {
-    if (selected && ready) {
-      viewer.current?.gotoRaDec(selected.ra, selected.dec);
-      viewer.current?.setFoV(8);
-      fieldOfView.current = 8;
+    if (!ready) return;
+    if (layers.markers) catalog.current?.show();
+    else catalog.current?.hide();
+    if (layers.grid) viewer.current?.showCooGrid();
+    else viewer.current?.hideCooGrid();
+  }, [layers.markers, layers.grid, ready]);
+  /**
+   * Moves the camera and reports the new view. Programmatic moves are reported here because
+   * Aladin only guarantees positionChanged for user drags.
+   */
+  function fly(ra: number | null, dec: number | null, fov: number | null) {
+    if (ra !== null && dec !== null) {
+      viewer.current?.gotoRaDec(ra, dec);
+      center.current = { ra, dec };
     }
+    if (fov !== null) {
+      fieldOfView.current = Math.max(0.1, Math.min(180, fov));
+      viewer.current?.setFoV(fieldOfView.current);
+    }
+    viewCallback.current({ ...center.current, fov: fieldOfView.current });
+  }
+  useEffect(() => {
+    if (selected && ready) fly(selected.ra, selected.dec, 8);
   }, [selected, ready]);
   useEffect(() => {
-    if (coordinates && ready) {
-      viewer.current?.gotoRaDec(coordinates.ra, coordinates.dec);
-      viewer.current?.setFoV(8);
-      fieldOfView.current = 8;
-    }
+    if (coordinates && ready) fly(coordinates.ra, coordinates.dec, 8);
   }, [coordinates, ready]);
   useEffect(() => {
     if (!command || !ready) return;
-    if (command.action === "center") {
-      viewer.current?.gotoRaDec(command.ra, command.dec);
-      viewer.current?.setFoV(8);
-      fieldOfView.current = 8;
-      return;
+    switch (command.action) {
+      case "center":
+        return fly(command.ra, command.dec, 8);
+      case "goto":
+        return fly(command.ra, command.dec, null);
+      case "fov":
+        return fly(null, null, command.fov);
+      case "all":
+        return fly(null, null, 180);
+      default:
+        return fly(null, null, fieldOfView.current * (command.action === "in" ? 0.5 : 2));
     }
-    fieldOfView.current = command.action === "all" ? 180 : Math.max(0.1, Math.min(180, fieldOfView.current * (command.action === "in" ? 0.5 : 2)));
-    viewer.current?.setFoV(fieldOfView.current);
   }, [command, ready]);
   return (
     <>

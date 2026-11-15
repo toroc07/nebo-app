@@ -75,3 +75,76 @@ export function stepDec(decDeg: number, unit: "d" | "m" | "s", steps: number): n
   const size = { d: 1, m: 1 / 60, s: 1 / 3600 }[unit];
   return Math.max(-90, Math.min(90, decDeg + size * steps));
 }
+
+const RAD = Math.PI / 180;
+
+/** Wraps a longitude into (−180°, 180°]. */
+export function wrap180(deg: number): number {
+  const d = ((((deg + 180) % 360) + 360) % 360) - 180;
+  return d === -180 ? 180 : d;
+}
+
+/**
+ * Greenwich mean sidereal time in degrees (Meeus, Astronomical Algorithms, eq. 12.4).
+ * Accurate to well under a second of time for dates near the present.
+ */
+export function gmstDeg(date: Date): number {
+  const jd = date.getTime() / 86400000 + 2440587.5;
+  const t = (jd - 2451545) / 36525;
+  return normalizeRa(
+    280.46061837 + 360.98564736629 * (jd - 2451545) + 0.000387933 * t * t - (t * t * t) / 38710000,
+  );
+}
+
+/**
+ * The point on Earth where a sky position is at the zenith right now: latitude = Dec,
+ * longitude = RA − GMST. The Earth turns under the sky, so the point drifts west 15°/h.
+ */
+export function subPoint(raDeg: number, decDeg: number, date: Date): { lat: number; lon: number } {
+  return { lat: decDeg, lon: wrap180(raDeg - gmstDeg(date)) };
+}
+
+/** Great-circle separation between two sky positions, in degrees (haversine, stable at small angles). */
+export function angularDistance(ra1: number, dec1: number, ra2: number, dec2: number): number {
+  const h =
+    Math.sin(((dec2 - dec1) * RAD) / 2) ** 2 +
+    Math.cos(dec1 * RAD) * Math.cos(dec2 * RAD) * Math.sin(((ra2 - ra1) * RAD) / 2) ** 2;
+  return (2 * Math.asin(Math.min(1, Math.sqrt(h)))) / RAD;
+}
+
+/*
+ * Hammer equal-area all-sky projection, centred on RA 12 h with east to the left, as on the
+ * sky map. Output is normalised to x ∈ [−1, 1], y ∈ [−1, 1] (north up). Hammer is used rather
+ * than Aitoff because it has a closed-form inverse, which turns a click into a position.
+ */
+export function hammer(raDeg: number, decDeg: number): { x: number; y: number } {
+  const l = -wrap180(raDeg - 180) * RAD; // east (larger RA) to the left
+  const b = decDeg * RAD;
+  const k = Math.sqrt(1 + Math.cos(b) * Math.cos(l / 2));
+  return {
+    x: (2 * Math.SQRT2 * Math.cos(b) * Math.sin(l / 2)) / k / (2 * Math.SQRT2),
+    y: (Math.SQRT2 * Math.sin(b)) / k / Math.SQRT2,
+  };
+}
+
+/** Inverse of `hammer`; null outside the ellipse. */
+export function hammerInverse(x: number, y: number): { ra: number; dec: number } | null {
+  if (x * x + y * y > 1) return null;
+  const X = x * 2 * Math.SQRT2;
+  const Y = y * Math.SQRT2;
+  const z = Math.sqrt(1 - (X / 4) ** 2 - (Y / 2) ** 2);
+  const l = 2 * Math.atan2(z * X, 2 * (2 * z * z - 1));
+  const b = Math.asin(Math.max(-1, Math.min(1, z * Y)));
+  return { ra: normalizeRa(180 - l / RAD), dec: b / RAD };
+}
+
+/* Field of view on a log scale, so 0.1° and 180° are equally reachable on the gauge. */
+export const FOV_MIN = 0.1;
+export const FOV_MAX = 180;
+export function fovToFraction(fov: number): number {
+  const f = Math.max(FOV_MIN, Math.min(FOV_MAX, fov));
+  return Math.log(f / FOV_MIN) / Math.log(FOV_MAX / FOV_MIN);
+}
+export function fractionToFov(t: number): number {
+  return FOV_MIN * Math.pow(FOV_MAX / FOV_MIN, Math.max(0, Math.min(1, t)));
+}

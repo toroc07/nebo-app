@@ -1,31 +1,13 @@
 "use client";
-import { useRef, useState, type CSSProperties } from "react";
-import { ArrowRight, Crosshair, LocateFixed, Minus, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Crosshair, Minus, Plus } from "lucide-react";
 import type { Target } from "@/lib/api";
 import CoordinatePanel from "./CoordinatePanel";
+import CockpitScreens, { ART_HEIGHT, ART_WIDTH, place, useNow, type Tab } from "./CockpitScreens";
+import type { SkyLayers, SkyMove, SkyView } from "./Sky";
 import s from "./cockpit.module.css";
 
 type Position = { ra: number; dec: number };
-
-/*
- * The cockpit art (public/panels/cockpit.webp) is the bottom of the design
- * reference: 1855 × 378 px, cut at y = 470 of the full 1855 × 848 frame.
- * Live controls sit exactly over the painted ones, so their boxes are written
- * in reference pixels and converted to percentages of the art.
- */
-const ART_WIDTH = 1855;
-const ART_HEIGHT = 378;
-const ART_TOP = 470;
-
-function place(x1: number, y1: number, x2: number, y2: number) {
-  const pct = (v: number, of: number) => `${(v / of) * 100}%`;
-  return {
-    "--l": pct(x1, ART_WIDTH),
-    "--t": pct(y1 - ART_TOP, ART_HEIGHT),
-    "--w": pct(x2 - x1, ART_WIDTH),
-    "--h": pct(y2 - y1, ART_HEIGHT),
-  } as CSSProperties;
-}
 
 export default function Cockpit({
   targets,
@@ -36,9 +18,12 @@ export default function Cockpit({
   onSelect,
   onCoordinates,
   onZoom,
-  onCenter,
   onView,
   onRetry,
+  skyView,
+  layers,
+  onLayers,
+  onCommand,
 }: {
   targets: Target[];
   selected: Target | null;
@@ -48,28 +33,47 @@ export default function Cockpit({
   onSelect: (t: Target | null) => void;
   onCoordinates: (p: Position) => void;
   onZoom: (action: "in" | "out" | "all") => void;
-  onCenter: (p: Position) => void;
   onView: () => void;
   onRetry: () => void;
+  skyView: SkyView | null;
+  layers: SkyLayers;
+  onLayers: (l: SkyLayers) => void;
+  onCommand: (move: SkyMove) => void;
 }) {
-  const [panelOpen, setPanelOpen] = useState(false);
+  // "closing" keeps the hologram mounted while it dematerialises back into the beam.
+  const [panel, setPanel] = useState<"closed" | "open" | "closing">("closed");
+  const panelOpen = panel === "open";
+  const [tab, setTab] = useState<Tab>("sky");
+  const now = useNow();
   const switchButton = useRef<HTMLButtonElement>(null);
   const position: Position | null = selected
     ? { ra: selected.ra, dec: selected.dec }
     : coordinates;
 
   function closePanel() {
-    setPanelOpen(false);
     // Return focus to the control that opened the dialog, as a keyboard user expects.
     switchButton.current?.focus();
+    const reduced =
+      document.documentElement.dataset.reduced === "true" ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setPanel(reduced ? "closed" : "closing");
   }
+  useEffect(() => {
+    if (panel !== "closing") return;
+    // Matches the 220 ms dematerialise + 60 ms beam delay in cockpit.module.css.
+    const id = setTimeout(() => setPanel("closed"), 300);
+    return () => clearTimeout(id);
+  }, [panel]);
 
   return (
-    <div className={s.cockpit} data-panel={panelOpen ? "open" : "closed"}>
-      {panelOpen && (
+    <div className={s.cockpit} data-panel={panel}>
+      {panel !== "closed" && (
         <>
-          <div className={s.beam} aria-hidden="true" />
+          <div className={s.beam} data-state={panel} aria-hidden="true">
+            <span className={s.beamDust} />
+          </div>
           <CoordinatePanel
+            closing={panel === "closing"}
             initial={position}
             onClose={closePanel}
             onApply={(p) => {
@@ -93,7 +97,52 @@ export default function Cockpit({
         <h2 className={s.identity}>
           Navigation <span>All-sky survey</span>
         </h2>
-        <label className={s.destination} style={place(575, 715, 1095, 745)}>
+        {/* The four painted menu keys switch what the multi-function screen beside them shows. */}
+        <div className={s.menu} role="tablist" aria-label="Cockpit screen">
+          {(
+            [
+              ["sky", "Sky map", place(412, 695, 518, 720)],
+              ["objects", "Objects", place(405, 728, 513, 755)],
+              ["catalogs", "Catalogs", place(398, 762, 507, 788)],
+              ["tools", "Tools", place(392, 797, 500, 823)],
+            ] as const
+          ).map(([id, label, box]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`cockpit-tab-${id}`}
+              aria-selected={tab === id}
+              aria-controls="cockpit-mfd"
+              className={`${s.control} ${s.menuKey}`}
+              style={box}
+              onClick={() => setTab(id)}
+            >
+              <span className={s.paintedText}>{label}</span>
+            </button>
+          ))}
+        </div>
+        <CockpitScreens
+          view={skyView}
+          position={position}
+          selected={selected}
+          targets={targets}
+          layers={layers}
+          tab={tab}
+          now={now}
+          onTab={setTab}
+          onLayers={onLayers}
+          // Picking the current destination again re-centres on it (after a drag, for example).
+          onSelect={(t) =>
+            t.slug === selected?.slug
+              ? onCommand({ action: "center", ra: t.ra, dec: t.dec })
+              : onSelect(t)
+          }
+          onGoto={(p) => onCommand({ action: "goto", ...p })}
+          onFov={(fov) => onCommand({ action: "fov", fov })}
+        />
+        {/* Phones have no cockpit screens (and no OBJECTS tab), so they keep this picker. */}
+        <label className={s.destination}>
           <span className={s.paintedLabel}>Destination</span>
           <select
             value={selected?.slug ?? ""}
@@ -109,23 +158,13 @@ export default function Cockpit({
           </select>
         </label>
         <button
-          type="button"
-          className={`${s.control} ${s.locate}`}
-          style={place(1111, 713, 1147, 746)}
-          disabled={!position}
-          aria-label="Centre the map on the destination"
-          onClick={() => position && onCenter(position)}
-        >
-          <LocateFixed aria-hidden="true" />
-        </button>
-        <button
           ref={switchButton}
           type="button"
           className={`${s.control} ${s.switch}`}
           style={place(1202, 694, 1300, 746)}
           aria-expanded={panelOpen}
           aria-haspopup="dialog"
-          onClick={() => (panelOpen ? closePanel() : setPanelOpen(true))}
+          onClick={() => (panelOpen ? closePanel() : setPanel("open"))}
         >
           <Crosshair aria-hidden="true" />
           <span className={s.paintedText}>RA / Dec</span>
@@ -133,7 +172,7 @@ export default function Cockpit({
         <div className={s.position} aria-live="polite">
           <span className={s.paintedLabel}>Position / ICRS</span>
           <strong style={place(1311, 718, 1444, 743)}>
-            {position ? `${position.ra.toFixed(3)}° / ${position.dec.toFixed(3)}°` : "Select target"}
+            {position ? `${position.ra.toFixed(3)}° / ${position.dec.toFixed(3)}°` : "No destination"}
           </strong>
         </div>
         <div className={s.zoom} role="group" aria-labelledby="cockpit-fov">

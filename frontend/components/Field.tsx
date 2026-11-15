@@ -1,6 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Play, Pause, RotateCcw } from "lucide-react";
+import { useEffect, useState, type ReactNode, type Ref } from "react";
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  Layers,
+  Pause,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import {
   timeline,
   imageUrl,
@@ -9,9 +21,13 @@ import {
   releaseLabel,
   ApiError,
   type Query,
+  type Target,
   type Timeline,
   type Building,
 } from "@/lib/api";
+import { decToParts, raToParts } from "@/lib/coordinates";
+import s from "./field.module.css";
+
 const stages: Record<string, string> = {
   queued: "Waiting for a turn",
   querying: "Searching for observations",
@@ -26,13 +42,32 @@ const bands = [
   { range: "3.83–4.41", use: "Brown dwarfs" },
   { range: "4.42–5.00", use: "Coldest objects" },
 ];
+
+/** `brown_dwarf_binary` → `Brown dwarf binary`. */
+function humanKind(kind: string) {
+  const text = kind.replace(/_/g, " ").trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : "Catalogued object";
+}
+
+/**
+ * Observation console: one SPHEREx field, its epochs and the blink comparator,
+ * drawn as the holographic screen of the ship (background: console-bg.webp).
+ */
 export default function Field({
   query,
+  target,
+  title,
+  headingRef,
+  onBack,
   recommended,
   speed,
   reduced,
 }: {
   query: Query;
+  target: Target | null;
+  title: string;
+  headingRef?: Ref<HTMLHeadingElement>;
+  onBack: () => void;
   recommended: number;
   speed: number;
   reduced: boolean;
@@ -143,177 +178,288 @@ export default function Field({
     setImageLoading(true);
   }, [current?.image_url, reload]);
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  const count = data?.epochs.length ?? 0;
+  const canCompare = count > 1 && !imageError;
+
+  function stepEpoch(direction: 1 | -1) {
+    setPlaying(false);
+    setEpoch((e) => (e + direction + count) % count);
+  }
+
+  // The patch centre once the API answers; before that, the requested position.
+  const center =
+    data?.patch ??
+    target ??
+    (query.ra !== undefined && query.dec !== undefined ? { ra: query.ra, dec: query.dec } : null);
+  const ra = center ? raToParts(center.ra) : null;
+  const dec = center ? decToParts(center.dec) : null;
+  const band = bands[detector - 1];
+
   return (
-    <section className="surface field">
-      <div className="field-controls">
-        <label>
-          Detector
-          <select
-            value={detector}
-            onChange={(e) => setDetector(Number(e.target.value))}
-          >
-            {bands.map((b, i) => (
-              <option value={i + 1} key={b.range}>
-                D{i + 1} · {b.range} µm · {b.use}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Field size
-          <select value={size} onChange={(e) => setSize(e.target.value)}>
-            <option value="small">3 arcminutes</option>
-            <option value="medium">6 arcminutes</option>
-            <option value="large">15 arcminutes</option>
-          </select>
-        </label>
-        <span className="science-label">
-          Observed change · {releaseLabel(current?.releases)}
-        </span>
-      </div>
-      {error ? (
-        <div className="notice" role="alert">
-          <h2>We could not open this field</h2>
-          <p>{error}</p>
-          <button
-            disabled={remaining > 0}
-            className="action"
-            onClick={() => setReload((x) => x + 1)}
-          >
-            <RotateCcw size={18} />
-            {remaining > 0 ? `Retry in ${remaining} s` : "Retry"}
+    <section className={s.scene} data-console="field" aria-labelledby="field-title">
+      <div className={s.stage}>
+        <img className={s.room} src="/panels/console-bg.webp" alt="" aria-hidden="true" draggable={false} />
+        <div className={s.screen}>
+          <svg className={s.frame} viewBox="0 0 1083 678" preserveAspectRatio="none" aria-hidden="true">
+            {/* Chamfered outline from the reference; the gap at top-left holds the Back tab. */}
+            <path className={s.frameLine} d="M150 0H1030L1083 44V630L1035 678H40L0 636V44L44 0H54" />
+            <path className={s.frameRule} d="M0 96H1083" />
+          </svg>
+          <img className={s.headerArt} src="/panels/console-header.webp" alt="" aria-hidden="true" />
+
+          <button type="button" className={s.back} onClick={onBack}>
+            <ArrowLeft aria-hidden="true" /> Back
           </button>
-        </div>
-      ) : !data ? (
-        <div className="field-loading" role="status">
-          <div className="skeleton" />
-          <h2>
-            {progress
-              ? stages[progress.progress.stage] || "Preparing the field"
-              : "Checking images"}
-          </h2>
-          <p>
-            A new field can take a few minutes. You can go back to the menu.
-          </p>
-          {progress && (
-            <>
-              <progress
-                max={progress.progress.total || 1}
-                value={
-                  progress.progress.total ? progress.progress.done : undefined
-                }
-                aria-label="Field preparation"
-              />
-              <p>
-                {progress.progress.total > 0
-                  ? `${progress.progress.done} of ${progress.progress.total}`
-                  : "Looking for available data…"}
-              </p>
-            </>
-          )}
-        </div>
-      ) : !current ? (
-        <p className="notice">
-          This field has no epochs available yet. Try another detector or size.
-        </p>
-      ) : (
-        <>
-          <div className="field-display">
-            <span className="north mono">N ↑</span>
-            <span className="east mono">E ←</span>
-            {imageLoading && !imageError && !loaded.has(currentUrl) && (
-              <span role="status" className="image-status">
-                Loading epoch…
-              </span>
-            )}
-            {imageError ? (
-              <p role="alert">
-                This image could not be loaded.{" "}
-                <button
-                  className="secondary"
-                  onClick={() => setReload((n) => n + 1)}
-                >
-                  Reload
-                </button>
-              </p>
-            ) : (
-              <img
-                src={imageUrl(current.image_url)}
-                alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}`}
-                width={420}
-                height={420}
-                onLoad={() => setImageLoading(false)}
-                onError={() => {
-                  setImageError(true);
-                  setImageLoading(false);
-                  setPlaying(false);
-                }}
-              />
-            )}
-            <span className="reticle" aria-hidden="true" />
-            <span className="scale mono">↔ {data.size.side_arcmin}′</span>
-          </div>
-          <div className="timeline-panel">
-            <label htmlFor="epoch">
-              Observed · {epochDateRange(current.start_utc, current.end_utc)}{" "}
-              UTC
+          <header className={s.header}>
+            <PlanetIcon />
+            <h1 id="field-title" ref={headingRef} tabIndex={-1}>
+              {title}
+            </h1>
+          </header>
+
+          <div className={s.body}>
+            <label className={`${s.control} ${s.detector}`}>
+              <span>Detector</span>
+              <Select value={detector} onChange={(v) => setDetector(Number(v))}>
+                {bands.map((b, i) => (
+                  <option value={i + 1} key={b.range}>
+                    D{i + 1} · {b.range} µm · {b.use}
+                  </option>
+                ))}
+              </Select>
             </label>
-            <input
-              id="epoch"
-              type="range"
-              min="0"
-              max={Math.max(0, data.epochs.length - 1)}
-              step="1"
-              value={epoch}
-              disabled={data.epochs.length < 2}
-              onChange={(e) => {
-                setPlaying(false);
-                setEpoch(Number(e.target.value));
-              }}
-            />
-            <div className="button-row">
+            <label className={`${s.control} ${s.size}`}>
+              <span>Field size</span>
+              <Select value={size} onChange={setSize}>
+                <option value="small">3 arcminutes</option>
+                <option value="medium">6 arcminutes</option>
+                <option value="large">15 arcminutes</option>
+              </Select>
+            </label>
+
+            <div className={s.viewer}>
+              <span className={`${s.compass} ${s.north}`} aria-hidden="true">N ↑</span>
+              <span className={`${s.compass} ${s.south}`} aria-hidden="true">S ↓</span>
+              <span className={`${s.compass} ${s.east}`} aria-hidden="true">E ←</span>
+              <span className={`${s.compass} ${s.west}`} aria-hidden="true">→ W</span>
+              <div className={s.image}>
+                <span className={s.brackets} aria-hidden="true" />
+                {error ? (
+                  <div className={s.message} role="alert">
+                    <strong>We could not open this field</strong>
+                    <p>{error}</p>
+                    <button
+                      type="button"
+                      className={s.retry}
+                      disabled={remaining > 0}
+                      onClick={() => setReload((x) => x + 1)}
+                    >
+                      <RotateCcw aria-hidden="true" />
+                      {remaining > 0 ? `Retry in ${remaining} s` : "Retry"}
+                    </button>
+                  </div>
+                ) : !data ? (
+                  <div className={s.message} role="status">
+                    <strong>
+                      {progress
+                        ? stages[progress.progress.stage] || "Preparing the field"
+                        : "Checking images"}
+                    </strong>
+                    <p>A new field can take a few minutes. You can go back to the menu.</p>
+                    {progress && (
+                      <>
+                        <progress
+                          max={progress.progress.total || 1}
+                          value={progress.progress.total ? progress.progress.done : undefined}
+                          aria-label="Field preparation"
+                        />
+                        <p>
+                          {progress.progress.total > 0
+                            ? `${progress.progress.done} of ${progress.progress.total}`
+                            : "Looking for available data…"}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : !current ? (
+                  <p className={s.message}>
+                    This field has no epochs available yet. Try another detector or size.
+                  </p>
+                ) : imageError ? (
+                  <div className={s.message} role="alert">
+                    <p>This image could not be loaded.</p>
+                    <button type="button" className={s.retry} onClick={() => setReload((n) => n + 1)}>
+                      <RotateCcw aria-hidden="true" /> Reload
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <img
+                      src={currentUrl}
+                      alt={`Infrared image of the field observed on ${current.start_utc.slice(0, 10)}, detector ${detector}`}
+                      width={420}
+                      height={420}
+                      onLoad={() => setImageLoading(false)}
+                      onError={() => {
+                        setImageError(true);
+                        setImageLoading(false);
+                        setPlaying(false);
+                      }}
+                    />
+                    {imageLoading && !loaded.has(currentUrl) && (
+                      <span role="status" className={s.imageStatus}>
+                        Loading epoch…
+                      </span>
+                    )}
+                    {/* The patch centre is the central pixel, which is where the target sits. */}
+                    <span className={s.reticle} aria-hidden="true" />
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className={s.cards}>
+              <section className={s.card} aria-labelledby="field-coordinates">
+                <h2 id="field-coordinates">
+                  <Crosshair aria-hidden="true" /> Coordinates (ICRS)
+                </h2>
+                <dl>
+                  <div>
+                    <dt>
+                      <ArrowLeftRight aria-hidden="true" /> RA
+                    </dt>
+                    <dd className={s.sexagesimal}>
+                      {ra ? (
+                        <>
+                          {ra.h}<i>h</i> {ra.m}<i>m</i> {ra.s}<i>s</i>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <ArrowUpDown aria-hidden="true" /> Dec
+                    </dt>
+                    <dd className={s.sexagesimal}>
+                      {dec ? (
+                        <>
+                          {dec.sign === "-" ? "−" : "+"}
+                          {dec.d}<i>°</i> {dec.m}<i>′</i> {dec.s}<i>″</i>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+              <section className={s.card} aria-labelledby="field-object">
+                <h2 id="field-object">
+                  <Layers aria-hidden="true" /> Object
+                </h2>
+                <dl>
+                  <div>
+                    <dt>Name</dt>
+                    <dd>{target?.name ?? "Custom position"}</dd>
+                  </div>
+                  <div>
+                    <dt>Type</dt>
+                    <dd>{target ? humanKind(target.kind) : "Field chosen by coordinates"}</dd>
+                  </div>
+                  <div>
+                    <dt>Band</dt>
+                    <dd>
+                      D{detector} · {data ? data.detector.wavelength_range_um.join("–") : band.range} µm
+                      {data && ` · ${data.size.pixel_scale_arcsec}″/px`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Instrument</dt>
+                    {/* The data release comes from the API for the epoch on screen; never hard-coded. */}
+                    <dd>{releaseLabel(current?.releases)}</dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
+
+            <div className={s.timeline}>
+              <p className={s.observed}>
+                {current
+                  ? `Observed: ${epochDateRange(current.start_utc, current.end_utc)} UTC`
+                  : "Observed: —"}
+                {count === 1 && " · Only one epoch is available; comparing needs at least two."}
+              </p>
+              <p className={s.honest}>
+                <strong>Observed change.</strong> A change between images does not confirm a new
+                object. Transparent areas have no data.
+              </p>
               <button
-                className="action"
-                disabled={data.epochs.length < 2 || imageError || !allPreloaded}
+                type="button"
+                className={s.compare}
+                disabled={!canCompare || !allPreloaded}
                 onClick={() => setPlaying((p) => !p)}
               >
-                {playing ? <Pause size={18} /> : <Play size={18} />}{" "}
+                {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
                 {playing
                   ? "Pause"
-                  : allPreloaded
+                  : !data || allPreloaded
                     ? "Compare epochs"
-                    : `Loading epochs ${preloaded}/${data.epochs.length}`}
+                    : `Loading epochs ${preloaded}/${count}`}
               </button>
-              <label>
-                Interval
-                <select
-                  value={interval}
-                  onChange={(e) => setIntervalMs(Number(e.target.value))}
-                >
+              <label className={`${s.control} ${s.interval}`}>
+                <span>Interval</span>
+                <Select value={interval} onChange={(v) => setIntervalMs(Number(v))}>
                   <option value="400">0.4 seconds</option>
                   <option value="800">0.8 seconds</option>
                   <option value="1500">1.5 seconds</option>
-                </select>
+                </Select>
               </label>
-              <span className="mono">
-                Epoch {epoch + 1} of {data.epochs.length}
+              <span className={s.counter} aria-live="polite">
+                {count ? `Epoch ${epoch + 1} of ${count}` : "Epoch —"}
               </span>
+              <div className={s.steps}>
+                <button type="button" aria-label="Previous epoch" disabled={!canCompare} onClick={() => stepEpoch(-1)}>
+                  <ChevronLeft aria-hidden="true" />
+                </button>
+                <button type="button" aria-label="Next epoch" disabled={!canCompare} onClick={() => stepEpoch(1)}>
+                  <ChevronRight aria-hidden="true" />
+                </button>
+              </div>
             </div>
-            {data.epochs.length === 1 && (
-              <p>Only one epoch is available; comparing needs at least two.</p>
-            )}
-            <p className="field-meta mono">
-              RA {data.patch.ra.toFixed(5)}° · Dec {data.patch.dec.toFixed(5)}°
-              · {data.detector.wavelength_range_um.join("–")} µm ·{" "}
-              {data.size.pixel_scale_arcsec}″/px
-            </p>
-            <p>
-              A change between images does not confirm a new object. Transparent
-              areas have no data.
-            </p>
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </section>
+  );
+}
+
+function Select({
+  value,
+  onChange,
+  children,
+}: {
+  value: string | number;
+  onChange: (v: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <span className={s.select}>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {children}
+      </select>
+      <ChevronDown aria-hidden="true" />
+    </span>
+  );
+}
+
+/** Ringed planet, as in the reference title. */
+function PlanetIcon() {
+  return (
+    <svg className={s.planet} viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="15" />
+      <path d="M12.5 44.5C4 50 2 54.5 6 56c6 2.2 22-4.6 36-15.5S62 15.6 58 9.6C56 6.8 50 8 43 12" />
+    </svg>
   );
 }
