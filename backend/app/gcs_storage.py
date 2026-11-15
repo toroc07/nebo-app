@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import functools
 import hashlib
 import logging
 import os
@@ -37,6 +38,12 @@ def _import_gcs_storage() -> Any:
     return storage
 
 
+@functools.lru_cache(maxsize=4)
+def _shared_client(bucket_name: str, project: str | None, prefix: str) -> "GCSStorageClient":
+    # One storage.Client per config: building it per call costs auth and setup every time.
+    return GCSStorageClient(bucket_name=bucket_name, project=project, prefix=prefix)
+
+
 class GCSStorageClient:
     """Thin wrapper over google.cloud.storage configured via env vars."""
 
@@ -59,7 +66,7 @@ class GCSStorageClient:
             return None
         project = os.environ.get("NEBO_GCS_PROJECT", DEFAULT_GCS_PROJECT).strip() or None
         prefix = os.environ.get("NEBO_GCS_PREFIX", DEFAULT_GCS_PREFIX).strip() or DEFAULT_GCS_PREFIX
-        return cls(bucket_name=bucket_name, project=project, prefix=prefix)
+        return _shared_client(bucket_name, project, prefix)
 
     def _get_bucket(self) -> Any:
         if self._client is None:

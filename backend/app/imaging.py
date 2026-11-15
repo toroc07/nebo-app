@@ -265,20 +265,43 @@ def compute_all_sector_coordinates(ra: float, dec: float) -> list[dict[str, Any]
     return sectors
 
 
+def target_world(target_wcs: WCS, target_shape: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+    """Sky coordinates of every target pixel; the same for all frames of a build."""
+    ny, nx = target_shape
+    xs, ys = np.meshgrid(np.arange(nx), np.arange(ny))
+    return target_wcs.pixel_to_world_values(xs, ys)
+
+
+def reproject_nearest_many(
+    arrays: list[np.ndarray],
+    source_wcs: WCS,
+    target_wcs: WCS,
+    target_shape: tuple[int, int],
+    world: tuple[np.ndarray, np.ndarray] | None = None,
+) -> list[np.ndarray]:
+    """Resample arrays sharing one source WCS onto the target grid (nearest neighbour).
+
+    The pixel lookup is computed once for all arrays; pass ``world`` to reuse the target
+    grid's sky coordinates across frames.
+    """
+    world_ra, world_dec = world or target_world(target_wcs, target_shape)
+    src_x, src_y = source_wcs.world_to_pixel_values(world_ra, world_dec)
+    ix = np.rint(src_x).astype(int)
+    iy = np.rint(src_y).astype(int)
+    outs = []
+    for values in arrays:
+        inside = (ix >= 0) & (iy >= 0) & (ix < values.shape[1]) & (iy < values.shape[0])
+        out = np.full(target_shape, np.nan)
+        out[inside] = values[iy[inside], ix[inside]]
+        outs.append(out)
+    return outs
+
+
 def reproject_nearest(
     values: np.ndarray, source_wcs: WCS, target_wcs: WCS, target_shape: tuple[int, int]
 ) -> np.ndarray:
     """Resample ``values`` onto the target grid with nearest-neighbour sampling."""
-    ny, nx = target_shape
-    xs, ys = np.meshgrid(np.arange(nx), np.arange(ny))
-    world_ra, world_dec = target_wcs.pixel_to_world_values(xs, ys)
-    src_x, src_y = source_wcs.world_to_pixel_values(world_ra, world_dec)
-    ix = np.rint(src_x).astype(int)
-    iy = np.rint(src_y).astype(int)
-    inside = (ix >= 0) & (iy >= 0) & (ix < values.shape[1]) & (iy < values.shape[0])
-    out = np.full(target_shape, np.nan)
-    out[inside] = values[iy[inside], ix[inside]]
-    return out
+    return reproject_nearest_many([values], source_wcs, target_wcs, target_shape)[0]
 
 
 def crop_center(image: np.ndarray, side: int) -> np.ndarray:

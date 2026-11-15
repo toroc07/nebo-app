@@ -279,9 +279,14 @@ def _build_exposure_row(
 
 
 def render_epoch_images(
-    records: list[irsa.FrameRecord], epochs: list[list[int]], processed: list[_Processed]
+    records: list[irsa.FrameRecord],
+    epochs: list[list[int]],
+    processed: list[_Processed],
+    final: bool = True,
 ) -> list[EpochImage]:
     """Co-add each epoch on the large grid, crop every size and render the PNGs.
+
+    ``final=False`` is for the previews saved mid-build: it skips the npz and the hole fill.
 
     Display limits are shared by all epochs and sizes, so a blink compares like with like.
     """
@@ -291,8 +296,8 @@ def render_epoch_images(
         if members:
             frames, variances = [m.image for m in members], [m.variance for m in members]
             stacked, stacked_variance = imaging.coadd(frames, variances)
-            npz = imaging.to_npz(stacked, stacked_variance)
-            coadds.append((epoch, imaging.fill_enclosed_holes(stacked), npz))
+            npz = imaging.to_npz(stacked, stacked_variance) if final else None
+            coadds.append((epoch, imaging.fill_enclosed_holes(stacked) if final else stacked, npz))
 
     # One stretch for every size (taken from the largest), so changing size keeps the contrast.
     largest = max(config.SIZES_DEG, key=config.SIZES_DEG.get)
@@ -503,6 +508,7 @@ class TimelineService:
             patch.ra, patch.dec, config.SIZES_DEG["large"]
         )
 
+        grid_world = imaging.target_world(grid_wcs, grid_shape)
         done = 0
         current_stage = "downloading"
         progress_lock = threading.Lock()
@@ -532,12 +538,13 @@ class TimelineService:
                     if proper_motion
                     else None
                 )
+                image, variance = imaging.reproject_nearest_many(
+                    [cutout.image, cutout.variance], cutout.wcs, grid_wcs, grid_shape, grid_world
+                )
                 return _Processed(
                     epoch=epoch,
-                    image=imaging.reproject_nearest(cutout.image, cutout.wcs, grid_wcs, grid_shape),
-                    variance=imaging.reproject_nearest(
-                        cutout.variance, cutout.wcs, grid_wcs, grid_shape
-                    ),
+                    image=image,
+                    variance=variance,
                     exposure_row=_build_exposure_row(
                         patch, timeline, epoch, record, cutout, data, source_position
                     ),
@@ -582,7 +589,7 @@ class TimelineService:
                     )
                     store.save_partial_timeline(
                         timeline_id,
-                        render_epoch_images(records, epochs, processed),
+                        render_epoch_images(records, epochs, processed, final=False),
                         stage=wave_stage,
                         done=done,
                         total=total_work,
