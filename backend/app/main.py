@@ -817,11 +817,14 @@ def _load_epoch_arrays(
     images = store.list_images(tl.id, size)
     if not images:
         raise HTTPException(status_code=404, detail="No images found for this size.")
+    # Only the largest size stores float32 arrays; smaller sizes are its centre crop (as their PNGs).
+    largest = max(config.SIZES_DEG, key=config.SIZES_DEG.get)
+    side = imaging.grid_pixels(config.SIZES_DEG[size])
     arrays: dict[int, np.ndarray] = {}
-    for img in images:
+    for img in store.list_images(tl.id, largest):
         npz = store.get_npz(img.id)
         if npz is not None:
-            arrays[img.epoch_index] = np.load(io.BytesIO(npz))["image"]
+            arrays[img.epoch_index] = imaging.crop_center(np.load(io.BytesIO(npz))["image"], side)
     return images, arrays
 
 
@@ -885,6 +888,8 @@ def get_patch_candidates(
         "wise_available": wise_available,
         "gaia_complete_to_g": g_complete,
         "candidates": candidates,
+        # Detection stops at the cap: there may be more changes than listed.
+        "truncated": len(detections) >= crossmatch.MAX_CANDIDATES,
     }
 
 
