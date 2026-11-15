@@ -302,6 +302,10 @@ Simulated science profiles (`simulated: true`). Fields the web client reads (kee
   `saturated` is tri-state: `true` (some frame saturated), `false` (every frame checked, none
   saturated) or `null` (frames left unchecked: never read as clean; the UI shows "n/a").
 - `/models/event`: `treeshap_values.top_drivers[]` of `{feature, phi}`.
+- Models 1 and 2 shrink their probabilities toward uniform (10%), so no class reads 0% or
+  100%: the weights are hand-set, not calibrated. After changing a model, refresh stored results
+  with `POST /patches/{id}/analyze` and body `{"force_recompute": true}` (without it the
+  stored results are returned unchanged).
 
 ### Database catalog hydration (`python -m app.db sync-catalogs`)
 
