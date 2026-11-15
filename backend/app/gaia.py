@@ -151,11 +151,7 @@ def parse_csv(text: str) -> list[GaiaSource]:
     return sources
 
 
-def query_cone(
-    ra: float, dec: float, radius_deg: float, g_max: float = DEFAULT_G_MAX, limit: int = MAX_ROWS
-) -> list[GaiaSource]:
-    """Gaia DR3 stars within ``radius_deg`` of (ra, dec), brightest first."""
-    query = build_cone_query(ra, dec, radius_deg, g_max, limit)
+def _post_tap(query: str) -> list[GaiaSource]:
     params = {"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "csv", "QUERY": query}
     for attempt in range(QUERY_ATTEMPTS):
         try:
@@ -169,6 +165,61 @@ def query_cone(
             log.info("Gaia TAP query failed (%s), retrying in %.0f s", error, wait)
             time.sleep(wait)
     raise AssertionError("unreachable")
+
+
+def query_cone(
+    ra: float, dec: float, radius_deg: float, g_max: float = DEFAULT_G_MAX, limit: int = MAX_ROWS
+) -> list[GaiaSource]:
+    """Gaia DR3 stars within ``radius_deg`` of (ra, dec), brightest first."""
+    return _post_tap(build_cone_query(ra, dec, radius_deg, g_max, limit))
+
+
+def build_suggested_query(
+    ra: float | None = None,
+    dec: float | None = None,
+    radius_deg: float = 30.0,
+    min_pm_mas_yr: float = 500.0,
+    min_parallax_mas: float = 50.0,
+    g_max: float = 14.0,
+    limit: int = 20,
+) -> str:
+    """ADQL query for nearby or fast-moving Gaia DR3 stars for the sky explorer."""
+    cone = ""
+    if ra is not None and dec is not None:
+        cone = (
+            f"  AND 1 = CONTAINS(POINT('ICRS', ra, dec), "
+            f"CIRCLE('ICRS', {ra:.7f}, {dec:.7f}, {radius_deg:.6f}))\n"
+        )
+    return f"""
+SELECT TOP {int(limit)} {", ".join(COLUMNS)}
+FROM gaiadr3.gaia_source
+WHERE phot_g_mean_mag < {g_max:.2f}
+  AND (pm > {min_pm_mas_yr:.1f} OR parallax > {min_parallax_mas:.1f})
+{cone}ORDER BY pm DESC
+"""
+
+
+def query_suggested_destinations(
+    ra: float | None = None,
+    dec: float | None = None,
+    radius_deg: float = 30.0,
+    min_pm_mas_yr: float = 500.0,
+    min_parallax_mas: float = 50.0,
+    g_max: float = 14.0,
+    limit: int = 20,
+) -> list[GaiaSource]:
+    """Fetch nearby or high-proper-motion Gaia DR3 stars to suggest in the explorer."""
+    return _post_tap(
+        build_suggested_query(
+            ra=ra,
+            dec=dec,
+            radius_deg=radius_deg,
+            min_pm_mas_yr=min_pm_mas_yr,
+            min_parallax_mas=min_parallax_mas,
+            g_max=g_max,
+            limit=limit,
+        )
+    )
 
 
 def separation_arcsec(ra1: float, dec1: float, ra2: float, dec2: float) -> float:

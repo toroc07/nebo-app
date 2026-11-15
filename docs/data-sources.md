@@ -17,7 +17,8 @@ together is in [`architecture.md`](architecture.md).
 | **NASA/IPAC IRSA — SIA** | `https://irsa.ipac.caltech.edu/SIA` (GET) | Same image list via `POS=CIRCLE ra dec 0.0001`, collections `spherex_dr1`, `spherex_qr3`, `spherex_dr1_deep`, `spherex_qr3_deep`, `dataproduct_subtype = science` | `backend/app/irsa.py` (`_query_frames_sia`, `SIA_COLLECTIONS`) | same as TAP | Lags TAP by about a day; used as hedge and fallback. 3 attempts |
 | **NASA/IPAC IRSA — IBE cutouts** | `https://irsa.ipac.caltech.edu/ibe/data/spherex/...?center=ra,decd&size=deg` | A 0.354° cutout of each Level 2 image: multi-extension FITS with IMAGE, VARIANCE, FLAGS, ZODI and the spectral WCS `W` | `backend/app/irsa.py` (`cutout_url`, `fetch_cutout`); read by `backend/app/imaging.py` (`read_cutout`) | Disk (`NEBO_CACHE_DIR`) and optional GCS; processed PNG/NPZ in `timeline_images` | ~4 MB each. Retries 429/5xx with backoff that honours `Retry-After`; 6 downloads in flight per process (IRSA is shared by every team) |
 | **NASA/IPAC IRSA — SPHEREx HiPS** | `https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube` | All-sky background map (cube, slice 40) streamed by Aladin Lite in the browser | `frontend/components/Sky.tsx` (`SPHEREX_HIPS`) | Browser cache | Visual reference only; never used for measurements |
-| **ESA Gaia DR3** | `https://gea.esac.esa.int/tap-server/tap/sync` (ADQL, CSV) | `gaiadr3.gaia_source`: `source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag, bp_rp`, cone around the patch, `phot_g_mean_mag < g_max`, `TOP 5000` | `backend/app/gaia.py` (`build_cone_query`, `query_cone`); served by `GET /patches/{id}/gaia` in `backend/app/main.py` | `api_query_cache` (`gaia_dr3_tap`) | 502 `gaia_unavailable` + `Retry-After: 30` when ESA fails. Positions propagated from J2016.0 to each epoch |
+| **ESA Gaia DR3** | `https://gea.esac.esa.int/tap-server/tap/sync` (ADQL, CSV) | `gaiadr3.gaia_source`: `source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag, bp_rp`, cone around the patch, `phot_g_mean_mag < g_max`, `TOP 5000`; also nearby/fast stars for `/explore/suggested` | `backend/app/gaia.py` (`build_cone_query`, `query_cone`, `query_suggested_destinations`); served by `/patches/{id}/gaia`, `/explore/suggested`, and cross-matched in `crossmatch.py` | `api_query_cache` (`gaia_dr3_tap`, `gaia_suggested_tap`) | 502 `gaia_unavailable` + `Retry-After: 30` when ESA fails (curated fallback on `/explore/suggested`). Positions propagated from J2016.0 to each epoch |
+| **NASA/IPAC IRSA — CatWISE2020** | `https://irsa.ipac.caltech.edu/TAP/sync` (POST, ADQL, CSV) | `catwise_2020`: `source_id, ra, dec, pmra, pmdec, w1mpro, w2mpro, w1sigmpro, w2sigmpro`, cone around the patch, `w2mpro < w2_max`, `TOP 5000` | `backend/app/wise.py` (`build_cone_query`, `query_cone`); served by `GET /patches/{id}/wise` and cross-matched in `crossmatch.py` / `models.py` | `api_query_cache` (`catwise2020_tap`) | 502 `wise_unavailable` + `Retry-After: 30` when IRSA fails. Positions propagated from 2015.4 to each epoch |
 
 ### What the SPHEREx data looks like to us
 
@@ -46,9 +47,7 @@ Resources listed by the NASA Space Apps 2026 challenge "Planet X and SPHEREx":
 
 ## Referenced but not queried
 
-- **SIMBAD**: only the source of the hard-coded target coordinates in `backend/app/targets.py`.
-- **WISE / CatWISE2020**: mentioned in schema comments and unused columns
-  (`targets.wise_*`, `patches.wise_crossmatch_json`); no query exists.
+- **SIMBAD**: only the source of the hard-coded target coordinates in `backend/app/targets.py` (used as fallback for ultra-cool dwarfs invisible in Gaia DR3).
 - `astroquery` is in `requirements.txt` but not imported: plain `requests` calls with explicit
   timeouts are used instead (astroquery/pyvo set no time limit).
 
