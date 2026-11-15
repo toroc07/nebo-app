@@ -70,6 +70,28 @@
   pointer-events: none;
 }
 
+/* Gaia DR3 stars: thin green rings inside the stage (they scale with the image, the stroke
+   does not). Fast movers in magenta, distinct from the amber expected-position ring. */
+.gaia {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.gaia circle {
+  fill: none;
+  stroke: #7ee0a1;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+}
+.gaia circle.gaiaFast {
+  stroke: #ff6bd6;
+  stroke-width: 2;
+  opacity: 1;
+}
+
 /* User pin: a crosshair, visually distinct from the catalog ring. */
 .pin {
   position: absolute;

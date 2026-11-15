@@ -47,6 +47,7 @@ import {
   type SkyGrid,
   type SkyPoint,
 } from "@/lib/lab/sky";
+import type { GaiaMark } from "@/lib/lab/gaia";
 import s from "./lab.module.css";
 
 /** `px` is the pixel index in the image of the level being shown. */
@@ -67,6 +68,8 @@ type Props = {
   resetKey: string;
   /** Catalog position as a 0-based pixel index in the current level, or null. */
   marker: PixelPoint | null;
+  /** Catalogued Gaia stars to ring, as world pixel indices (already clipped to the level). */
+  catalogStars?: GaiaMark[];
   pin: SkyPoint | null;
   /** `final` is false while the pin is being dragged and true once the position is settled. */
   onPinChange: (pin: SkyPoint | null, final: boolean) => void;
@@ -97,6 +100,7 @@ export default function ImageViewport({
   onLevelChange,
   resetKey,
   marker,
+  catalogStars,
   pin,
   onPinChange,
   onHover,
@@ -559,6 +563,27 @@ export default function ImageViewport({
                 draggable={false}
                 onError={onImageError}
               />
+              {/* Inside the stage, so the rings pan and zoom with the image for free. Drawn in
+                  world pixels: a radius of 1.5 px is ~9″, about one SPHEREx PSF. */}
+              {catalogStars && catalogStars.length > 0 && (
+                <svg
+                  className={s.gaia}
+                  width={world.width}
+                  height={world.height}
+                  viewBox={`0 0 ${world.width} ${world.height}`}
+                  aria-hidden="true"
+                >
+                  {catalogStars.map((m) => (
+                    <circle
+                      key={m.id}
+                      cx={m.x + 0.5}
+                      cy={m.y + 0.5}
+                      r={1.5}
+                      className={m.fast ? s.gaiaFast : undefined}
+                    />
+                  ))}
+                </svg>
+              )}
             </div>
             {markerScreen && (
               <span
