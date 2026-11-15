@@ -130,9 +130,11 @@ export default function CockpitScreens({
   onFov: (fov: number) => void;
 }) {
   const countries = useCountries();
-  // The Earth panels follow the destination when there is one, otherwise the map centre.
+  // Tools copy the destination when there is one, otherwise the map centre.
   const focus = position ?? (view ? { ra: view.ra, dec: view.dec } : null);
-  const zenith = focus ? subPoint(focus.ra, focus.dec, now) : null;
+  // The Earth panels follow what the map shows; the destination only until the map reports a view.
+  const centre = view ? { ra: view.ra, dec: view.dec } : position;
+  const zenith = centre ? subPoint(centre.ra, centre.dec, now) : null;
   const ground = zenith ? countryAt(countries, zenith) : null;
 
   const nearest = useMemo(() => {
@@ -153,7 +155,7 @@ export default function CockpitScreens({
       <EarthGlobe
         countries={countries}
         zenith={zenith}
-        follow={focus ? `${focus.ra.toFixed(4)},${focus.dec.toFixed(4)}` : ""}
+        follow={centre ? `${centre.ra.toFixed(4)},${centre.dec.toFixed(4)}` : ""}
         onOpen={() => onTab("sky")}
       />
 
