@@ -1,3 +1,5 @@
+<p align="center"><img src="frontend/public/brand/nebo-logo-ui.png" width="160" alt="Nebo logo"></p>
+
 # Nebo — SPHEREx sky viewer
 
 Nebo is a web viewer of the infrared sky built for the **NASA Space Apps Challenge 2026,
