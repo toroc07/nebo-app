@@ -155,6 +155,11 @@ await page.waitForFunction(() => document.documentElement.dataset.reduced);
 // --- start screen ------------------------------------------------------------------------------
 const menu = page.getByRole("navigation", { name: "Start menu" });
 assert.equal(await menu.getByRole("button").count(), 3, "START, TUTORIAL and CREW");
+assert.equal(
+  await page.getByRole("link", { name: /Nebo source code on GitHub/ }).getAttribute("href"),
+  "https://github.com/toroc07/nebo-app",
+  "the start screen links to the repository",
+);
 assert.ok(
   await page
     .locator('[data-scene="home"] img')

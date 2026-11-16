@@ -116,7 +116,8 @@ and zoom-level helpers stay in `lib/lab/` because the field viewer uses them; it
 
 ## Browser test
 
-`node tests/browser.mjs` drives the real journey with the API mocked: start screen (axe),
+`node tests/browser.mjs` drives the real journey with the API mocked: start screen (axe, and the
+bottom-left GitHub link to `https://github.com/toroc07/nebo-app`, which opens in a new tab),
 the 7-step tutorial, 200 % text and RTL at desktop sizes, START → cockpit, Objects → View images
 → field (a 202 then ready) and Back, then a field at `preview_ready` (Compare preview and the
 epoch steps enabled, Stack and Changes disabled, Gaia prefetched once and kept on the final

@@ -223,6 +223,52 @@
   outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
+/*
+ * Repository link: bottom-left of the room, in the menu's style but quieter than its buttons.
+ * It sits just right of the sound toggle (audio.module.css: fixed, 40 px at left/bottom 16 px),
+ * sharing its bottom edge.
+ */
+.repo {
+  position: absolute;
+  left: 64px;
+  bottom: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: max(8px, calc(10 * var(--S)));
+  min-height: 44px;
+  padding: max(6px, calc(8 * var(--S))) max(12px, calc(16 * var(--S)));
+  color: var(--ink);
+  text-decoration: none;
+  background: rgb(4 14 22 / 0.78);
+  border: 1px solid rgb(63 210 255 / 0.35);
+  border-radius: calc(5 * var(--S));
+  transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+.repo svg {
+  flex: none;
+  width: max(20px, calc(24 * var(--S)));
+  height: max(20px, calc(24 * var(--S)));
+}
+.repo strong {
+  display: block;
+  font: 600 max(13px, calc(15 * var(--S))) Plex, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.repo small {
+  display: block;
+  font-size: max(11px, calc(12 * var(--S)));
+  color: var(--muted);
+}
+.repo:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 14px rgb(63 210 255 / 0.4);
+}
+.repo:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
 /* Crew roster: replaces the menu inside the same wall screen. */
 .crew {
   display: flex;

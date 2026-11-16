@@ -550,6 +550,8 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Start screen: a GitHub link at the bottom left opens the repository
+  (`toroc07/nebo-app`) in a new tab; Next's dev indicator moves to the bottom right.
 - **2026-11-15** — Cockpit: dragging the map until the selected object (or typed point) leaves
   the centre reticle now forgets it; before, *View images* reopened an object that was no
   longer on screen. Zooming in place keeps the selection.
