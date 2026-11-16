@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Target } from "@/lib/api";
 import { LANDMARKS, type Landmark } from "@/lib/landmarks";
+import { angularDistance, centreRadiusDeg } from "@/lib/coordinates";
 // Aladin's distributed package has no TypeScript declarations.
 // The small interface below describes only the public methods used here.
 type Viewer = {
@@ -101,27 +102,51 @@ export default function Sky({
     [ready, setReady] = useState(false),
     [retry, setRetry] = useState(0),
     [hover, setHover] = useState<HoverLabel | null>(null),
-    [pinAt, setPinAt] = useState<{ x: number; y: number } | null>(null);
+    [pinAt, setPinAt] = useState<{ x: number; y: number } | null>(null),
+    // The marker under the centre reticle (the purple crosshair), named while it stays there.
+    [centred, setCentred] = useState<HoverLabel | null>(null);
   callback.current = onSelect;
   landmarkCallback.current = onLandmark;
-  // The pinned label follows its object while the map moves. Its pixel is asked for in the next
-  // animation frame, outside Aladin's own event handling (calling into its WASM from inside an
-  // Aladin event can collide with its redraw).
+  // Labels that follow the map: the pinned destination, and whichever visible marker sits under
+  // the centre reticle (the same radius the console uses for "at the map centre"). Pixels are
+  // asked for in the next animation frame, outside Aladin's own event handling (calling into its
+  // WASM from inside an Aladin event can collide with its redraw).
   const pinnedRef = useRef(pinned),
+    targetsRef = useRef(targets),
+    layersRef = useRef(layers),
     pinFrame = useRef(0),
     placePin = useRef(() => {});
   pinnedRef.current = pinned;
+  targetsRef.current = targets;
+  layersRef.current = layers;
   placePin.current = () => {
     cancelAnimationFrame(pinFrame.current);
     pinFrame.current = requestAnimationFrame(() => {
+      const v = viewer.current;
+      const toPixel = (ra: number, dec: number) => {
+        try {
+          const xy = v ? v.world2pix(ra, dec) : null;
+          return xy && Number.isFinite(xy[0]) && Number.isFinite(xy[1]) ? { x: xy[0], y: xy[1] } : null;
+        } catch {
+          return null;
+        }
+      };
       const pin = pinnedRef.current;
-      let xy: [number, number] | null = null;
-      try {
-        xy = pin && viewer.current ? viewer.current.world2pix(pin.ra, pin.dec) : null;
-      } catch {
-        xy = null;
-      }
-      setPinAt(xy && Number.isFinite(xy[0]) && Number.isFinite(xy[1]) ? { x: xy[0], y: xy[1] } : null);
+      setPinAt(pin ? toPixel(pin.ra, pin.dec) : null);
+      const { ra, dec } = center.current;
+      const radius = centreRadiusDeg(fieldOfView.current, host.current?.clientWidth);
+      const candidates = [
+        ...(layersRef.current.markers
+          ? targetsRef.current.map((t) => ({ name: t.name, kind: "Nebo target", ra: t.ra, dec: t.dec }))
+          : []),
+        ...(layersRef.current.landmarks ? LANDMARKS : []),
+      ];
+      const nearest = candidates
+        .map((c) => ({ c, d: angularDistance(ra, dec, c.ra, c.dec) }))
+        .filter((x) => x.d <= radius)
+        .sort((a, b) => a.d - b.d)[0]?.c;
+      const at = nearest ? toPixel(nearest.ra, nearest.dec) : null;
+      setCentred(nearest && at ? { name: nearest.name, kind: nearest.kind, ...at } : null);
     });
   };
   useEffect(() => () => cancelAnimationFrame(pinFrame.current), []);
@@ -298,6 +323,7 @@ export default function Sky({
       viewer.current?.setFoV(fieldOfView.current);
     }
     viewCallback.current({ ...center.current, fov: fieldOfView.current });
+    placePin.current();
   }
   useEffect(() => {
     if (selected && ready) fly(selected.ra, selected.dec, 8);
@@ -305,8 +331,11 @@ export default function Sky({
   // After the fly effects above (same commit), so the pin is measured where the map ends up.
   useEffect(() => {
     if (ready) placePin.current();
-    else setPinAt(null);
-  }, [pinned?.name, pinned?.ra, pinned?.dec, ready]);
+    else {
+      setPinAt(null);
+      setCentred(null);
+    }
+  }, [pinned?.name, pinned?.ra, pinned?.dec, ready, targets, layers.markers, layers.landmarks]);
   useEffect(() => {
     if (coordinates && ready) fly(coordinates.ra, coordinates.dec, 8);
   }, [coordinates, ready]);
@@ -339,8 +368,15 @@ export default function Sky({
           <span>{pinned.kind}</span>
         </p>
       )}
-      {/* The pinned object already shows its name; hovering it adds no second label. */}
-      {hover && hover.name !== pinned?.name && (
+      {/* Under the centre reticle: named while the crosshair stays on it; a click pins it. */}
+      {centred && centred.name !== pinned?.name && (
+        <p className="sky-label" data-centred="" style={{ left: centred.x, top: centred.y }} aria-hidden="true">
+          <strong>{centred.name}</strong>
+          <span>{centred.kind}</span>
+        </p>
+      )}
+      {/* An object that already shows its name gets no second label from the pointer. */}
+      {hover && hover.name !== pinned?.name && hover.name !== centred?.name && (
         <p className="sky-label" style={{ left: hover.x, top: hover.y }} aria-hidden="true">
           <strong>{hover.name}</strong>
           <span>{hover.kind}</span>

@@ -246,28 +246,40 @@ await page.screenshot({ path: path.join(out, "cockpit.png") });
 // --- Objects -> Barnard's Star -> View images -> field console --------------------------------
 await objectsTab.click();
 await page.getByRole("tabpanel").getByRole("button", { name: /Barnard's Star/ }).click();
-// The map flies to the selection, so its marker sits at the map centre. The chosen destination's
-// name stays pinned above it; clicking the marker again drops the selection (and the name), after
-// which the name only shows while the pointer is over the marker; a third click picks it again.
+// The map flies to the selection, so its marker sits under the centre reticle. The chosen
+// destination's name stays pinned above it. Clicking the marker again drops the selection; its
+// name then shows only while the reticle (or the pointer) is on it. Clicking it picks it again.
 {
   const box = await page.getByRole("region", { name: /SPHEREx sky map/ }).boundingBox();
   const cx = box.x + box.width / 2,
     cy = box.y + box.height / 2;
   const pinned = page.locator(".sky-label[data-pinned]").filter({ hasText: "Barnard's Star" });
-  const hovered = page.locator(".sky-label:not([data-pinned])").filter({ hasText: "Barnard's Star" });
+  const centred = page.locator(".sky-label[data-centred]").filter({ hasText: "Barnard's Star" });
+  const hovered = page.locator(".sky-label:not([data-pinned]):not([data-centred])").filter({ hasText: "Barnard's Star" });
   await pinned.waitFor({ timeout: 10_000 });
   await page.mouse.click(cx, cy);
   await pinned.waitFor({ state: "detached", timeout: 5_000 });
   await page.getByText("Free flight").first().waitFor({ timeout: 5_000 });
-  await page.mouse.move(box.x + 10, box.y + 10);
+  await centred.waitFor({ timeout: 5_000 });
+  // Drag the map 120 px right (hand-paced: Aladin's WASM dislikes bursts of pointer moves).
+  const sx = cx - 240,
+    sy = cy - 120;
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) {
+    await page.mouse.move(sx + 15 * i, sy);
+    await page.waitForTimeout(60);
+  }
+  await page.mouse.up();
+  await centred.waitFor({ state: "detached", timeout: 5_000 });
   for (let i = 0; i < 20 && !(await hovered.count()); i++) {
-    await page.mouse.move(cx + (i % 2), cy);
+    await page.mouse.move(cx + 120 + (i % 3) - 1, cy);
     await page.waitForTimeout(250);
   }
   await hovered.waitFor({ timeout: 5_000 });
   await page.mouse.move(box.x + 10, box.y + 10);
   await hovered.waitFor({ state: "detached", timeout: 5_000 });
-  await page.mouse.click(cx, cy);
+  await page.mouse.click(cx + 120, cy);
   await pinned.waitFor({ timeout: 5_000 });
 }
 mode = "building"; // the first /timeline answer is 202, the retry is ready
@@ -371,7 +383,7 @@ writeFileSync(
         "tutorial: 7 steps, buttons, keyboard, back to the menu",
         "200% text and RTL at desktop sizes",
         "START -> cockpit unlocked",
-        "Sky-map marker names: shown on hover, pinned by a click, dropped by a second click",
+        "Sky-map marker names: under the reticle or the pointer, pinned by a click, dropped by a second click",
         "Objects -> View images -> field (202 then ready, epoch image)",
         "Back to the cockpit",
         "Field at preview_ready: compare and step enabled, stack and changes wait, Gaia prefetched once",

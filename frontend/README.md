@@ -24,8 +24,10 @@ the Nebo targets (gold squares, from `/targets`; clicking one selects it) and **
 blue circles, `lib/landmarks.ts`): 34 famous objects visible in the infrared (Orion Nebula,
 Andromeda, the Galactic Centre, bright stars…) and the Sun's nearest neighbours (Proxima Centauri,
 Wolf 359, Luhman 16…). Landmark positions are fixed SIMBAD coordinates (J2000), not queried at
-run time. Hovering any marker shows its name and kind just above the pointer (Aladin's
-`objectHovered` event); the label goes away when the pointer leaves or the map moves. Clicking a
+run time. A marker's name and kind show above it while the centre reticle (the purple
+crosshair, same radius as the console's "at the map centre") is on it, and go when the map moves
+it away; hovering any marker with the pointer shows its name too (Aladin's `objectHovered`
+event). Clicking a
 marker selects it: its name stays pinned above it (it follows the object while the map moves) and
 it becomes the destination. A landmark is a destination like typed coordinates (no build is
 started until *View images*), and the field opens with its name. The pin goes away when another
