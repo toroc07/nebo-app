@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { Target } from "@/lib/api";
+import { LANDMARKS } from "@/lib/landmarks";
 // Aladin's distributed package has no TypeScript declarations.
 // The small interface below describes only the public methods used here.
 type Viewer = {
@@ -12,8 +13,12 @@ type Viewer = {
     options?: { successCallback?: (survey: { setSliceNumber: (n: number) => void }) => void },
   ) => unknown;
   setImageLayer: (layer: unknown) => void;
-  // Callbacks verified in aladin.js: positionChanged gets {ra, dec, dragging}, zoomChanged the FoV.
-  on: (event: "positionChanged" | "zoomChanged", handler: (payload: never) => void) => void;
+  // Callbacks verified in aladin.js: positionChanged gets {ra, dec, dragging}, zoomChanged the FoV;
+  // objectHovered / objectHoveredStop get (source, {x, y}) with the pointer in the map's pixels.
+  on: (
+    event: "positionChanged" | "zoomChanged" | "objectHovered" | "objectHoveredStop",
+    handler: (...payload: never[]) => void,
+  ) => void;
   getRaDec: () => [number, number];
   showCooGrid: () => void;
   hideCooGrid: () => void;
@@ -24,7 +29,15 @@ type Viewer = {
 export type SkySnapshot = { url: string; width: number; height: number };
 /** What the map is showing right now: its centre and horizontal field of view, in degrees. */
 export type SkyView = { ra: number; dec: number; fov: number };
-export type SkyLayers = { markers: boolean; grid: boolean };
+export type SkyLayers = { markers: boolean; landmarks: boolean; grid: boolean };
+/** A hovered marker's name, drawn above the pointer (map pixels). */
+type HoverLabel = { name: string; kind: string; x: number; y: number };
+type CatalogLayer = {
+  removeAll: () => void;
+  addSources: (s: unknown[]) => void;
+  show: () => void;
+  hide: () => void;
+};
 /** Camera moves the cockpit screens can request (the command id is added by the page). */
 export type SkyMove =
   | { action: "center" | "goto"; ra: number; dec: number }
@@ -65,19 +78,18 @@ export default function Sky({
   const host = useRef<HTMLDivElement>(null),
     fieldOfView = useRef(180),
     viewer = useRef<Viewer | null>(null),
-    catalog = useRef<{
-      removeAll: () => void;
-      addSources: (s: unknown[]) => void;
-      show: () => void;
-      hide: () => void;
-    } | null>(null),
+    catalog = useRef<CatalogLayer | null>(null),
+    // Orientation only (lib/landmarks.ts): a separate catalogue, style and toggle from the
+    // Nebo targets, and no click action.
+    landmarks = useRef<CatalogLayer | null>(null),
     api = useRef<any>(null),
     callback = useRef(onSelect),
     viewCallback = useRef(onView),
     center = useRef({ ra: 269.446, dec: 4.769 });
   const [error, setError] = useState(false),
     [ready, setReady] = useState(false),
-    [retry, setRetry] = useState(0);
+    [retry, setRetry] = useState(0),
+    [hover, setHover] = useState<HoverLabel | null>(null);
   callback.current = onSelect;
   viewCallback.current = onView;
   const captureCallback = useRef(onCapture);
@@ -145,6 +157,17 @@ export default function Sky({
             { successCallback: (survey) => survey.setSliceNumber(SKY_FRAME) },
           ),
         );
+        // Added first, so the Nebo targets are drawn above them where they overlap.
+        landmarks.current = A.catalog({
+          name: "Landmarks",
+          shape: "circle",
+          sourceSize: 12,
+          color: "#9ad7ff",
+        });
+        viewer.current!.addCatalog(landmarks.current);
+        landmarks.current!.addSources(
+          LANDMARKS.map((l) => A.source(l.ra, l.dec, { name: l.name, kind: l.kind })),
+        );
         catalog.current = A.catalog({
           name: "Nebo objects",
           sourceSize: 18,
@@ -157,14 +180,29 @@ export default function Sky({
           },
         });
         viewer.current!.addCatalog(catalog.current);
+        // Hovering a marker (Nebo target or landmark) names it above the pointer. The pointer
+        // position comes with the event: asking Aladin for the source's pixel here would call
+        // into its WASM in the middle of its own event handling.
+        viewer.current!.on("objectHovered", ((
+          source: { data?: { name?: string; kind?: string } } | null,
+          xy: { x: number; y: number } | undefined,
+        ) => {
+          const name = source?.data?.name;
+          if (!name || !xy) return;
+          setHover({ name, kind: source.data?.kind ?? "Nebo target", x: xy.x, y: xy.y });
+        }) as (...payload: never[]) => void);
+        viewer.current!.on("objectHoveredStop", (() => setHover(null)) as (...payload: never[]) => void);
         // Report the live view so the cockpit screens follow drags and wheel zooms too.
         const report = () =>
           viewCallback.current({ ...center.current, fov: fieldOfView.current });
         viewer.current!.on("positionChanged", (({ ra, dec }: { ra: number; dec: number }) => {
+          // The label would stay behind while the marker moves with the map.
+          setHover(null);
           center.current = { ra, dec };
           report();
         }) as (payload: never) => void);
         viewer.current!.on("zoomChanged", ((fov: number) => {
+          setHover(null);
           // Keeps the +/− buttons stepping from the zoom the user reached with the wheel.
           fieldOfView.current = fov;
           report();
@@ -179,6 +217,8 @@ export default function Sky({
       cancelled = true;
       viewer.current = null;
       catalog.current = null;
+      landmarks.current = null;
+      setHover(null);
       node.replaceChildren();
     };
   }, [retry]);
@@ -197,9 +237,12 @@ export default function Sky({
     if (!ready) return;
     if (layers.markers) catalog.current?.show();
     else catalog.current?.hide();
+    if (layers.landmarks) landmarks.current?.show();
+    else landmarks.current?.hide();
+    setHover(null);
     if (layers.grid) viewer.current?.showCooGrid();
     else viewer.current?.hideCooGrid();
-  }, [layers.markers, layers.grid, ready]);
+  }, [layers.markers, layers.landmarks, layers.grid, ready]);
   /**
    * Moves the camera and reports the new view. Programmatic moves are reported here because
    * Aladin only guarantees positionChanged for user drags.
@@ -244,6 +287,12 @@ export default function Sky({
         role="region"
         aria-label="SPHEREx sky map; use the console below to choose an object or coordinates"
       />
+      {hover && (
+        <p className="sky-label" style={{ left: hover.x, top: hover.y }} aria-hidden="true">
+          <strong>{hover.name}</strong>
+          <span>{hover.kind}</span>
+        </p>
+      )}
       {!ready && (
         <div className="sky-message" role="status">
           {error ? (

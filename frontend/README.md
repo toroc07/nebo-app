@@ -19,6 +19,15 @@ npm run typecheck
 npm run build
 ```
 
+The sky map shows two marker layers, each with its own switch in the cockpit's CATALOGS screen:
+the Nebo targets (gold squares, from `/targets`; clicking one selects it) and **landmarks** (light
+blue circles, `lib/landmarks.ts`): 34 famous objects visible in the infrared (Orion Nebula,
+Andromeda, the Galactic Centre, bright stars…) and the Sun's nearest neighbours (Proxima Centauri,
+Wolf 359, Luhman 16…). Landmarks are labels for orientation only: clicking one does nothing, and
+their positions are fixed SIMBAD coordinates (J2000), not queried at run time. Hovering any marker
+shows its name and kind just above the pointer (Aladin's `objectHovered` event); the label goes
+away when the pointer leaves or the map moves.
+
 The sky explorer has a public chat (top-left key): one room per catalogue object, or a general room when nothing is selected. Nobody signs in; the browser keeps a generated nickname (`nebo.chat.nickname` in localStorage). The backend filters every message and deletes it after 24 hours (contract in `backend/README.md`).
 
 In the observation room, the wall tablet shows the observed object as a spinning 3D model (`components/StarHologram.tsx`). It is an illustration from the object's type and temperature, not SPHEREx data, and it says so on screen.

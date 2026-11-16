@@ -49,7 +49,12 @@ Resources listed by the NASA Space Apps 2026 challenge "Planet X and SPHEREx":
 
 ## Referenced but not queried
 
-- **SIMBAD**: only the source of the hard-coded target coordinates in `backend/app/targets.py` (used as fallback for ultra-cool dwarfs invisible in Gaia DR3).
+- **SIMBAD**: only the source of hard-coded coordinates, never queried at run time:
+  - the target coordinates in `backend/app/targets.py` (used as fallback for ultra-cool dwarfs
+    invisible in Gaia DR3);
+  - the 34 sky-map landmarks in `frontend/lib/landmarks.ts` (ICRS, epoch J2000), resolved on
+    2026-11-16 through the SIMBAD TAP mirror at `https://simbad.harvard.edu/simbad/sim-tap/sync`
+    (CDS Strasbourg was down). They label the cockpit map for orientation only.
 - `astroquery` is in `requirements.txt` but not imported: plain `requests` calls with explicit
   timeouts are used instead (astroquery/pyvo set no time limit).
 

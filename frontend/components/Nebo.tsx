@@ -58,7 +58,7 @@ export default function Nebo() {
     [shutdown, setShutdown] = useState(false),
     [locked, setLocked] = useState(false),
     [screenPowered, setScreenPowered] = useState(true),
-    [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, grid: false }),
+    [skyLayers, setSkyLayers] = useState<SkyLayers>({ markers: true, landmarks: true, grid: false }),
     [query, setQuery] = useState<Query | null>(null),
     // A shared field link (?ra&dec|target&fov&det&epoch) opens the viewer directly.
     [link, setLink] = useState<FieldLink | null>(null),

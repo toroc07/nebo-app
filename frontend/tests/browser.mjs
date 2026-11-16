@@ -246,6 +246,18 @@ await page.screenshot({ path: path.join(out, "cockpit.png") });
 // --- Objects -> Barnard's Star -> View images -> field console --------------------------------
 await objectsTab.click();
 await page.getByRole("tabpanel").getByRole("button", { name: /Barnard's Star/ }).click();
+// The map flies to the selection, so its marker sits at the map centre: hovering it names it.
+{
+  const box = await page.getByRole("region", { name: /SPHEREx sky map/ }).boundingBox();
+  const label = page.locator(".sky-label").filter({ hasText: "Barnard's Star" });
+  for (let i = 0; i < 20 && !(await label.count()); i++) {
+    await page.mouse.move(box.x + box.width / 2 + (i % 2), box.y + box.height / 2);
+    await page.waitForTimeout(250);
+  }
+  await label.waitFor({ timeout: 5_000 });
+  await page.mouse.move(box.x + 10, box.y + 10);
+  await label.waitFor({ state: "detached", timeout: 5_000 });
+}
 mode = "building"; // the first /timeline answer is 202, the retry is ready
 const before = timelineRequests;
 await page.getByRole("button", { name: /View images/ }).click();
@@ -347,6 +359,7 @@ writeFileSync(
         "tutorial: 7 steps, buttons, keyboard, back to the menu",
         "200% text and RTL at desktop sizes",
         "START -> cockpit unlocked",
+        "Hovering a sky-map marker names it above the pointer",
         "Objects -> View images -> field (202 then ready, epoch image)",
         "Back to the cockpit",
         "Field at preview_ready: compare and step enabled, stack and changes wait, Gaia prefetched once",

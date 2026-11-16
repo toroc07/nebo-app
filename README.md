@@ -24,12 +24,14 @@ Earlier, the public found hundreds of such objects in NASA WISE data with tools 
 ### Start and cockpit
 
 - **Launch sequence.** A start screen inside the ship, still landed on Earth, with the menu on
-  its wall screen; then the Nebo power-on and a hyperspace tunnel while the sky loads.
+  its wall screen (and a link to this repository); then the Nebo power-on and a hyperspace
+  tunnel while the sky loads.
 - **Sky explorer.** A cockpit over an all-sky SPHEREx map (Aladin Lite with IRSA's SPHEREx
   HiPS), with Sky map, Objects, Catalogs and Tools screens. Pick a featured destination, type
-  RA/Dec or click the map to fly; zoom, jump back to the whole sky, and toggle the Nebo object
-  markers and the coordinate grid. The console shows the map centre, the nearest catalogued
-  object, the field of view and the UTC clock.
+  RA/Dec or move the map; zoom, jump back to the whole sky, and toggle the Nebo object
+  markers, the landmarks (famous infrared sights and the Sun's nearest neighbours) and the
+  coordinate grid. Hovering a marker shows its name. The console shows the map centre, the
+  nearest catalogued object, the field of view and the UTC clock.
 - **Guided tour.** A step-by-step tutorial over annotated screenshots of the real interface.
 
 ### Field viewer
@@ -40,7 +42,8 @@ Earlier, the public found hundreds of such objects in NASA WISE data with tools 
   (north up, east left, 6.15″/px) with a shared stretch, so the differences you see are real.
 - **Fast first look.** Coordinate searches build in steps (archive search, download, first
   image, one image per epoch, refinement) with visible progress: a first image in tens of
-  seconds, all epochs soon after, refined images when the build ends.
+  seconds, all epochs soon after (already blinkable as a preview, with Gaia and CatWISE
+  prefetched), refined images when the build ends.
 - **Blink comparator and stack.** Step through the epochs with the date strip, buttons or
   arrow keys, or blink them at 0.4, 0.8 or 1.5 s per frame. The stack view co-adds the epochs
   you choose (inverse-variance) to reveal fainter sources.
@@ -127,8 +130,8 @@ criteria. This is how Nebo answers each one.
   are computed from each field's measurements (or say why they cannot be), and Nebo only ever
   speaks of *observed changes* and *candidate signals*.
 - **Solid engineering:** a FastAPI + PostgreSQL backend that builds fields in stages (`202` with
-  progress, then `200`), deployed on Google Cloud Run and Vercel, and covered by 300+ automated
-  tests (204 backend, 112 frontend).
+  progress, then `200`), deployed on Google Cloud Run and Vercel, and covered by 330+ automated
+  tests (221 backend, 115 frontend) plus a Playwright browser journey.
 
 ### Relevance
 
@@ -168,7 +171,8 @@ flowchart LR
   fe -- "HiPS tiles" --> hips["IRSA SPHEREx HiPS"]
   api --> pg[("PostgreSQL")]
   api -- "TAP / SIA / cutouts" --> irsa["NASA/IPAC IRSA<br/>SPHEREx Level 2 images"]
-  api -- "cone search" --> gaia["ESA Gaia DR3"]
+  api -- "cone search" --> gaia["ESA Gaia DR3<br/>(GAVO mirror)"]
+  api -- "cone search" --> catwise["CatWISE2020 (IRSA)<br/>(NOIRLab mirror)"]
 ```
 
 The full picture (deployment, build pipeline, database ER diagram, component tree, user
@@ -182,7 +186,7 @@ constants, metrics and techniques are in
 | Folder | What it is |
 | --- | --- |
 | [`backend/`](backend/) | FastAPI + PostgreSQL API and ETL. API contract in [`backend/README.md`](backend/README.md) |
-| [`frontend/`](frontend/) | Next.js app: menu, sky explorer, field viewer, observation lab. See [`frontend/README.md`](frontend/README.md) |
+| [`frontend/`](frontend/) | Next.js app: menu, sky explorer and field viewer. See [`frontend/README.md`](frontend/README.md) |
 | [`shared/`](shared/) | Synthetic static demo export with the same shape as the API |
 | [`docs/`](docs/) | Architecture, data sources, science and techniques, frontend plan, lab notes |
 | `data/` | Placeholder; raw data is never committed |
@@ -230,7 +234,9 @@ optional GCS bucket for cutouts. Details in [docs/architecture.md §2](docs/arch
 | [NASA/IPAC Infrared Science Archive: SPHEREx](https://irsa.ipac.caltech.edu/Missions/spherex.html) | All science images (TAP, SIA, cutouts) and the all-sky HiPS map |
 | [IRSA SPHEREx tutorial notebooks](https://caltech-ipac.github.io/irsa-tutorials/) | Reference for data access from Python |
 | [WiseView](http://byw.tools/wiseview) | Inspiration for the blink comparator |
-| [ESA Gaia Data Release 3](https://www.cosmos.esa.int/web/gaia/dr3) | Catalogued-star overlay |
+| [ESA Gaia Data Release 3](https://www.cosmos.esa.int/web/gaia/dr3) | Catalogued-star overlay (ESA archive, GAVO mirror as fallback) |
+| [CatWISE2020](https://catwise.github.io/) (IRSA) | Infrared source overlay and cold-candidate check (NOIRLab Astro Data Lab mirror as fallback) |
+| [SIMBAD](https://simbad.cds.unistra.fr/) | Fixed coordinates of the featured targets and of the sky-map landmarks (not queried at run time) |
 | CSA [NEOSSat](https://www.asc-csa.gc.ca/eng/satellites/neossat/) and [CADC](https://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/) | Listed by the challenge; not used yet |
 
 ## Contributing
@@ -243,6 +249,8 @@ change, `docs/data-sources.md`**.
 ## Credits
 
 SPHEREx data courtesy of NASA/JPL-Caltech and the NASA/IPAC Infrared Science Archive. Gaia data
-from the European Space Agency mission Gaia, processed by the Gaia DPAC. NASA does not endorse
+from the European Space Agency mission Gaia, processed by the Gaia DPAC. CatWISE2020 is based on
+data from NASA's WISE and NEOWISE missions. This project has made use of the SIMBAD database,
+operated at CDS, Strasbourg, France. NASA does not endorse
 any non-U.S. Government entity and is not responsible for information contained on
 non-U.S. Government websites.

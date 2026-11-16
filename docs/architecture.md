@@ -57,6 +57,8 @@ flowchart LR
   end
 
   gaia["ESA Gaia DR3 TAP<br/>gaiadr3.gaia_source"]
+  catwise["IRSA TAP<br/>catwise_2020"]
+  mirrors["Mirrors when the primary is down<br/>GAVO (Gaia) · NOIRLab Data Lab (CatWISE)"]
 
   user --> fe
   fe -- "REST /api/v1" --> api
@@ -70,12 +72,16 @@ flowchart LR
   api <--> gcs
   worker <--> gcs
   api -- "cone search" --> gaia
+  api -- "cone search" --> catwise
+  api -. "fallback" .-> mirrors
 ```
 
 - The browser talks to **our API** for everything except the background sky map, which
   Aladin Lite streams straight from IRSA's SPHEREx HiPS.
 - The API never proxies HiPS tiles and never stores raw FITS in Postgres: it stores the
   processed PNG/NPZ per epoch and the metadata of every exposure used.
+- The sky-map landmarks (`frontend/lib/landmarks.ts`) are static coordinates bundled with the
+  frontend; nothing is queried for them.
 
 ## 2. Deployment and processes
 
@@ -453,9 +459,9 @@ graph TD
 | Component | Role |
 | --- | --- |
 | `Nebo` | Root state machine (`view`: Home, Explore, Field), loads `/targets`, orchestrates the GSAP camera turns and the warp |
-| `HomeScene` | Start screen inside the landed ship: menu (START, TUTORIAL) and falling leaves in the forest window |
-| `TutorialTour` | Full-screen guided tutorial opened from TUTORIAL: 5 steps, each a screenshot of a section (`public/tutorial/*.webp`) with numbered callouts and leader lines |
-| `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), target markers, executes camera commands |
+| `HomeScene` | Start screen inside the landed ship: menu (START, TUTORIAL, CREW), a GitHub link to the repository in the menu screen's bottom-left corner, and falling leaves in the forest window |
+| `TutorialTour` | Full-screen guided tutorial opened from TUTORIAL: 7 steps, each a screenshot of a section (`public/tutorial/*.webp`) with numbered callouts and leader lines |
+| `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), Nebo target markers and orientation landmarks (`lib/landmarks.ts`, separate catalogue and toggle), the name of the hovered marker, executes camera commands |
 | `Cockpit`, `CockpitScreens`, `CoordinatePanel` | Console over the sky: destinations, RA/Dec entry, zoom, layers, Earth sub-point globe, clock |
 | `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view, epoch stack (`/timeline/stack`) |
 | `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
@@ -499,7 +505,7 @@ flowchart LR
     aladin["Aladin Lite"]
   end
   nebo --> api_ts
-  api_ts -- "/targets, /patches, /timeline,<br/>/images (+ mask.png), /patches/{id}/gaia,<br/>/chat/{room}/messages" --> api["Nebo API"]
+  api_ts -- "/targets, /patches, /timeline (+ /stack),<br/>/images (+ mask.png), /patches/{id}/gaia, /wise,<br/>/candidates, /alignment, /explore/suggested,<br/>/chat/{room}/messages" --> api["Nebo API"]
   aladin -- "HiPS tiles" --> hips["IRSA SPHEREx HiPS"]
 ```
 
@@ -508,12 +514,13 @@ flowchart LR
   shows `progress.stage`; errors carry their own retry countdown.
 - The app has no demo fallback: without the API it shows an error (the lab that could switch to
   the synthetic demo was removed).
-- Gaia is never queried from the browser; it goes through `/patches/{id}/gaia`.
+- Gaia and CatWISE are never queried from the browser; they go through `/patches/{id}/gaia`
+  and `/patches/{id}/wise`. The landmarks need no query at all (static coordinates).
 
 ### Tests
 
-- Frontend unit tests: `npm test` (`tsx --test tests/*.test.ts`): api, coordinates, fov,
-  viewport, sky, gaia, warp, demo palettes.
+- Frontend unit tests: `npm test` (`tsx --test tests/*.test.ts`, 115 tests): api, chat,
+  coordinates, demo palettes, fieldLink, fov, gaia, landmarks, overlays, sky, viewport, warp.
 - Browser flows: Playwright scripts in `frontend/tests/*.mjs`, run by hand against a local build.
 - Backend: `pytest` in `backend/` (no network or DB needed; Postgres tests run only with
   `NEBO_TEST_DATABASE_URL`).
@@ -528,6 +535,8 @@ signal", never "Planet X found".
 | Epoch images (PNG/NPZ), dates, releases, exposure metadata | **Real**: IRSA SPHEREx Level 2 images |
 | Exposure photometry, `image_photometry` in `/metrics` | **Real**: measured on the real images |
 | Gaia overlay | **Real**: ESA Gaia DR3 |
+| CatWISE overlay | **Real**: CatWISE2020 (IRSA, or the NOIRLab mirror) |
+| Sky-map landmarks | **Real positions** (SIMBAD, J2000), labels for orientation only; not detections |
 | Background sky map | **Real**: IRSA SPHEREx HiPS |
 | Spectrum, spectral indices, light curve, variability, confidence, Models 1–3 | **Measured** on each patch (`real_science.py`); a part that cannot be measured says why (`available: false`). Demo profiles only for an explicit `scenario` (`simulated: true`) |
 | Model 1–3 logic | Hand-tuned estimators (not trained), shown as "model estimate, not a detection"; Model 2's templates rarely fit real spectra, so a poor fit is said |
@@ -550,6 +559,11 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-16** — Sky map: a second Aladin catalogue of 34 orientation landmarks
+  (`lib/landmarks.ts`, SIMBAD J2000 positions, "Landmarks" switch in CATALOGS, on by default,
+  no click action), and hovering any marker shows its name above the pointer. Docs audit: §1
+  diagram gains CatWISE and the GAVO/NOIRLab mirrors; §8 component table (HomeScene, 7-step
+  tutorial, Sky), data-flow endpoints and test list updated; §9 lists CatWISE and landmarks.
 - **2026-11-15** — Start screen: a GitHub link in the bottom-left corner of the menu screen
   opens the repository (`toroc07/nebo-app`) in a new tab; Next's dev indicator moves to the
   bottom right.

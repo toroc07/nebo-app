@@ -331,6 +331,32 @@ label span {
   bottom: 44px;
   pointer-events: none;
 }
+/* Name of the marker under the pointer, just above it (left/top: the pointer, in map pixels). */
+.sky-label {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 260px;
+  margin: 0;
+  padding: 4px 9px;
+  translate: -50% calc(-100% - 16px);
+  font: 600 0.8rem/1.25 Plex, system-ui, sans-serif;
+  text-align: center;
+  white-space: nowrap;
+  color: #eef8fc;
+  background: rgb(4 14 22 / 0.86);
+  border: 1px solid rgb(63 210 255 / 0.45);
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgb(63 210 255 / 0.25);
+  pointer-events: none;
+}
+.sky-label span {
+  font-weight: 400;
+  font-size: 0.7rem;
+  color: #a9c3d0;
+}
 .selection {
   padding-top: 24px;
 }

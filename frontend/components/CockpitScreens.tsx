@@ -213,6 +213,7 @@ export default function CockpitScreens({
         {tab === "catalogs" && (
           <div className={s.mfdToggles}>
             <Toggle label="Nebo objects" on={layers.markers} onChange={(v) => onLayers({ ...layers, markers: v })} />
+            <Toggle label="Landmarks" on={layers.landmarks} onChange={(v) => onLayers({ ...layers, landmarks: v })} />
             <Toggle label="Coordinate grid" on={layers.grid} onChange={(v) => onLayers({ ...layers, grid: v })} />
             <p>
               {targets.length} catalogued object{targets.length === 1 ? "" : "s"} · SPHEREx all-sky map
