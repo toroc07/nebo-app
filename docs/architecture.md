@@ -485,7 +485,9 @@ stateDiagram-v2
 Reduced motion (`prefers-reduced-motion`) skips every animation, including the leaves. The blink
 speed is set in the field console. Destinations come only from the cockpit (Objects tab or the
 RA/Dec panel); the older menu screens (Observe, Featured objects, coordinate form, Settings) were
-removed.
+removed. A chosen object or typed point is the destination only while it sits under the centre
+reticle: dragging the map until it leaves the reticle forgets it, so *View images* opens the map
+centre (`followView` in `Nebo.tsx`).
 
 ### Data flow
 
@@ -548,6 +550,9 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Cockpit: dragging the map until the selected object (or typed point) leaves
+  the centre reticle now forgets it; before, *View images* reopened an object that was no
+  longer on screen. Zooming in place keeps the selection.
 - **2026-11-15** — Faster new areas (frontend only): the preview of a field that is still
   building can be blinked from `preview_ready` on (Stack still waits for the final images);
   Gaia DR3 and CatWISE are prefetched as soon as the epoch dates are known; coordinates

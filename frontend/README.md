@@ -48,7 +48,10 @@ opens that field in the viewer. `ra`/`dec` are ICRS degrees; `fov` is 3, 6 or 15
 else 3); `epoch` is 1-based like the viewer (default 1, clamped to the last one). Any invalid value
 ignores the whole link and the app starts at Home. Coordinates within 30″ of a catalogued object open that object's field
 and show its name and type (from `patch.target` in `/timeline`), whether they come from a link,
-the RA/Dec form or the map centre. "Copy link" in the viewer writes the current
+the RA/Dec form or the map centre. In the cockpit, a chosen object or typed point stays the
+destination only while it sits under the centre reticle: once the map has reached it, dragging it
+out of the reticle forgets it (the side screen goes back to "Free flight"), and *View images* opens
+what is then in the centre. Zooming in place keeps it. "Copy link" in the viewer writes the current
 field as such a link; a field that is not cached shows the usual building screen. While a field
 builds, the epochs already in the `202` are shown as a "Preview" (one exposure per epoch from
 `preview_ready` on, sharing one stretch): they can be blinked, stepped and shown as a Difference
@@ -117,7 +120,8 @@ and zoom-level helpers stay in `lib/lab/` because the field viewer uses them; it
 the 7-step tutorial, 200 % text and RTL at desktop sizes, START → cockpit, Objects → View images
 → field (a 202 then ready) and Back, then a field at `preview_ready` (Compare preview and the
 epoch steps enabled, Stack and Changes disabled, Gaia prefetched once and kept on the final
-images). Run `npm run dev` first; it opens `http://localhost:3000`
+images), then dragging the selected object off-centre (View images asks for `ra`/`dec`, not the
+old `target`). Run `npm run dev` first; it opens `http://localhost:3000`
 (`NEBO_TEST_URL` to change; use `localhost`, not `127.0.0.1`, or `next dev` blocks its scripts).
 `NEBO_CHROME` points to a Chrome/Edge binary when Playwright's own browser is not installed;
 results and screenshots go to `NEBO_ARTIFACTS` (default: the system temp folder).

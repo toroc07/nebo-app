@@ -51,7 +51,8 @@ const targets = [
 const cors = { "Access-Control-Allow-Origin": "*" };
 let mode = "ready",
   timelineRequests = 0,
-  gaiaRequests = 0;
+  gaiaRequests = 0,
+  lastTimelineQuery = "";
 const epochsOf = (n, frames) =>
   Array.from({ length: n }, (_, i) => ({
     index: i,
@@ -69,6 +70,7 @@ await page.route("**/api/v1/**", async (route) => {
     return route.fulfill({ json: [{ target_slug: "barnards-star", detectors_ready: [3] }], headers: cors });
   if (p.endsWith("/timeline")) {
     timelineRequests++;
+    lastTimelineQuery = url.search;
     // A progressive build at `preview_ready`: every epoch already has its one-frame preview.
     if (mode === "preview")
       return route.fulfill({
@@ -294,6 +296,37 @@ await page.screenshot({ path: path.join(out, "field-final.png") });
 await field.getByRole("button", { name: "Back", exact: true }).click();
 await objectsTab.waitFor({ timeout: 30_000 });
 
+// --- Dragging the selected object off the centre reticle forgets it -----------------------------
+// Back from the field, Barnard's Star is still selected and centred: View images would reopen it.
+// Dragging the map away must drop it, so View images opens the new map centre instead.
+const map = page.getByRole("region", { name: /SPHEREx sky map/ });
+const box = await map.boundingBox();
+const cx = box.x + box.width / 2,
+  cy = box.y + box.height / 3;
+// The return warp covers the map for a moment: drag once the map itself is under the pointer.
+await page.waitForFunction(
+  ([x, y]) => !!document.elementFromPoint(x, y)?.closest(".aladin-host"),
+  [cx, cy],
+  { timeout: 15_000 },
+);
+await page.mouse.move(cx, cy);
+await page.mouse.down();
+// A hand-paced drag: Aladin's WASM throws "recursive use of an object" when pointer moves arrive
+// faster than it draws (it happens without Nebo's code too, in the headless browser).
+for (let i = 1; i <= 10; i++) {
+  await page.mouse.move(cx + 30 * i, cy + 12 * i);
+  await page.waitForTimeout(60);
+}
+await page.mouse.up();
+await page.waitForTimeout(500);
+await page.getByRole("button", { name: /View images/ }).click();
+await field.getByRole("button", { name: "Back", exact: true }).waitFor({ timeout: 30_000 });
+for (let i = 0; i < 50 && !/[?&]ra=/.test(lastTimelineQuery); i++) await page.waitForTimeout(100);
+assert.match(lastTimelineQuery, /[?&]ra=/, "after dragging away, View images opens the map centre, not the old object");
+assert.doesNotMatch(lastTimelineQuery, /target=barnards-star/);
+await field.getByRole("button", { name: "Back", exact: true }).click();
+await objectsTab.waitFor({ timeout: 30_000 });
+
 assert.deepEqual(errors, [], "no uncaught page errors");
 writeFileSync(
   path.join(out, "browser-results.json"),
@@ -312,6 +345,7 @@ writeFileSync(
         "Objects -> View images -> field (202 then ready, epoch image)",
         "Back to the cockpit",
         "Field at preview_ready: compare and step enabled, stack and changes wait, Gaia prefetched once",
+        "Dragging the selected object off-centre deselects it: View images opens the map centre",
       ],
     },
     null,

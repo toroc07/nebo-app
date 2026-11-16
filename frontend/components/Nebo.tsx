@@ -407,6 +407,27 @@ export default function Nebo() {
   useEffect(() => {
     if (view !== "Field") fieldOrigin.current = view;
   }, [view]);
+  /**
+   * The chosen object or typed point is the destination only while it sits under the centre
+   * reticle (the same radius View images uses). Once the map has reached it, moving the map until
+   * it leaves the reticle forgets it, so View images opens what is now in the centre instead of a
+   * star that is no longer on screen. Zooming in place keeps it. A choice the map has not reached
+   * yet (the map still loading, or about to fly there) is never dropped.
+   */
+  const reachedDestination = useRef<object | null>(null);
+  function followView(view: SkyView) {
+    setSkyView(view);
+    const destination = selected ?? skyCoordinates;
+    if (!destination) return;
+    const radius = centreRadiusDeg(view.fov, window.innerWidth);
+    if (angularDistance(view.ra, view.dec, destination.ra, destination.dec) <= radius) {
+      reachedDestination.current = destination;
+    } else if (reachedDestination.current === destination) {
+      reachedDestination.current = null;
+      setSelected((s) => (s === destination ? null : s));
+      setSkyCoordinates((c) => (c === destination ? null : c));
+    }
+  }
   function open(t: Target) {
     setSelected(t);
     setQuery({ target: t.slug });
@@ -523,7 +544,7 @@ export default function Nebo() {
                 coordinates={skyCoordinates}
                 command={skyCommand}
                 layers={skyLayers}
-                onView={setSkyView}
+                onView={followView}
                 onSelect={(target) => { setSkyCoordinates(null); setSelected(target); }}
               />
               <span className="map-credit">
