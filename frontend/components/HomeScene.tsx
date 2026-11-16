@@ -242,7 +242,7 @@ export default function HomeScene({
             <BookOpen aria-hidden="true" />
             <span>
               <strong>Tutorial</strong>
-              <small>Every section, step by step</small>
+              <small>Step by step guide</small>
             </span>
           </button>
           <button type="button" className={s.tutorial} onClick={() => setShowCrew(true)}>
