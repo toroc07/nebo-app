@@ -357,6 +357,11 @@ label span {
   font-size: 0.7rem;
   color: #a9c3d0;
 }
+/* The chosen destination's name stays: a brighter frame than the passing hover label. */
+.sky-label[data-pinned] {
+  border-color: #3fd2ff;
+  box-shadow: 0 0 14px rgb(63 210 255 / 0.45);
+}
 .selection {
   padding-top: 24px;
 }

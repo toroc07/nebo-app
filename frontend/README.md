@@ -23,10 +23,14 @@ The sky map shows two marker layers, each with its own switch in the cockpit's C
 the Nebo targets (gold squares, from `/targets`; clicking one selects it) and **landmarks** (light
 blue circles, `lib/landmarks.ts`): 34 famous objects visible in the infrared (Orion Nebula,
 Andromeda, the Galactic Centre, bright stars…) and the Sun's nearest neighbours (Proxima Centauri,
-Wolf 359, Luhman 16…). Landmarks are labels for orientation only: clicking one does nothing, and
-their positions are fixed SIMBAD coordinates (J2000), not queried at run time. Hovering any marker
-shows its name and kind just above the pointer (Aladin's `objectHovered` event); the label goes
-away when the pointer leaves or the map moves.
+Wolf 359, Luhman 16…). Landmark positions are fixed SIMBAD coordinates (J2000), not queried at
+run time. Hovering any marker shows its name and kind just above the pointer (Aladin's
+`objectHovered` event); the label goes away when the pointer leaves or the map moves. Clicking a
+marker selects it: its name stays pinned above it (it follows the object while the map moves) and
+it becomes the destination. A landmark is a destination like typed coordinates (no build is
+started until *View images*), and the field opens with its name. The pin goes away when another
+marker is clicked, when the same marker is clicked again, or when the map is dragged until the
+object leaves the centre reticle.
 
 The sky explorer has a public chat (top-left key): one room per catalogue object, or a general room when nothing is selected. Nobody signs in; the browser keeps a generated nickname (`nebo.chat.nickname` in localStorage). The backend filters every message and deletes it after 24 hours (contract in `backend/README.md`).
 

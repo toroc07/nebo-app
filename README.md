@@ -30,7 +30,8 @@ Earlier, the public found hundreds of such objects in NASA WISE data with tools 
   HiPS), with Sky map, Objects, Catalogs and Tools screens. Pick a featured destination, type
   RA/Dec or move the map; zoom, jump back to the whole sky, and toggle the Nebo object
   markers, the landmarks (famous infrared sights and the Sun's nearest neighbours) and the
-  coordinate grid. Hovering a marker shows its name. The console shows the map centre, the
+  coordinate grid. Hovering a marker shows its name; clicking it pins the name and makes it the
+  destination (a second click drops it). The console shows the map centre, the
   nearest catalogued object, the field of view and the UTC clock.
 - **Guided tour.** A step-by-step tutorial over annotated screenshots of the real interface.
 

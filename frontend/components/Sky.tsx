@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { Target } from "@/lib/api";
-import { LANDMARKS } from "@/lib/landmarks";
+import { LANDMARKS, type Landmark } from "@/lib/landmarks";
 // Aladin's distributed package has no TypeScript declarations.
 // The small interface below describes only the public methods used here.
 type Viewer = {
@@ -20,6 +20,8 @@ type Viewer = {
     handler: (...payload: never[]) => void,
   ) => void;
   getRaDec: () => [number, number];
+  // Sky position -> map pixels; null (or a throw) when it is outside the projection.
+  world2pix: (ra: number, dec: number) => [number, number] | null;
   showCooGrid: () => void;
   hideCooGrid: () => void;
   // aladin.js 3.9: renders the HiPS layers (plus the reticle, and the logo unless logo: false).
@@ -32,6 +34,8 @@ export type SkyView = { ra: number; dec: number; fov: number };
 export type SkyLayers = { markers: boolean; landmarks: boolean; grid: boolean };
 /** A hovered marker's name, drawn above the pointer (map pixels). */
 type HoverLabel = { name: string; kind: string; x: number; y: number };
+/** The chosen destination's name, kept on screen above it until it is deselected. */
+export type SkyPin = { name: string; kind: string; ra: number; dec: number };
 type CatalogLayer = {
   removeAll: () => void;
   addSources: (s: unknown[]) => void;
@@ -58,7 +62,9 @@ export default function Sky({
   coordinates,
   command,
   layers,
+  pinned = null,
   onSelect,
+  onLandmark,
   onView,
   onCapture,
 }: {
@@ -67,7 +73,11 @@ export default function Sky({
   coordinates: { ra: number; dec: number } | null;
   command: SkyCommand | null;
   layers: SkyLayers;
+  /** The destination whose name stays on screen (a selected target or landmark). */
+  pinned?: SkyPin | null;
   onSelect: (t: Target) => void;
+  /** A landmark was clicked: the page makes it the destination, or drops it on a second click. */
+  onLandmark?: (l: Landmark) => void;
   onView: (view: SkyView) => void;
   /**
    * Hands the page a way to take a still of the real sky map (for the analysis room's side
@@ -79,9 +89,10 @@ export default function Sky({
     fieldOfView = useRef(180),
     viewer = useRef<Viewer | null>(null),
     catalog = useRef<CatalogLayer | null>(null),
-    // Orientation only (lib/landmarks.ts): a separate catalogue, style and toggle from the
-    // Nebo targets, and no click action.
+    // Orientation landmarks (lib/landmarks.ts): a separate catalogue, style and toggle from the
+    // Nebo targets. Clicking one makes it the destination (handled by the page).
     landmarks = useRef<CatalogLayer | null>(null),
+    landmarkCallback = useRef(onLandmark),
     api = useRef<any>(null),
     callback = useRef(onSelect),
     viewCallback = useRef(onView),
@@ -89,8 +100,31 @@ export default function Sky({
   const [error, setError] = useState(false),
     [ready, setReady] = useState(false),
     [retry, setRetry] = useState(0),
-    [hover, setHover] = useState<HoverLabel | null>(null);
+    [hover, setHover] = useState<HoverLabel | null>(null),
+    [pinAt, setPinAt] = useState<{ x: number; y: number } | null>(null);
   callback.current = onSelect;
+  landmarkCallback.current = onLandmark;
+  // The pinned label follows its object while the map moves. Its pixel is asked for in the next
+  // animation frame, outside Aladin's own event handling (calling into its WASM from inside an
+  // Aladin event can collide with its redraw).
+  const pinnedRef = useRef(pinned),
+    pinFrame = useRef(0),
+    placePin = useRef(() => {});
+  pinnedRef.current = pinned;
+  placePin.current = () => {
+    cancelAnimationFrame(pinFrame.current);
+    pinFrame.current = requestAnimationFrame(() => {
+      const pin = pinnedRef.current;
+      let xy: [number, number] | null = null;
+      try {
+        xy = pin && viewer.current ? viewer.current.world2pix(pin.ra, pin.dec) : null;
+      } catch {
+        xy = null;
+      }
+      setPinAt(xy && Number.isFinite(xy[0]) && Number.isFinite(xy[1]) ? { x: xy[0], y: xy[1] } : null);
+    });
+  };
+  useEffect(() => () => cancelAnimationFrame(pinFrame.current), []);
   viewCallback.current = onView;
   const captureCallback = useRef(onCapture);
   captureCallback.current = onCapture;
@@ -163,6 +197,10 @@ export default function Sky({
           shape: "circle",
           sourceSize: 12,
           color: "#9ad7ff",
+          onClick: (source: { data: { name: string } }) => {
+            const landmark = LANDMARKS.find((l) => l.name === source.data.name);
+            if (landmark) landmarkCallback.current?.(landmark);
+          },
         });
         viewer.current!.addCatalog(landmarks.current);
         landmarks.current!.addSources(
@@ -196,13 +234,16 @@ export default function Sky({
         const report = () =>
           viewCallback.current({ ...center.current, fov: fieldOfView.current });
         viewer.current!.on("positionChanged", (({ ra, dec }: { ra: number; dec: number }) => {
-          // The label would stay behind while the marker moves with the map.
+          // The hover label would stay behind while the marker moves with the map; the pinned
+          // one follows it.
           setHover(null);
+          placePin.current();
           center.current = { ra, dec };
           report();
         }) as (payload: never) => void);
         viewer.current!.on("zoomChanged", ((fov: number) => {
           setHover(null);
+          placePin.current();
           // Keeps the +/− buttons stepping from the zoom the user reached with the wheel.
           fieldOfView.current = fov;
           report();
@@ -261,6 +302,11 @@ export default function Sky({
   useEffect(() => {
     if (selected && ready) fly(selected.ra, selected.dec, 8);
   }, [selected, ready]);
+  // After the fly effects above (same commit), so the pin is measured where the map ends up.
+  useEffect(() => {
+    if (ready) placePin.current();
+    else setPinAt(null);
+  }, [pinned?.name, pinned?.ra, pinned?.dec, ready]);
   useEffect(() => {
     if (coordinates && ready) fly(coordinates.ra, coordinates.dec, 8);
   }, [coordinates, ready]);
@@ -287,7 +333,14 @@ export default function Sky({
         role="region"
         aria-label="SPHEREx sky map; use the console below to choose an object or coordinates"
       />
-      {hover && (
+      {pinned && pinAt && (
+        <p className="sky-label" data-pinned="" style={{ left: pinAt.x, top: pinAt.y }} aria-hidden="true">
+          <strong>{pinned.name}</strong>
+          <span>{pinned.kind}</span>
+        </p>
+      )}
+      {/* The pinned object already shows its name; hovering it adds no second label. */}
+      {hover && hover.name !== pinned?.name && (
         <p className="sky-label" style={{ left: hover.x, top: hover.y }} aria-hidden="true">
           <strong>{hover.name}</strong>
           <span>{hover.kind}</span>

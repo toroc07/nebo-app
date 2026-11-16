@@ -21,7 +21,8 @@ import {
 import type { SkyLayers, SkyView } from "./Sky";
 import s from "./cockpit.module.css";
 
-type Position = { ra: number; dec: number };
+// A clicked landmark also carries its name and kind.
+type Position = { ra: number; dec: number; name?: string; kind?: string };
 export type Tab = "sky" | "objects" | "catalogs" | "tools";
 
 /*
@@ -159,12 +160,12 @@ export default function CockpitScreens({
       />
 
       <div className={s.titleScreen} style={place(276, 699, 390, 744)}>
-        <strong>{selected?.name ?? (position ? "Custom position" : "Free flight")}</strong>
+        <strong>{selected?.name ?? position?.name ?? (position ? "Custom position" : "Free flight")}</strong>
         <span>
           {selected
             ? humanKind(selected.kind)
             : position
-              ? "Typed coordinates"
+              ? (position.kind ?? "Typed coordinates")
               : "View images uses the map centre"}
         </span>
         {position && (

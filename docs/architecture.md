@@ -461,7 +461,7 @@ graph TD
 | `Nebo` | Root state machine (`view`: Home, Explore, Field), loads `/targets`, orchestrates the GSAP camera turns and the warp |
 | `HomeScene` | Start screen inside the landed ship: menu (START, TUTORIAL, CREW), a GitHub link to the repository in the menu screen's bottom-left corner, and falling leaves in the forest window |
 | `TutorialTour` | Full-screen guided tutorial opened from TUTORIAL: 7 steps, each a screenshot of a section (`public/tutorial/*.webp`) with numbered callouts and leader lines |
-| `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), Nebo target markers and orientation landmarks (`lib/landmarks.ts`, separate catalogue and toggle), the name of the hovered marker, executes camera commands |
+| `Sky` | Aladin Lite map, SPHEREx HiPS cube (AIT projection), Nebo target markers and orientation landmarks (`lib/landmarks.ts`, separate catalogue and toggle), the name of the hovered marker and the pinned name of the destination (placed with `world2pix` in the next animation frame), executes camera commands |
 | `Cockpit`, `CockpitScreens`, `CoordinatePanel` | Console over the sky: destinations, RA/Dec entry, zoom, layers, Earth sub-point globe, clock |
 | `Field` | Observation console: detector and size selectors, timeline polling, epoch preload, blink playback, difference view, epoch stack (`/timeline/stack`) |
 | `WarpOverlay` | Tunnel transition that ends when the destination is ready (max 12 s) |
@@ -491,7 +491,8 @@ stateDiagram-v2
 Reduced motion (`prefers-reduced-motion`) skips every animation, including the leaves. The blink
 speed is set in the field console. Destinations come only from the cockpit (Objects tab or the
 RA/Dec panel); the older menu screens (Observe, Featured objects, coordinate form, Settings) were
-removed. A chosen object or typed point is the destination only while it sits under the centre
+removed. Clicking a map marker (Nebo target or landmark) selects it and pins its name; clicking it
+again drops it; a landmark destination opens a coordinate field named after it. A chosen object or typed point is the destination only while it sits under the centre
 reticle: dragging the map until it leaves the reticle forgets it, so *View images* opens the map
 centre (`followView` in `Nebo.tsx`).
 
@@ -559,6 +560,10 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-16** — Sky map selection: clicking a marker pins its name and makes it the
+  destination; a second click on it drops it. Landmarks are now clickable destinations (like
+  typed coordinates, not warmed); their field opens with the landmark's name (title and `name`
+  in the link). Dragging the destination off the centre reticle still drops it.
 - **2026-11-16** — Sky map: a second Aladin catalogue of 34 orientation landmarks
   (`lib/landmarks.ts`, SIMBAD J2000 positions, "Landmarks" switch in CATALOGS, on by default,
   no click action), and hovering any marker shows its name above the pointer. Docs audit: §1

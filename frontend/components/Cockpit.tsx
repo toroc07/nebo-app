@@ -7,7 +7,8 @@ import CockpitScreens, { ART_HEIGHT, ART_WIDTH, place, useNow, type Tab } from "
 import type { SkyLayers, SkyMove, SkyView } from "./Sky";
 import s from "./cockpit.module.css";
 
-type Position = { ra: number; dec: number };
+// A clicked landmark also carries its name and kind.
+type Position = { ra: number; dec: number; name?: string; kind?: string };
 
 export default function Cockpit({
   targets,

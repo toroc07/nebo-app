@@ -42,7 +42,10 @@ export default function Nebo() {
     [catalogLoading, setCatalogLoading] = useState(false),
     [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<Target | null>(null),
-    [skyCoordinates, setSkyCoordinates] = useState<{ ra: number; dec: number } | null>(null),
+    // Typed coordinates, or a clicked landmark (which also carries its name and kind).
+    [skyCoordinates, setSkyCoordinates] = useState<{ ra: number; dec: number; name?: string; kind?: string } | null>(null),
+    // Name of a coordinate field opened from a landmark, for the field's title and shared link.
+    [queryName, setQueryName] = useState<string | undefined>(undefined),
     [skyCommand, setSkyCommand] = useState<SkyCommand | null>(null),
     [skyView, setSkyView] = useState<SkyView | null>(null),
     // First-person turn between the cockpit (right = towards the analysis wall) and back.
@@ -429,6 +432,7 @@ export default function Nebo() {
     }
   }
   function open(t: Target) {
+    setQueryName(undefined);
     setSelected(t);
     setQuery({ target: t.slug });
     go("Field");
@@ -491,8 +495,8 @@ export default function Nebo() {
                 query={query}
                 target={selected}
                 catalog={targets}
-                title={selected?.name || (link?.query === query && link.name) || "Your observation field"}
-                name={link?.query === query ? link.name : undefined}
+                title={selected?.name || (link?.query === query && link.name) || queryName || "Your observation field"}
+                name={link?.query === query ? link.name : queryName}
                 headingRef={heading}
                 onBack={back}
                 powered={screenPowered}
@@ -545,7 +549,26 @@ export default function Nebo() {
                 command={skyCommand}
                 layers={skyLayers}
                 onView={followView}
-                onSelect={(target) => { setSkyCoordinates(null); setSelected(target); }}
+                pinned={
+                  selected
+                    ? { name: selected.name, kind: "Nebo target", ra: selected.ra, dec: selected.dec }
+                    : skyCoordinates?.name
+                      ? { name: skyCoordinates.name, kind: skyCoordinates.kind ?? "", ra: skyCoordinates.ra, dec: skyCoordinates.dec }
+                      : null
+                }
+                // A click on the map's marker picks it; a second click on the same one drops it.
+                onSelect={(target) => {
+                  setSkyCoordinates(null);
+                  setSelected((s) => (s?.slug === target.slug ? null : target));
+                }}
+                // A landmark becomes the destination like typed coordinates, keeping its name.
+                // Not warmed: clicking around to read names must not queue builds.
+                onLandmark={(l) => {
+                  setSelected(null);
+                  setSkyCoordinates((c) =>
+                    c?.name === l.name ? null : { ra: l.ra, dec: l.dec, name: l.name, kind: l.kind },
+                  );
+                }}
               />
               <span className="map-credit">
                 SPHEREx all-sky map · NASA/IPAC IRSA
@@ -585,6 +608,7 @@ export default function Nebo() {
                 if (selected) open(selected);
                 else if (centred) open(centred);
                 else {
+                  setQueryName(skyCoordinates?.name);
                   setQuery({ ra: p.ra, dec: p.dec });
                   go("Field");
                 }
