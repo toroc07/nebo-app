@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ArrowLeft } from "lucide-react";
 import { sfx } from "@/lib/audio";
-import { read, type Target, type Query } from "@/lib/api";
+import { read, warmTimeline, type Target, type Query } from "@/lib/api";
 import { parseFieldLink, type FieldLink } from "@/lib/fieldLink";
 import { angularDistance, centreRadiusDeg } from "@/lib/coordinates";
 import Field from "./Field";
@@ -543,6 +543,11 @@ export default function Nebo() {
               onCoordinates={(p) => {
                 setSelected(null);
                 setSkyCoordinates(p);
+                // Typed coordinates are where View images will go: start the build now, with the
+                // detector and size the field opens with, so the download runs while the visitor
+                // is still in the cockpit. Only typed points: warming every map centre the visitor
+                // pans over would queue builds (and new patches) for places nobody chose.
+                warmTimeline({ ra: p.ra, dec: p.dec }, "medium", 3);
               }}
               onZoom={(action) => setSkyCommand({ id: Date.now(), action })}
               onView={(p) => {

@@ -227,8 +227,11 @@ Notes:
 - `wait_for=first_light|preview` is opt-in and only for coordinate searches; the default
   (`complete`) keeps answering `202` until the build ends.
 - The web frontend uses the default and renders the `epochs[]` already present in each `202`
-  as a "Preview" (with the build steps and a progress bar) and keeps epoch comparison locked
-  until the final `200`, so a new coordinate shows its first image at first light.
+  as a "Preview" (with the build steps and a progress bar). Once two epochs exist
+  (`preview_ready`) the preview can be blinked and shown as a Difference; Stack waits for the
+  final `200`. Gaia DR3 and CatWISE are prefetched from `preview_ready` on.
+- Coordinates applied with the cockpit's RA/Dec form send one `GET /timeline` right away
+  (`warmTimeline`), so the build is already running when the visitor presses *View images*.
 - Partial saves replace the image rows, so **image ids change**: clients re-read
   `image_url` on every poll.
 - All epochs of one size share `display_min/max`, so a blink compares like with like.
@@ -534,9 +537,6 @@ signal", never "Planet X found".
 
 Found while writing this document (2026-11-15); fix them and strike them here.
 
-- `Field.tsx` maps only `queued`, `querying`, `downloading`, `rendering`; the stages
-  `first_light`, `preview_ready`, `refining` fall back to a generic label, and the frontend does
-  not use `wait_for` yet, so users wait for the full build before seeing an image.
 - `gcs_media_assets` and `timeline_images.gcs_uri` are never written (`targets.gaia_*`,
   `targets.wise_*`, `patches.gaia_crossmatch_json`, and `patches.wise_crossmatch_json` are now
   populated by `app.db sync-catalogs` and `analyze_patch_science` / `classify_event`).
@@ -548,6 +548,11 @@ Found while writing this document (2026-11-15); fix them and strike them here.
 
 Newest first. One line per change that affects this document.
 
+- **2026-11-15** — Faster new areas (frontend only): the preview of a field that is still
+  building can be blinked from `preview_ready` on (Stack still waits for the final images);
+  Gaia DR3 and CatWISE are prefetched as soon as the epoch dates are known; coordinates
+  typed in the cockpit start their build at once (`warmTimeline`). Struck the known gap about
+  `Field.tsx` stages: it labels every stage and shows the preview.
 - **2026-11-15** — Catalogue layers: new `app/tap_fallback.py`. Gaia DR3 cones fall back to GAVO
   (Heidelberg) and CatWISE2020 to NOIRLab Data Lab when ESA or IRSA do not answer; 5 s connect /
   30 s read, one try per service, a failed service skipped for 5 min (was 10 s / 60 s, two tries,

@@ -408,9 +408,12 @@ export default function Field({
   useEffect(() => {
     if (count && epoch >= count) setEpoch(count - 1);
   }, [count, epoch]);
-  // Epochs are compared only once every image is downloaded; partial ones are a preview.
+  // A progressive build's preview (one exposure per epoch from `preview_ready` on) already shares
+  // one stretch across epochs, so it can be blinked; it is labelled "Preview" and noisier. The
+  // stack is co-added server-side from the final images only.
   const building = !!progress;
-  const canCompare = count > 1 && !imageError && !building;
+  const canCompare = count > 1 && !imageError;
+  const canStack = canCompare && !building;
   // A new field or epoch count resets the stack to every epoch (and off when it cannot stack).
   useEffect(() => {
     setStackEpochs(Array.from({ length: count }, (_, i) => i));
@@ -426,10 +429,18 @@ export default function Field({
   const ready = !!data && !progress;
   const patchId = data?.patch.id ?? 0;
   const mjds = (data?.epochs ?? []).map((e) => e.mid_mjd ?? NaN);
-  const catalogKey = ready && mjds.every(Number.isFinite) ? `${patchId}|${size}|${mjds.join()}` : "";
+  // Gaia and CatWISE need only the patch and the epoch dates, not the images: they work on the
+  // preview too, from `preview_ready` on (at `first_light` only one epoch is known yet, so the
+  // dates would change and the layers load twice).
+  const epochsKnown = ready || (!!data && progress?.progress.stage !== "first_light" && count > 1);
+  const catalogKey =
+    epochsKnown && patchId && mjds.every(Number.isFinite) ? `${patchId}|${size}|${mjds.join()}` : "";
   const fieldKey = ready ? `${patchId}|${size}|${detector}|${count}` : "";
-  const gaiaLayer = useLayer(layers.gaia, catalogKey, (signal) => loadGaia(patchId, size, mjds, signal));
-  const wiseLayer = useLayer(layers.wise, catalogKey, (signal) => loadWise(patchId, size, mjds, signal));
+  // Fetched as soon as the dates are known, switched on or not: a new area's cone query (ESA,
+  // IRSA, up to ~30 s) then runs while the visitor looks at the images, and switching the layer
+  // on is instant. The server caches each cone for good, so this costs nothing on later visits.
+  const gaiaLayer = useLayer(layers.gaia, catalogKey, (signal) => loadGaia(patchId, size, mjds, signal), true);
+  const wiseLayer = useLayer(layers.wise, catalogKey, (signal) => loadWise(patchId, size, mjds, signal), true);
   // Badges compare the first and last epochs, so they stay put while blinking.
   const changesLayer = useLayer(layers.changes && count > 1, fieldKey, (signal) =>
     fetchPatchCandidates(patchId, { detector, size, epoch_a: 0, epoch_b: count - 1 }, signal),
@@ -476,8 +487,8 @@ export default function Field({
   const detail = selected && detailFor(selected);
   const imageSize = pixels ? { width: pixels.w, height: pixels.h } : null;
   const layerButtons = [
-    ["gaia", "Gaia DR3", Star, gaiaLayer, !ready],
-    ["wise", "CatWISE", Radar, wiseLayer, !ready],
+    ["gaia", "Gaia DR3", Star, gaiaLayer, !catalogKey],
+    ["wise", "CatWISE", Radar, wiseLayer, !catalogKey],
     ["changes", "Changes", Sparkles, changesLayer, !ready || count < 2],
     ["mask", "Mask", SquareDashed, maskLayer, !ready || !current?.mask_url],
   ] as const;
@@ -529,7 +540,7 @@ export default function Field({
     setCursor({ ...sky, x, y });
   }
   const reference = data?.epochs[0];
-  const stacking = stack && canCompare && stackEpochs.length >= 2;
+  const stacking = stack && canStack && stackEpochs.length >= 2;
   const showDifference = !stacking && difference && !!reference && epoch > 0;
   // The API takes each epoch's own index; the chips hold positions in the list.
   const stackUrl = stacking
@@ -834,14 +845,14 @@ export default function Field({
                       )}
                     {/* The patch centre is the central pixel, which is where the target sits. */}
                     <span className={s.reticle} aria-hidden="true" />
-                    {pixels && !building && (
+                    {pixels && (
                       <FieldOverlays
                         width={pixels.w}
                         height={pixels.h}
                         epoch={epoch}
                         gaia={layers.gaia ? (gaiaLayer?.value ?? null) : null}
                         wise={layers.wise ? (wiseLayer?.value ?? null) : null}
-                        changes={layers.changes ? (changesLayer?.value?.candidates ?? null) : null}
+                        changes={layers.changes && !building ? (changesLayer?.value?.candidates ?? null) : null}
                         selected={selected}
                         onSelect={setSelected}
                       />
@@ -891,7 +902,7 @@ export default function Field({
                       data-image-tool=""
                       className={`${s.diffToggle} ${s.stackToggle}`}
                       aria-pressed={stacking}
-                      disabled={!canCompare}
+                      disabled={!canStack}
                       title="Co-add the chosen epochs: less noise, but changes between them average out"
                       onClick={() => {
                         setPlaying(false);
@@ -1142,7 +1153,10 @@ export default function Field({
                     <strong>Still downloading images</strong>
                     {progress!.progress.total > 0 &&
                       ` · ${progress!.progress.done} of ${progress!.progress.total} exposures`}
-                    . You can look at the preview; comparing epochs unlocks when every image is ready.
+                    .{" "}
+                    {count > 1
+                      ? "You can already compare the preview: one exposure per epoch, so it is noisier. The full images replace it when they are ready."
+                      : "You can look at the first image; comparing unlocks once every epoch has its preview."}
                   </p>
                   <BuildBar progress={progress} />
                   <button type="button" className={s.stop} onClick={stopWaiting}>
@@ -1164,11 +1178,13 @@ export default function Field({
                 {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
                 {playing
                   ? "Pause"
-                  : building && data
+                  : building && data && count < 2
                     ? "Downloading…"
                     : !data || allPreloaded
-                    ? "Compare epochs"
-                    : `Loading epochs ${preloaded}/${count}`}
+                      ? building
+                        ? "Compare preview"
+                        : "Compare epochs"
+                      : `Loading epochs ${preloaded}/${count}`}
               </button>
               <ConsoleSelect
                 className={s.interval}
@@ -1189,7 +1205,6 @@ export default function Field({
                     epochs={data!.epochs}
                     current={epoch}
                     onPick={(i) => {
-                      if (building) return;
                       setPlaying(false);
                       setEpoch(i);
                     }}
@@ -1432,14 +1447,23 @@ function PlanetIcon() {
 
 /**
  * One lazily loaded catalog layer. It is fetched when `on` and `key` are set and the layer holds
- * nothing for that key yet; switching it off and on again retries a failed load.
+ * nothing for that key yet; switching it off and on again retries a failed load. `prefetch` loads
+ * it before it is switched on; a failed prefetch is retried when the visitor switches it on.
  */
-function useLayer<T>(on: boolean, key: string, load: (signal: AbortSignal) => Promise<T>) {
+function useLayer<T>(on: boolean, key: string, load: (signal: AbortSignal) => Promise<T>, prefetch = false) {
   const [state, setState] = useState<{ key: string; value?: T; error?: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const loadRef = useRef(load);
   loadRef.current = load;
+  const active = on || prefetch;
+  // A prefetched layer stays active whatever the switch says, so a load in flight is never
+  // restarted by switching it on; only a failed one is asked again.
+  const failed = state?.key === key && !!state.error;
   useEffect(() => {
-    if (!on || !key) return;
+    if (prefetch && on && failed) setAttempt((n) => n + 1);
+  }, [on]);
+  useEffect(() => {
+    if (!active || !key) return;
     if (state?.key === key && !state.error) return;
     const abort = new AbortController();
     setState({ key });
@@ -1466,7 +1490,7 @@ function useLayer<T>(on: boolean, key: string, load: (signal: AbortSignal) => Pr
       setState((s) => (s?.key === key && !s.value && !s.error ? null : s));
     };
     // `state` is left out on purpose: storing the answer must not trigger a new request.
-  }, [on, key]);
+  }, [active, key, attempt]);
   return state?.key === key ? state : null;
 }
 

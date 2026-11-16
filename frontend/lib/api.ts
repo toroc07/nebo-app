@@ -383,6 +383,23 @@ export function validCoordinates(ra: string, dec: string) {
     Number(dec) <= 90
   );
 }
+function timelineParams(query: Query, size: string, detector: number) {
+  return new URLSearchParams({
+    ...Object.fromEntries(
+      Object.entries(query).map(([k, v]) => [k, String(v)]),
+    ),
+    size,
+    detector: String(detector),
+  });
+}
+/**
+ * Asks once for a field the visitor is about to open, so the server starts building it (or
+ * finds it ready) before "View images". Nothing is read back and failures are ignored: the
+ * field's own request, a moment later, reports its state. The backend reuses the patch (30″).
+ */
+export function warmTimeline(query: Query, size = "medium", detector = 3) {
+  fetch(origin + "/api/v1/timeline?" + timelineParams(query, size, detector)).catch(() => {});
+}
 export async function timeline(
   query: Query,
   size: string,
@@ -390,13 +407,7 @@ export async function timeline(
   signal: AbortSignal,
   onProgress: (p: Building) => void,
 ): Promise<Timeline> {
-  const p = new URLSearchParams({
-    ...Object.fromEntries(
-      Object.entries(query).map(([k, v]) => [k, String(v)]),
-    ),
-    size,
-    detector: String(detector),
-  });
+  const p = timelineParams(query, size, detector);
   while (!signal.aborted) {
     const r = await fetch(origin + "/api/v1/timeline?" + p, { signal }).catch(
       (e) => {

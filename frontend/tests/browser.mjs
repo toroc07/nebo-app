@@ -50,7 +50,17 @@ const targets = [
 ];
 const cors = { "Access-Control-Allow-Origin": "*" };
 let mode = "ready",
-  timelineRequests = 0;
+  timelineRequests = 0,
+  gaiaRequests = 0;
+const epochsOf = (n, frames) =>
+  Array.from({ length: n }, (_, i) => ({
+    index: i,
+    start_utc: `202${i + 3}-08-15T20:45:11Z`,
+    end_utc: `202${i + 3}-08-16T20:45:11Z`,
+    mid_mjd: 60000 + 180 * i,
+    frames_used: frames,
+    image_url: `/api/v1/images/${i + 1}.png`,
+  }));
 await page.route("**/api/v1/**", async (route) => {
   const url = new URL(route.request().url());
   const p = url.pathname;
@@ -59,6 +69,22 @@ await page.route("**/api/v1/**", async (route) => {
     return route.fulfill({ json: [{ target_slug: "barnards-star", detectors_ready: [3] }], headers: cors });
   if (p.endsWith("/timeline")) {
     timelineRequests++;
+    // A progressive build at `preview_ready`: every epoch already has its one-frame preview.
+    if (mode === "preview")
+      return route.fulfill({
+        status: 202,
+        headers: { ...cors, "Retry-After": "1" },
+        json: {
+          status: "building",
+          patch: { id: 7, ra: 269.446223, dec: 4.76878, target: "barnards-star" },
+          detector: { id: 3, wavelength_range_um: [1.63, 2.41] },
+          size: { side_arcmin: 6, pixel_scale_arcsec: 6.15 },
+          is_partial: true,
+          progress: { stage: "preview_ready", done: 3, total: 24 },
+          retry_after_s: 1,
+          epochs: epochsOf(3, 1),
+        },
+      });
     if (mode === "building") {
       mode = "ready";
       return route.fulfill({
@@ -71,16 +97,10 @@ await page.route("**/api/v1/**", async (route) => {
       headers: cors,
       json: {
         status: "ready",
-        patch: { ra: 269.446223, dec: 4.76878, target: "barnards-star" },
+        patch: { id: 7, ra: 269.446223, dec: 4.76878, target: "barnards-star" },
         detector: { id: 3, wavelength_range_um: [1.63, 2.41] },
         size: { side_arcmin: 6, pixel_scale_arcsec: 6.15 },
-        epochs: Array.from({ length: 3 }, (_, i) => ({
-          index: i,
-          start_utc: `202${i + 3}-08-15T20:45:11Z`,
-          end_utc: `202${i + 3}-08-16T20:45:11Z`,
-          frames_used: 8,
-          image_url: `/api/v1/images/${i + 1}.png`,
-        })),
+        epochs: epochsOf(3, 8),
       },
     });
   }
@@ -94,7 +114,33 @@ await page.route("**/api/v1/**", async (route) => {
         "base64",
       ),
     });
-  // Everything else (chat, Gaia, spectra, models…) is optional for this journey.
+  if (/\/patches\/\d+\/gaia$/.test(p)) {
+    gaiaRequests++;
+    const mjds = url.searchParams.getAll("mjd").map(Number);
+    return route.fulfill({
+      headers: cors,
+      json: {
+        patch_id: 7,
+        size: { name: "medium", width_px: 1, height_px: 1 },
+        catalog: { name: "Gaia DR3", ref_epoch: 2016, g_max: 18, g_complete: 18, radius_deg: 0.1, truncated: false, note: "" },
+        mjd: mjds,
+        stars: [
+          {
+            source_id: "1",
+            g_mag: 9.5,
+            bp_rp: 2.8,
+            pm_ra_mas_yr: 0,
+            pm_dec_mas_yr: 0,
+            pm_total_mas_yr: 0,
+            parallax_mas: 1,
+            distance_pc: 1000,
+            positions: mjds.map((mjd) => ({ mjd, ra: 269.446223, dec: 4.76878, x: 0, y: 0, in_image: true })),
+          },
+        ],
+      },
+    });
+  }
+  // Everything else (chat, CatWISE, spectra, models…) is optional for this journey.
   return route.fulfill({ status: 404, headers: cors, json: { detail: "not mocked" } });
 });
 
@@ -213,6 +259,41 @@ await page.screenshot({ path: path.join(out, "field.png") });
 await page.locator('[data-console="field"]').getByRole("button", { name: "Back", exact: true }).click();
 await objectsTab.waitFor({ timeout: 30_000 });
 
+// --- A field still building: its preview can be blinked and Gaia works before it is done --------
+mode = "preview";
+gaiaRequests = 0;
+await objectsTab.click();
+await page.getByRole("tabpanel").getByRole("button", { name: /Barnard's Star/ }).click();
+await page.getByRole("button", { name: /View images/ }).click();
+const field = page.locator('[data-console="field"]');
+await page.waitForFunction(
+  () => {
+    const b = [...document.querySelectorAll("button")].find((e) => e.textContent?.trim() === "Compare preview");
+    return b && !b.disabled;
+  },
+  null,
+  { timeout: 30_000 },
+);
+assert.ok(await field.getByRole("button", { name: "Next epoch" }).isEnabled(), "epochs can be stepped in the preview");
+assert.ok(await field.getByRole("button", { name: "Stack", exact: true }).isDisabled(), "the stack waits for the final images");
+const layerGroup = field.getByRole("group", { name: "Catalog layers" });
+assert.ok(await layerGroup.getByRole("button", { name: "Changes", exact: true }).isDisabled(), "changes need the final images");
+for (let i = 0; i < 50 && gaiaRequests === 0; i++) await page.waitForTimeout(100);
+assert.ok(gaiaRequests > 0, "Gaia is prefetched while the field builds, before the layer is switched on");
+const prefetched = gaiaRequests;
+await layerGroup.getByRole("button", { name: "Gaia DR3", exact: true }).click();
+await page.locator("#layer-status").filter({ hasText: /Gaia: 1 stars? on this image/ }).waitFor({ timeout: 10_000 });
+assert.equal(gaiaRequests, prefetched, "switching the prefetched layer on does not ask again");
+await page.screenshot({ path: path.join(out, "field-building.png") });
+mode = "ready";
+await field.getByRole("button", { name: "Compare epochs" }).waitFor({ timeout: 30_000 });
+// The final timeline keeps the patch and the epoch dates: the catalogue layer stays, not reloaded.
+await page.locator("#layer-status").filter({ hasText: /Gaia: 1 stars? on this image/ }).waitFor({ timeout: 10_000 });
+assert.equal(gaiaRequests, prefetched, "the final images do not reload the catalogue layer");
+await page.screenshot({ path: path.join(out, "field-final.png") });
+await field.getByRole("button", { name: "Back", exact: true }).click();
+await objectsTab.waitFor({ timeout: 30_000 });
+
 assert.deepEqual(errors, [], "no uncaught page errors");
 writeFileSync(
   path.join(out, "browser-results.json"),
@@ -230,6 +311,7 @@ writeFileSync(
         "START -> cockpit unlocked",
         "Objects -> View images -> field (202 then ready, epoch image)",
         "Back to the cockpit",
+        "Field at preview_ready: compare and step enabled, stack and changes wait, Gaia prefetched once",
       ],
     },
     null,

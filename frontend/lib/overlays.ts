@@ -276,7 +276,8 @@ export function layerLine(name: string, state: LayerState, noun: string, total?:
   if (!state?.value || total === undefined) return `${name}: loading…`;
   if (total === 0) return `${name}: no ${noun} returned for this field`;
   if (inImage === 0) return `${name}: ${total} ${noun}, none inside this image`;
-  return `${name}: ${inImage ?? total} ${noun} on this image`;
+  const n = inImage ?? total;
+  return `${name}: ${n} ${n === 1 ? noun.replace(/s$/, "") : noun} on this image`;
 }
 
 /**

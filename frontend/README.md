@@ -49,7 +49,12 @@ else 3); `epoch` is 1-based like the viewer (default 1, clamped to the last one)
 ignores the whole link and the app starts at Home. Coordinates within 30″ of a catalogued object open that object's field
 and show its name and type (from `patch.target` in `/timeline`), whether they come from a link,
 the RA/Dec form or the map centre. "Copy link" in the viewer writes the current
-field as such a link; a field that is not cached shows the usual building screen. A coordinate
+field as such a link; a field that is not cached shows the usual building screen. While a field
+builds, the epochs already in the `202` are shown as a "Preview" (one exposure per epoch from
+`preview_ready` on, sharing one stretch): they can be blinked, stepped and shown as a Difference
+("Compare preview"); only Stack waits for the final images. Coordinates applied with the RA/Dec
+form in the cockpit are requested once right away (`warmTimeline`, detector 3, 6′), so the build
+starts before *View images*; map centres are not warmed, so panning creates no builds. A coordinate
 link may carry `name` (≤ 80 characters, e.g. `&name=Proxima+Centauri`): the viewer shows it as the
 title and object name for a field that is not in the catalogue. Catalogue targets ignore it.
 
@@ -57,7 +62,11 @@ title and object name for a field that is not in the catalogue. Catalogue target
 
 `components/Field.tsx` draws catalog layers over the field image with `components/FieldOverlays.tsx`
 (helpers and types in `lib/overlays.ts`, Gaia in `lib/lab/gaia.ts`). Each layer is off by default and
-fetched the first time it is switched on (right column, above the cards):
+fetched the first time it is switched on (right column, above the cards). Gaia DR3 and CatWISE are
+the exception: they need only the patch and the epoch dates, so they are prefetched as soon as those
+are known (also on a preview that is still building, from `preview_ready` on) and switching them on
+is instant; a failed prefetch is asked again when the layer is switched on. Changes, Mask and
+Alignment need the final images and stay disabled while the field builds.
 
 - **Gaia DR3** (`/patches/{id}/gaia`): green rings, magenta for fast movers (≥ 100 mas/yr) with a
   dashed first→last epoch trajectory. Stars are propagated to each epoch's `mid_mjd`, so they move
@@ -106,7 +115,9 @@ and zoom-level helpers stay in `lib/lab/` because the field viewer uses them; it
 
 `node tests/browser.mjs` drives the real journey with the API mocked: start screen (axe),
 the 7-step tutorial, 200 % text and RTL at desktop sizes, START → cockpit, Objects → View images
-→ field (a 202 then ready) and Back. Run `npm run dev` first; it opens `http://localhost:3000`
+→ field (a 202 then ready) and Back, then a field at `preview_ready` (Compare preview and the
+epoch steps enabled, Stack and Changes disabled, Gaia prefetched once and kept on the final
+images). Run `npm run dev` first; it opens `http://localhost:3000`
 (`NEBO_TEST_URL` to change; use `localhost`, not `127.0.0.1`, or `next dev` blocks its scripts).
 `NEBO_CHROME` points to a Chrome/Edge binary when Playwright's own browser is not installed;
 results and screenshots go to `NEBO_ARTIFACTS` (default: the system temp folder).
