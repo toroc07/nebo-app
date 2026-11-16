@@ -253,24 +253,21 @@ export default function HomeScene({
             </span>
           </button>
         </nav>
+        {/* Bottom-left corner of the wall screen: the source code, in a new tab. */}
+        <a
+          className={s.repo}
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Nebo source code on GitHub (opens in a new tab)"
+          inert={touring || undefined}
+        >
+          <GitHubMark />
+          GitHub <span aria-hidden="true">↗</span>
+        </a>
           </>
         )}
       </div>
-      {/* Bottom-left of the room, outside the wall screen: the source code, in a new tab. */}
-      <a
-        className={s.repo}
-        href={REPO_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Nebo source code on GitHub (opens in a new tab)"
-        inert={touring || undefined}
-      >
-        <GitHubMark />
-        <span>
-          <strong>GitHub</strong>
-          <small>Source code ↗</small>
-        </span>
-      </a>
       {touring && (
         <TutorialTour
           onClose={() => setTouring(false)}

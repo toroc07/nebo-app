@@ -224,41 +224,34 @@
   outline-offset: 3px;
 }
 /*
- * Repository link: bottom-left of the room, in the menu's style but quieter than its buttons.
- * It sits just right of the sound toggle (audio.module.css: fixed, 40 px at left/bottom 16 px),
- * sharing its bottom edge.
+ * Repository link: bottom-left corner of the wall screen, in line with the menu's left edge,
+ * below it. A small chip, quieter than the menu buttons.
  */
 .repo {
   position: absolute;
-  left: 64px;
-  bottom: 16px;
-  z-index: 2;
-  display: flex;
+  left: calc(28 * var(--S));
+  bottom: calc(26 * var(--S));
+  display: inline-flex;
   align-items: center;
-  gap: max(8px, calc(10 * var(--S)));
-  min-height: 44px;
-  padding: max(6px, calc(8 * var(--S))) max(12px, calc(16 * var(--S)));
-  color: var(--ink);
+  gap: max(6px, calc(8 * var(--S)));
+  min-height: 32px;
+  padding: max(4px, calc(5 * var(--S))) max(10px, calc(12 * var(--S)));
+  font: 600 max(12px, calc(13 * var(--S))) Plex, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   text-decoration: none;
-  background: rgb(4 14 22 / 0.78);
+  color: var(--ink);
+  background: rgb(10 30 46 / 0.75);
   border: 1px solid rgb(63 210 255 / 0.35);
   border-radius: calc(5 * var(--S));
   transition: box-shadow 160ms ease, border-color 160ms ease;
 }
 .repo svg {
   flex: none;
-  width: max(20px, calc(24 * var(--S)));
-  height: max(20px, calc(24 * var(--S)));
+  width: max(16px, calc(18 * var(--S)));
+  height: max(16px, calc(18 * var(--S)));
 }
-.repo strong {
-  display: block;
-  font: 600 max(13px, calc(15 * var(--S))) Plex, sans-serif;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.repo small {
-  display: block;
-  font-size: max(11px, calc(12 * var(--S)));
+.repo span {
   color: var(--muted);
 }
 .repo:hover {
@@ -407,6 +400,10 @@ a.member:focus-visible {
   }
   .menu {
     grid-template-columns: 1fr;
+  }
+  .repo {
+    position: static;
+    align-self: flex-start;
   }
   .crewList {
     grid-template-columns: 1fr;
