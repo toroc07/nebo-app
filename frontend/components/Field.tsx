@@ -799,6 +799,7 @@ export default function Field({
                       <button
                         ref={analysisButton}
                         type="button"
+                        data-image-tool=""
                         className={`${s.diffToggle} ${s.analysisToggle}`}
                         aria-expanded={analysis === "open"}
                         aria-controls="science-panel"
@@ -848,6 +849,7 @@ export default function Field({
                     {!building && data?.patch.id && (
                       <button
                         type="button"
+                        data-image-tool=""
                         className={`${s.diffToggle} ${s.alignToggle}`}
                         aria-pressed={layers.alignment}
                         title="Check this epoch against the fixed Gaia stars"
@@ -858,6 +860,7 @@ export default function Field({
                     )}
                     {layers.alignment && !building ? (
                       <div
+                        data-image-tool=""
                         className={`${s.alignBanner} ${alignmentRow?.status === "offset_warning" ? s.alignWarn : ""}`}
                         role="status"
                       >
@@ -874,6 +877,7 @@ export default function Field({
                     ) : null}
                     <button
                       type="button"
+                      data-image-tool=""
                       className={s.diffToggle}
                       aria-pressed={difference}
                       disabled={!canCompare}
@@ -884,6 +888,7 @@ export default function Field({
                     </button>
                     <button
                       type="button"
+                      data-image-tool=""
                       className={`${s.diffToggle} ${s.stackToggle}`}
                       aria-pressed={stacking}
                       disabled={!canCompare}
@@ -896,7 +901,7 @@ export default function Field({
                       <Layers2 aria-hidden="true" /> Stack
                     </button>
                     {stacking && (
-                      <div className={s.stackPicker} role="group" aria-label="Epochs in the stack (at least two)">
+                      <div data-image-tool="" className={s.stackPicker} role="group" aria-label="Epochs in the stack (at least two)">
                         {data.epochs.map((e, i) => (
                           <button
                             key={e.index}

@@ -1115,10 +1115,14 @@
     flex: 1;
     min-width: 0;
   }
-  /* The four layer chips share one line. */
+  /* The four layer chips share one line; the status lines wrap below them, full width. */
   .cards .layers {
-    flex-wrap: nowrap;
+    justify-content: flex-start;
     gap: calc(5 * var(--s));
+  }
+  .cards .layerStatus {
+    margin-top: calc(2 * var(--s));
+    text-align: left;
   }
   .cards .layers button {
     padding: calc(2 * var(--s)) calc(7 * var(--s));
@@ -1336,6 +1340,9 @@
 .layerStatus span {
   display: block;
 }
+.layerStatus span + span {
+  margin-top: 2px;
+}
 .layers button:disabled {
   opacity: 0.45;
 }
@@ -1395,10 +1402,11 @@
   border: 2px solid #ff5ce1;
   box-shadow: 0 0 6px #ff5ce1;
 }
+/* Hundreds per field: small and translucent so the sky and the badges stay readable. */
 .wiseMark {
-  width: 11px;
-  height: 11px;
-  border-color: #fbbf24;
+  width: 9px;
+  height: 9px;
+  border-color: rgb(251 191 36 / 0.7);
   border-radius: 1px;
   rotate: 45deg;
 }
@@ -1426,6 +1434,31 @@
   border-radius: 4px;
   cursor: pointer;
   pointer-events: auto;
+}
+/*
+ * Badges near the top edge hang below their point, so they do not sit under the Analysis /
+ * Difference buttons or get cut off; near the sides they align inward.
+ */
+.badge[data-v="below"] {
+  translate: -50% 10px;
+}
+.badge[data-h="left"] {
+  translate: -6px calc(-100% - 10px);
+}
+.badge[data-h="right"] {
+  translate: calc(-100% + 6px) calc(-100% - 10px);
+}
+.badge[data-v="below"][data-h="left"] {
+  translate: -6px 10px;
+}
+.badge[data-v="below"][data-h="right"] {
+  translate: calc(-100% + 6px) 10px;
+}
+.badge[data-v="mid"][data-h="after"] {
+  translate: 12px -50%;
+}
+.badge[data-v="mid"][data-h="before"] {
+  translate: calc(-100% - 12px) -50%;
 }
 /* Unlabelled change: a small dot, so dozens of changes do not hide the sky. */
 .changeDot {

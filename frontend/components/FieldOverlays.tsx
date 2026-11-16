@@ -1,4 +1,5 @@
 "use client";
+import { useLayoutEffect, useRef } from "react";
 import type { CandidateDetection } from "@/lib/api";
 import { FAST_MOVER_MAS_YR, type GaiaField } from "@/lib/lab/gaia";
 import {
@@ -46,10 +47,21 @@ export default function FieldOverlays({
     selectedId === `${kind}:${id}`;
 
   const labelled = labelledChanges(changes ?? []);
+  const overlay = useRef<HTMLDivElement>(null);
+  // Place every badge where it covers no image button and stays inside the image.
+  useLayoutEffect(() => {
+    const root = overlay.current;
+    if (!root) return;
+    const place = () => placeBadges(root);
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [changes, width, height]);
   const fastStars = gaia?.stars.filter((star) => trajectory(star)) ?? [];
 
   return (
-    <div className={s.overlay}>
+    <div ref={overlay} className={s.overlay}>
       {fastStars.length > 0 && (
         <svg
           className={s.paths}
@@ -153,6 +165,8 @@ export default function FieldOverlays({
             type="button"
             className={`${s.badge} ${tone}`}
             style={at(change.x, change.y)}
+            // Placement order: new signals first, so they get the free spots.
+            data-badge={tone === s.badgeNew ? 0 : tone === s.badgeKnown ? 1 : 2}
             aria-pressed={isSelected("change", id)}
             onClick={() => onSelect({ kind: "change", change })}
           >
@@ -162,4 +176,59 @@ export default function FieldOverlays({
       })}
     </div>
   );
+}
+
+/** Badge placements to try, in order: [vertical, horizontal]; undefined = above / centred. */
+const PLACEMENTS: [string | undefined, string | undefined][] = [
+  [undefined, undefined],
+  ["below", undefined],
+  [undefined, "right"],
+  ["below", "right"],
+  [undefined, "left"],
+  ["below", "left"],
+  ["mid", "after"],
+  ["mid", "before"],
+];
+
+/**
+ * Moves each change badge to the first placement that stays inside the image, overlaps no
+ * `[data-image-tool]` button (Analysis, Difference, Alignment, Stack…) and, when it can, no badge
+ * placed before it. A badge with no free placement keeps the default one, under the buttons.
+ */
+function placeBadges(root: HTMLElement) {
+  const box = root.getBoundingClientRect();
+  const tools = [...(root.parentElement?.querySelectorAll<HTMLElement>("[data-image-tool]") ?? [])]
+    .map((e) => e.getBoundingClientRect())
+    .filter((r) => r.width > 0);
+  const hits = (a: DOMRect, b: DOMRect) =>
+    a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const placed: DOMRect[] = [];
+  const badges = [...root.querySelectorAll<HTMLElement>("[data-badge]")].sort(
+    (a, b) => Number(a.dataset.badge) - Number(b.dataset.badge),
+  );
+  for (const badge of badges) {
+    const inside = (r: DOMRect) =>
+      r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+    const clear = (r: DOMRect) => inside(r) && !tools.some((t) => hits(r, t));
+    // Best: clear of the buttons and of the badges already placed; else clear of the buttons only.
+    const fits =
+      PLACEMENTS.find(([v, h]) => {
+        setPlacement(badge, v, h);
+        const r = badge.getBoundingClientRect();
+        return clear(r) && !placed.some((p) => hits(r, p));
+      }) ??
+      PLACEMENTS.find(([v, h]) => {
+        setPlacement(badge, v, h);
+        return clear(badge.getBoundingClientRect());
+      });
+    if (!fits) setPlacement(badge, undefined, undefined);
+    placed.push(badge.getBoundingClientRect());
+  }
+}
+
+function setPlacement(el: HTMLElement, v: string | undefined, h: string | undefined) {
+  if (v) el.dataset.v = v;
+  else delete el.dataset.v;
+  if (h) el.dataset.h = h;
+  else delete el.dataset.h;
 }

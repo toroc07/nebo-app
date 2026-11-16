@@ -68,7 +68,9 @@ fetched the first time it is switched on (right column, above the cards):
   badges "Catalogued object", "Candidate signal" or "Cold candidate (no Gaia)". Cold candidates and
   the strongest changes (8 in total) get a text badge; the rest are clickable dots. Residuals on
   static catalogued stars with consistent flux ("Catalogued · likely PSF/λ systematic") are grey
-  dots, and the status line counts them apart ("3 changes · 11 likely systematic").
+  dots, and the status line counts them apart ("3 changes · 11 likely systematic"). Each badge
+  is measured after render and moved (above, below, to a side) so it stays inside the image and
+  off the image buttons (`data-image-tool`) and the badges placed before it; new signals go first.
 - **Stack** (button under Alignment, `/timeline/stack`): shows the co-add of the chosen epochs
   (chips E1, E2…; two at least) instead of the current epoch. Less noise, but anything that changed
   between those epochs is averaged out, so it replaces the blink rather than joining it.
